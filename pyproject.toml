@@ -12,6 +12,7 @@ dependencies = [
     # opencv-python-headless 5.0.0.93 ships without CascadeClassifier and breaks
     # Haar detection — stay on the 4.10 line. Headless = no GUI/Qt deps.
     "opencv-python-headless==4.10.0.84",
+    "fonttools[woff]>=4.50",
 ]
 
 [project.optional-dependencies]
