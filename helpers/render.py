@@ -220,18 +220,42 @@ def is_portrait_source(video: Path) -> bool:
 def source_fps(video: Path) -> float:
     """Return the source's video frame rate (frames per second).
 
-    Reads r_frame_rate ("30000/1001") and evaluates the fraction. Returns 0.0
-    if it can't be determined, so callers fall back to the safe default.
+    Prefers avg_frame_rate over r_frame_rate. r_frame_rate is not the cadence —
+    it is the lowest rate that can express every timestamp exactly, so on a
+    variable-frame-rate file it reports a tick base, not a frame rate. Measured
+    on iPhone HEVC: r_frame_rate=600/1 for footage whose real average is 30.5.
+    Trusting it made a 30fps phone look like a 60fps camera to every caller.
+
+    Falls back to r_frame_rate when avg is missing or degenerate (0/0, as some
+    streams report), and to 0.0 when neither resolves, so callers can apply
+    their own default.
     """
+    def _ratio(s: str) -> float:
+        num, _, den = s.strip().partition("/")
+        try:
+            v = float(num) / float(den) if den else float(num)
+        except (ValueError, ZeroDivisionError):
+            return 0.0
+        return v if v > 0 else 0.0
+
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=r_frame_rate",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+             "-show_entries", "stream=avg_frame_rate,r_frame_rate",
+             # keyed output: ffprobe emits these fields in ITS order, not the
+             # order asked for, so a nokey read silently takes r_frame_rate first
+             "-of", "default=noprint_wrappers=1", str(video)],
             capture_output=True, text=True, check=True,
         )
-        num, _, den = out.stdout.strip().partition("/")
-        return float(num) / float(den) if den else float(num)
+        got = {}
+        for ln in out.stdout.splitlines():
+            key, _, val = ln.strip().partition("=")
+            if key:
+                got[key] = val
+        for key in ("avg_frame_rate", "r_frame_rate"):
+            if (v := _ratio(got.get(key, ""))):
+                return v
+        return 0.0
     except Exception:
         return 0.0
 
@@ -243,6 +267,34 @@ def shortform_target_fps(video: Path) -> str:
     matches Instagram/TikTok/Shorts capture); slower sources keep the 24 standard.
     """
     return "30" if source_fps(video) >= 29.5 else "24"
+
+
+STANDARD_FPS = (23.976, 24.0, 25.0, 29.97, 30.0, 48.0, 50.0, 59.94, 60.0)
+
+
+def longform_target_fps(videos: list[Path]) -> str:
+    """One CFR for the whole longform render, as a string for ffmpeg `-r`.
+
+    `--keep-resolution` used to leave fps alone so a longform cut kept its
+    source cadence. That silently breaks the moment an EDL draws on sources at
+    DIFFERENT rates — a multicam shoot, or a phone whose VFR file reports a
+    nonsense r_frame_rate. The per-segment extracts are each fine, but Rule 2's
+    lossless `-c copy` concat cannot reconcile mismatched rates and timebases,
+    and the result is not an error: it is a playable file whose frames have been
+    thrown away. Measured on a two-camera 16:9 edit (iPhone VFR "30.51" + DJI
+    29.97 + a second iPhone file reporting 19.45): 520s of video carrying 1371
+    frames — 2.6 fps, a slideshow that ffprobe reports without complaint.
+
+    So pin ONE rate for every segment: the highest source rate, snapped to the
+    nearest broadcast standard. Highest (not median) so no source is ever
+    decimated below the cadence it was shot at.
+    """
+    rates = [f for f in (source_fps(v) for v in videos) if f > 0]
+    if not rates:
+        return "30"
+    top = max(rates)
+    best = min(STANDARD_FPS, key=lambda s: abs(s - top))
+    return f"{best:.3f}".rstrip("0").rstrip(".")
 
 
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
@@ -259,6 +311,7 @@ def extract_segment(
     keep_resolution: bool = False,
     gain_db: float = 0.0,
     streams: str = "av",
+    target_fps: str | None = None,
 ) -> None:
     """Extract a cut range as its own MP4 with grade + 30ms audio fades baked in.
 
@@ -348,7 +401,11 @@ def extract_segment(
         # (Chrome/Remotion in Phase 2) silently re-interpret the graded image.
         cmd += ["-colorspace", "bt709", "-color_primaries", "bt709",
                 "-color_trc", "bt709", "-color_range", "tv"]
-        if not keep_resolution:
+        if target_fps:
+            # one rate for every segment — see longform_target_fps() on why a
+            # mixed-rate set cannot survive the lossless concat
+            cmd += ["-r", target_fps]
+        elif not keep_resolution:
             # short-form fps: 30 if the source is 30fps+ (natural motion, matches
             # IG/TikTok/Shorts capture), else the 24 standard; longform keeps source.
             cmd += ["-r", shortform_target_fps(source)]
@@ -370,6 +427,57 @@ def extract_segment(
         cmd += ["-movflags", "+faststart"]
     cmd += [str(out_path)]
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+
+def video_stream_duration(video: Path) -> float:
+    """Duration of the VIDEO stream alone, which is not the file's duration.
+
+    A container reports the longest stream. Phones can stop writing picture and
+    keep writing sound — measured on an iPhone HEVC take: video ends at 713.1s,
+    audio runs to 776.2s in the same file, and `format=duration` says 776.2.
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+            capture_output=True, text=True, check=True,
+        )
+        return float(out.stdout.strip())
+    except Exception:
+        return 0.0
+
+
+def check_ranges_have_picture(edl: dict, edit_dir: Path) -> None:
+    """Fail loudly when a range asks for picture the source does not have.
+
+    ffmpeg does not treat "seek past the end of the video stream" as an error:
+    it writes a valid, empty MP4 (measured: 698 bytes, zero frames) and exits 0.
+    The lossless concat then skips it in silence, so the render SUCCEEDS and the
+    delivered cut is simply missing those takes — the audio is all there, which
+    makes it read as a sync bug rather than as missing footage. Catch it here,
+    where the fix (use the other camera, or shorten the range) is still cheap.
+    """
+    durations: dict[str, float] = {}
+    bad: list[tuple[int, str, float, float]] = []
+    for i, r in enumerate(edl.get("ranges", [])):
+        name = r["source"]
+        if name not in durations:
+            durations[name] = video_stream_duration(
+                resolve_path(edl["sources"][name], edit_dir))
+        vdur = durations[name]
+        if vdur and float(r["end"]) > vdur:
+            bad.append((i, name, float(r["end"]), vdur))
+    if not bad:
+        return
+    print("\nERRO: range(s) pedindo imagem que a fonte não tem:", file=sys.stderr)
+    for i, name, end, vdur in bad:
+        print(f"  range[{i}] {name} termina em {end:.2f}s, mas o stream de vídeo "
+              f"acaba em {vdur:.2f}s  (faltam {end - vdur:.2f}s)", file=sys.stderr)
+    print("  O áudio dessa fonte pode ser mais longo que a imagem — confira com:\n"
+          "    ffprobe -v error -show_entries stream=codec_type,duration <fonte>\n"
+          "  Use outra câmera nesses ranges ou encurte-os.", file=sys.stderr)
+    sys.exit(1)
 
 
 def snap_ranges_to_frames(edl: dict, fps: int) -> int:
@@ -421,6 +529,12 @@ def extract_all_segments(
     If the EDL `grade` is "auto", analyze each segment range with
     `auto_grade_for_clip` and apply a per-segment subtle correction.
     Otherwise, apply the same preset/raw filter to every segment.
+
+    A range may carry its own `"grade"` field, which overrides the EDL-level
+    one for that range only. This is what makes a MULTICAM cut possible: two
+    bodies never match natively, so the B-camera ranges need a corrective
+    filter that the A-camera ranges must not get. `"grade": ""` on a range
+    explicitly means "no grade here" (not "inherit").
     """
     resolved = resolve_grade_filter(edl.get("grade"))
     is_auto = resolved == "__AUTO__"
@@ -442,6 +556,14 @@ def extract_all_segments(
     if is_auto:
         print("  (auto-grade per segment: analyzing each range)")
 
+    # see the J-cut path — one CFR for every segment, or the concat drops frames
+    fps_lock = None
+    if keep_resolution:
+        srcs = [resolve_path(v, edit_dir) for v in sources.values()]
+        fps_lock = longform_target_fps(srcs)
+        if len({source_fps(s) for s in srcs}) > 1:
+            print(f"  fontes com fps diferentes → travando tudo em {fps_lock} fps")
+
     def work(i: int, r: dict) -> Path:
         src_name = r["source"]
         src_path = resolve_path(sources[src_name], edit_dir)
@@ -450,7 +572,12 @@ def extract_all_segments(
         duration = end - start
         out_path = clips_dir / f"seg_{i:02d}_{src_name}.mp4"
 
-        if is_auto:
+        # a per-range grade wins over the EDL-level one (multicam B-camera match)
+        if "grade" in r:
+            seg_filter = resolve_grade_filter(r.get("grade"))
+            if seg_filter == "__AUTO__":
+                seg_filter, _stats = auto_grade_for_clip(src_path, start=start, duration=duration, verbose=False)
+        elif is_auto:
             seg_filter, _stats = auto_grade_for_clip(src_path, start=start, duration=duration, verbose=False)
         else:
             seg_filter = resolved
@@ -458,13 +585,13 @@ def extract_all_segments(
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
 
         note = r.get("beat") or r.get("note") or ""
-        grade_note = f"  grade: {seg_filter or '(none)'}" if is_auto else ""
+        grade_note = f"  grade: {seg_filter or '(none)'}" if (is_auto or "grade" in r) else ""
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{grade_note}{gain_note}", flush=True)
         extract_segment(
             src_path, start, duration, seg_filter, out_path,
             preview=preview, draft=draft, keep_resolution=keep_resolution,
-            gain_db=gain_db,
+            gain_db=gain_db, target_fps=fps_lock,
         )
         return out_path
 
@@ -576,12 +703,25 @@ def trailing_silence(source: Path, start: float, end: float,
 
 
 def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
-    """Work out each take's video range, audio range and output offsets."""
+    """Work out each take's video range, audio range and output offsets.
+
+    The lead is per-junction: a range may carry `"jcut_lead_frames": N` to
+    override the global lead for the seam where THAT take comes in. 0 butt-joins
+    that one junction while the rest of the edit keeps its overlap — the way to
+    place a J-cut on a few narrative transitions instead of every cut. Range 0
+    has no incoming seam, so its lead is always 0.
+    """
     fps = cfg["fps"]
-    lead = cfg["lead_frames"] / fps
     ranges = edl["ranges"]
     sources = edl["sources"]
     n = len(ranges)
+
+    def lead_for(i: int) -> float:
+        if i <= 0 or i >= n:      # no incoming seam before the first / after the last
+            return 0.0
+        override = ranges[i].get("jcut_lead_frames")
+        frames = cfg["lead_frames"] if override is None else max(0, int(override))
+        return frames / fps
 
     plan: list[dict] = []
     a_off = v_off = 0.0
@@ -597,17 +737,19 @@ def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
             tail = usable_frames / fps
 
         a_in, a_out = start, end - tail
-        v_in = start + (lead if i > 0 else 0.0)
+        v_in = start + lead_for(i)
         v_out = a_out
         plan.append({
             "i": i, "src": src, "range": r,
             "a_in": a_in, "a_out": a_out, "a_off": a_off,
             "v_in": v_in, "v_out": v_out, "v_off": v_off,
+            "lead_frames": round(lead_for(i) * fps),
             "tail_frames": round(tail * fps),
             "silence_avail_ms": round(avail * 1000) if avail is not None else None,
         })
+        # the NEXT take's lead is what pulls its audio back over this one
         v_off += v_out - v_in
-        a_off += (a_out - a_in) - lead
+        a_off += (a_out - a_in) - lead_for(i + 1)
     return plan
 
 
@@ -675,22 +817,43 @@ def extract_and_assemble_jcut(
     if jobs <= 0:
         jobs = max(1, min(4, (os.cpu_count() or 4) // 3))
 
+    # One CFR for every segment. Only longform needs it resolved here — the
+    # short-form path already forces its own rate inside extract_segment.
+    fps_lock = None
+    if keep_resolution:
+        srcs = [resolve_path(v, edit_dir) for v in edl["sources"].values()]
+        fps_lock = longform_target_fps(srcs)
+        if len({source_fps(s) for s in srcs}) > 1:
+            print(f"  fontes com fps diferentes → travando tudo em {fps_lock} fps")
+
     lead_ms = round(cfg["lead_frames"] / cfg["fps"] * 1000)
     print(f"J-cut: áudio entra {cfg['lead_frames']}f ({lead_ms}ms) antes da imagem"
           f"  ({len(plan)} takes, {jobs} paralelos)")
 
     def work(p: dict) -> dict:
         i, r = p["i"], p["range"]
-        seg_filter = (auto_grade_for_clip(p["src"], start=p["v_in"],
-                                          duration=p["v_out"] - p["v_in"],
-                                          verbose=False)[0]
-                      if is_auto else resolved)
+        # a per-range grade wins over the EDL-level one (multicam B-camera match).
+        # This mirrors extract_all_segments(); the J-cut is the DEFAULT path, so a
+        # per-range grade honoured only there would never actually run.
+        if "grade" in r:
+            seg_filter = resolve_grade_filter(r.get("grade"))
+            if seg_filter == "__AUTO__":
+                seg_filter = auto_grade_for_clip(p["src"], start=p["v_in"],
+                                                 duration=p["v_out"] - p["v_in"],
+                                                 verbose=False)[0]
+        elif is_auto:
+            seg_filter = auto_grade_for_clip(p["src"], start=p["v_in"],
+                                             duration=p["v_out"] - p["v_in"],
+                                             verbose=False)[0]
+        else:
+            seg_filter = resolved
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
         vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
         apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
         extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
                         vpath, preview=preview, draft=draft,
-                        keep_resolution=keep_resolution, streams="v")
+                        keep_resolution=keep_resolution, streams="v",
+                        target_fps=fps_lock)
         extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
                         apath, preview=preview, draft=draft,
                         keep_resolution=keep_resolution, gain_db=gain_db,
@@ -1146,6 +1309,8 @@ def main() -> None:
         edl["total_duration_s"] = round(sum(r["end"] - r["start"] for r in edl["ranges"]), 3)
         edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2))
         print(f"  frame-aligned {snapped} range(s) to {target_fps}fps → edl.json updated")
+
+    check_ranges_have_picture(edl, edit_dir)
 
     if args.draft:
         base_name = "base_draft.mp4"
