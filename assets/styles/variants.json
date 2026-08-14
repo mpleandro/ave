@@ -143,5 +143,25 @@
   },
   "headlineFamily": "Poppins",
   "headlineMinSize": 40,
-  "headlineGfont": "family=Poppins:wght@400;800;900"
+  "headlineGfont": "family=Poppins:wght@400;800;900",
+  "camera": {
+    "_readme": "Padrões da câmera dinâmica. `zooms` cicla a cada corte; `pushIn` é a aproximação acumulada DENTRO de um segmento.",
+    "zooms": [
+      1.14,
+      1.2,
+      1.12,
+      1.22,
+      1.16,
+      1.1,
+      1.18
+    ],
+    "pushIn": 0.04,
+    "targetX": 0.5,
+    "targetY": 0.4
+  },
+  "flash": {
+    "durationFrames": 7,
+    "blur": 16,
+    "intensity": 1.0
+  }
 }

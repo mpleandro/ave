@@ -1,0 +1,29 @@
+/* Flash na transição — um feixe atravessa o quadro com brilho.
+ *
+ * Desfoque é o que separa um FEIXE de uma lavagem: a 26px lia como
+ * clareamento geral do quadro; a 16px lê como feixe. Se precisar de mais
+ * presença, subir a opacidade e baixar o desfoque juntos — nunca só alargar.
+ */
+.ave-flash {
+  --flash-blur: 16;
+  --flash-scale: 1;
+  --flash-intensity: 1;
+
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: calc(150px * var(--flash-scale));
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, calc(0.85 * var(--flash-intensity))) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  filter: blur(calc(var(--flash-blur) * var(--flash-scale) * 1px));
+  transform: rotate(-12deg) translateX(-40vw);
+  opacity: 0;
+  mix-blend-mode: screen;
+  z-index: 5;
+}

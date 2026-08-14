@@ -214,43 +214,109 @@ def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty) -> str:
     return "\n".join("    " + b for b in blocks)
 
 
+def camera_parts(data, duration):
+    """(js da timeline, estilo do a-roll, blocos de flash).
+
+    A câmera é um item da aba Estilo com três partes separáveis. `zoomCuts` é o
+    que faz um plano fixo parecer editado — sem ele o vídeo é uma câmera parada
+    por um minuto. Se o usuário desligar tudo, vale dizer o que ele perde.
+
+    `tracking` (perseguição do olhar) ainda NÃO está portado: ele depende do
+    rastreio de rosto quadro a quadro, que é outro dado. Ligado sem esse dado,
+    seria inventar movimento — então ele é ignorado com aviso, não fingido.
+    """
+    cam = data.get("camera", {}) or {}
+    els = data.get("elements", {}) or {}
+    defaults = VARIANTS["camera"]
+    segs = data.get("_segments") or []
+    zoom_cuts = bool(els.get("zoomCuts", True)) and bool(segs)
+    zoom_auto = bool(els.get("zoomAuto", True)) and bool(segs)
+
+    js, style, blocks = "", "", []
+    if cam.get("enabled", True) and (zoom_cuts or zoom_auto):
+        tx = cam.get("targetX", defaults["targetX"]) * 100
+        ty = cam.get("targetY", defaults["targetY"]) * 100
+        style = f"transform-origin:{tx:.1f}% {ty:.1f}%;"
+        opts = {
+            "segments": segs,
+            "zooms": cam.get("zooms") or defaults["zooms"],
+            "pushIn": cam.get("pushIn", defaults["pushIn"]),
+            "zoomCuts": zoom_cuts,
+            "zoomAuto": zoom_auto,
+        }
+        js = ("  AVE_CAMERA.buildCamera(document.getElementById('a-roll'), gsap, tl, "
+              + json.dumps(opts) + ");")
+
+    fps = data.get("fps", 30)
+    fl = VARIANTS["flash"]
+    for k, tr in enumerate(data.get("transitions") or []):
+        at = float(tr.get("at", 0))
+        if at >= duration:
+            continue
+        start = max(0.0, at - fl["durationFrames"] / fps)
+        dur = (fl["durationFrames"] * 2) / fps
+        blocks.append(
+            f'  <div id="flash{k}" class="ave-flash clip" data-start="{start:.3f}" '
+            f'data-duration="{min(dur, duration - start):.3f}" data-track-index="6" '
+            f'style="--flash-intensity:{tr.get("intensity", fl["intensity"])}; '
+            f'--flash-blur:{fl["blur"]}"></div>'
+        )
+        js += (f"\n  tl.fromTo('#flash{k}', {{opacity:0, xPercent:-120}}, "
+               f"{{opacity:1, xPercent:120, duration:{dur:.3f}, ease:'power1.inOut'}}, "
+               f"{start:.3f});")
+    return js, style, blocks
+
+
 def render_html(data, timed, st, style_id, video, duration, orphans, penalty) -> str:
     accent = data.get("accent") or "#FF6B1A"
     hook_block, hook_css = hook_markup(data, accent)
+    W, H = data.get("width", 1080), data.get("height", 1920)
+    cfg = data.get("captions", {})
+    bottom = cfg.get("paddingBottom", VARIANTS["bottom"])
+    size = cfg.get("fontSize") or st["size"]
+    cam_js, cam_style, flash_blocks = camera_parts(data, duration)
+
     gfont = st["gfont"]
     if hook_block:
         # a headline usa Poppins em 400/800/900; pedir só o peso da legenda
         # deixaria o texto cair numa fonte genérica sem erro visível
         gfont = f"{gfont}&{VARIANTS['headlineGfont']}"
-    W, H = data.get("width", 1080), data.get("height", 1920)
-    cfg = data.get("captions", {})
-    bottom = cfg.get("paddingBottom", VARIANTS["bottom"])
-    size = cfg.get("fontSize") or st["size"]
 
     if st["animated"]:
-        css = '<link rel="stylesheet" href="styles/karaoke.css">\n' \
-              '<script src="styles/karaoke.js"></script>'
+        cap_css = ('<link rel="stylesheet" href="styles/karaoke.css">\n'
+                   '<script src="styles/karaoke.js"></script>')
         container = (f'<div class="ave-cap {style_id}" style="--cap-scale:1;'
                      f' --cap-size:{size}; --cap-bottom:{bottom}">')
-        timeline = """  var tl = gsap.timeline({ paused: true });
-  // Montada pelo MESMO módulo que a prévia do editor usa. Tween declarativo em
-  // tempo absoluto é seekable por construção.
-  AVE_KARAOKE.buildTimeline(document.getElementById('root'), gsap, tl, 1);
-  window.__timelines["main"] = tl;"""
-        gsap_tag = '<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>'
-        no_tl = ""
     else:
-        css = '<link rel="stylesheet" href="styles/static.css">'
+        cap_css = '<link rel="stylesheet" href="styles/static.css">'
         container = (f'<div class="ave-cap-static {style_id}" style="--cap-scale:1;'
                      f' --cap-size:{size}; --cap-bottom:{bottom};'
                      f' --cap-family:{st["cssFamily"]}; --cap-weight:{st["weight"]};'
                      f' --cap-track:{st.get("tracking", 0)};'
                      f' --cap-sx:{st.get("sx", 1)}; --cap-sy:{st.get("sy", 1)}">')
-        # Estilo estático não registra timeline. Sem esta marca o produtor fica
-        # 45 SEGUNDOS esperando o registro antes de desistir, em todo render.
-        timeline = "  // estilo estático: sem animação, sem timeline"
-        gsap_tag = ""
-        no_tl = " data-no-timeline"
+
+    # A timeline é necessária se QUALQUER coisa se move — legenda animada,
+    # câmera ou flash. Sem nada em movimento, `data-no-timeline` evita 45s
+    # perdidos por render esperando um registro que nunca vem.
+    parts = []
+    if st["animated"]:
+        parts.append("  AVE_KARAOKE.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+    if cam_js:
+        parts.append(cam_js)
+    needs_tl = bool(parts)
+
+    extra_css = ""
+    if cam_js and flash_blocks:
+        extra_css = '<link rel="stylesheet" href="styles/camera.css">'
+    elif flash_blocks:
+        extra_css = '<link rel="stylesheet" href="styles/camera.css">'
+    cam_tag = '<script src="styles/camera.js"></script>' if cam_js else ""
+    gsap_tag = ('<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>'
+                if needs_tl else "")
+    no_tl = "" if needs_tl else " data-no-timeline"
+    timeline = ("  var tl = gsap.timeline({ paused: true });\n"
+                + "\n".join(parts) + '\n  window.__timelines["main"] = tl;'
+                if needs_tl else "  // nada em movimento: sem timeline")
 
     return f"""<!doctype html>
 <html lang="pt-BR" data-resolution="portrait">
@@ -259,12 +325,15 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 <meta name="viewport" content="width={W}, height={H}" />
 <link href="https://fonts.googleapis.com/css2?{gfont}&display=swap" rel="stylesheet">
 {gsap_tag}
-{css}
+{cam_tag}
+{cap_css}
 {hook_css}
+{extra_css}
 <style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   html, body {{ width:{W}px; height:{H}px; overflow:hidden; background:#000; }}
-  #a-roll {{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }}
+  #a-roll {{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
+             {cam_style} }}
 </style>
 </head>
 <body>
@@ -280,6 +349,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
          data-track-index="9" data-volume="1"></audio>
 
 {hook_block}
+{chr(10).join(flash_blocks)}
 
   {container}
 {markup(timed, st, style_id, orphans, penalty)}
@@ -304,6 +374,8 @@ def main() -> None:
     ap.add_argument("-o", "--output", type=Path, required=True)
     ap.add_argument("--style", default=None)
     ap.add_argument("--end", type=float, default=None)
+    ap.add_argument("--edl", type=Path, default=None,
+                    help="edl.json — de onde saem as fronteiras de segmento da câmera")
     args = ap.parse_args()
 
     data = json.loads(args.edit_data.read_text())
@@ -327,6 +399,10 @@ def main() -> None:
     files = style_files(style_id, st)
     if data.get("hook", {}).get("enabled"):
         files.append("headline.css")
+    if (data.get("camera", {}).get("enabled", True)
+            and any((data.get("elements") or {}).get(k, True) for k in ("zoomCuts", "zoomAuto"))) \
+            or data.get("transitions"):
+        files += ["camera.js", "camera.css"]
     for f in files:
         shutil.copy2(STYLES_DIR / f, proj / "styles" / f)
 
@@ -341,6 +417,22 @@ def main() -> None:
         duration = min(duration, args.end)
 
     fps = data.get("fps", 30)
+
+    # Fronteiras de segmento para a câmera: saem das junções REAIS do corte
+    # (jcut_timeline), não de um arquivo à parte que pode ficar velho.
+    segs = []
+    edl_path = args.edl or (args.edit_data.parent.parent.parent / "edl.json")
+    if edl_path.exists():
+        tl = json.loads(edl_path.read_text()).get("jcut_timeline") or []
+        for k, t in enumerate(tl):
+            s0 = t.get("video_start_in_output")
+            if s0 is None or s0 >= duration:
+                continue
+            s1 = (tl[k + 1].get("video_start_in_output")
+                  if k + 1 < len(tl) else duration)
+            segs.append({"start": round(s0, 3), "end": round(min(s1, duration), 3)})
+    data["_segments"] = segs
+
     words = [w for w in json.loads(args.captions.read_text())
              if w["startMs"] / 1000 < duration]
 
