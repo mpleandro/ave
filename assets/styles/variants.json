@@ -1,12 +1,30 @@
 {
   "_readme": "Números dos estilos de legenda, lidos pela prévia do editor E pelo compositor. Existe para que os dois não possam divergir: o algoritmo de agrupamento é curto e estável, mas os NÚMEROS (tamanho, peso, largura máxima) são o que sempre desandava quando viviam em dois lugares.",
-
   "_orphans_pt": "Palavras funcionais curtas que não devem TERMINAR uma linha. A quebra de duas linhas equilibra largura, mas equilíbrio puro deixa a linha acabar em 'de' o tempo todo — coisa que legenda de verdade nunca faz.",
-  "orphansPt": ["o", "a", "os", "as", "e", "é", "de", "do", "da", "em", "no", "na", "um", "uma", "que", "se", "ao", "à", "por", "com"],
+  "orphansPt": [
+    "o",
+    "a",
+    "os",
+    "as",
+    "e",
+    "é",
+    "de",
+    "do",
+    "da",
+    "em",
+    "no",
+    "na",
+    "um",
+    "uma",
+    "que",
+    "se",
+    "ao",
+    "à",
+    "por",
+    "com"
+  ],
   "orphanPenalty": 200,
-
   "bottom": 430,
-
   "styles": {
     "karaoke": {
       "animated": true,
@@ -23,7 +41,6 @@
       "maxW": 720,
       "gapEm": 0.2368
     },
-
     "simples": {
       "_note": "Poppins não tem corte condensado, então o sx 0.9 é uma regular distorcida — ela afina as hastes nos dois sentidos. Se ficar leve demais, subir o peso, nunca comprimir mais.",
       "animated": false,
@@ -39,7 +56,6 @@
       "tracking": -3,
       "maxW": 860
     },
-
     "serifada": {
       "animated": false,
       "family": "Libre Baskerville",
@@ -54,7 +70,6 @@
       "tracking": -1,
       "maxW": 860
     },
-
     "classica": {
       "_note": "Legenda clássica de duas linhas. maxWords alto de propósito: quem manda aqui é a largura, não a contagem.",
       "animated": false,
@@ -70,5 +85,63 @@
       "tracking": 0,
       "maxW": 840
     }
-  }
+  },
+  "_headlines_readme": "Geometria das headlines. `weights` é [linha1, linha2]; `cap` é TETO de corpo, não corpo fixo — a headline é sempre duas linhas ajustadas a `safeW` medindo o texto real. `upper` diz se o estilo escreve em caixa alta.",
+  "headlines": {
+    "outline": {
+      "weights": [
+        800,
+        800
+      ],
+      "cap": 92,
+      "safeW": 900,
+      "lh": 1.02,
+      "top": 330,
+      "upper": false,
+      "stroke": 12,
+      "usesAccent": false
+    },
+    "card": {
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 82,
+      "safeW": 820,
+      "lh": 1.06,
+      "top": 210,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": false
+    },
+    "realce": {
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 86,
+      "safeW": 830,
+      "lh": 1.04,
+      "top": 230,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true
+    },
+    "misto": {
+      "weights": [
+        400,
+        900
+      ],
+      "cap": 98,
+      "safeW": 900,
+      "lh": 0.98,
+      "top": 230,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true
+    }
+  },
+  "headlineFamily": "Poppins",
+  "headlineMinSize": 40,
+  "headlineGfont": "family=Poppins:wght@400;800;900"
 }

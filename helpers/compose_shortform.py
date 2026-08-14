@@ -125,6 +125,79 @@ def esc(s: str) -> str:
     return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
+def hl_width(text: str, size: float, weight: int) -> float:
+    if not text:
+        return 0.0
+    fam = VARIANTS["headlineFamily"]
+    return measure(text, fam, size, weight) - 1.0 * len(text)  # letter-spacing -1px
+
+
+def hl_two_lines(text: str, weights: list[int]) -> list[str]:
+    """Divide em DUAS linhas equilibrando a largura medida.
+
+    Só entra em ação quando o dado traz a headline como uma frase só. Em
+    produção `hook.lines` já vem com as duas linhas escritas por quem redigiu —
+    e aí a divisão é dele, não nossa.
+    """
+    words = text.split()
+    if len(words) < 2:
+        return [words[0] if words else "", ""]
+    best, best_diff = [words[0], " ".join(words[1:])], float("inf")
+    for i in range(1, len(words)):
+        a, b = " ".join(words[:i]), " ".join(words[i:])
+        d = abs(hl_width(a, 100, weights[0]) - hl_width(b, 100, weights[1]))
+        if d < best_diff:
+            best, best_diff = [a, b], d
+    return best
+
+
+def hl_fit(lines: list[str], h: dict) -> float:
+    """Corpo que faz a linha mais larga caber em `safeW`, limitado por `cap`.
+
+    `cap` é TETO, não medida fixa: uma headline curta pode chegar nele, uma
+    longa tem que encolher. Duas passadas porque a largura não é perfeitamente
+    linear no corpo — a primeira estima, a segunda corrige.
+    """
+    w = h["weights"]
+
+    def widest(size: float) -> float:
+        return max(hl_width(lines[0], size, w[0]),
+                   hl_width(lines[1] if len(lines) > 1 else "", size, w[1]))
+
+    size = int(h["safeW"] / max(1.0, widest(100)) * 100)
+    size = int(h["safeW"] / max(1.0, widest(size)) * size)
+    return max(VARIANTS["headlineMinSize"], min(size, h["cap"]))
+
+
+def hook_markup(data: dict, accent: str) -> tuple[str, str]:
+    """(markup, css_extra) do hook. Bloco próprio, id estável, tempo próprio."""
+    hook = data.get("hook", {})
+    if not hook.get("enabled"):
+        return "", ""
+    style_id = hook.get("style", "card")
+    h = VARIANTS["headlines"].get(style_id)
+    if h is None:
+        raise SystemExit(f"estilo de headline '{style_id}' não existe. "
+                         f"Prontos: {', '.join(VARIANTS['headlines'])}")
+
+    raw = [l for l in (hook.get("lines") or []) if l]
+    if len(raw) == 1:
+        raw = hl_two_lines(raw[0], h["weights"])
+    raw = (raw + ["", ""])[:2]
+    if h["upper"]:
+        raw = [l.upper() for l in raw]
+
+    size = hl_fit(raw, h)
+    end = float(hook.get("endSec", 4.0))
+    lines = "".join(f'<div class="hl-line">{esc(l)}</div>' for l in raw if l)
+    block = (f'  <div id="hook" class="ave-hook {style_id} clip" data-start="0" '
+             f'data-duration="{end:.3f}" data-track-index="2" '
+             f'style="--hl-scale:1; --hl-size:{size}; --hl-lh:{h["lh"]}; '
+             f'--hl-top:{h["top"]}; --hl-accent:{accent}; --hl-stroke:{h["stroke"]}">'
+             f'{lines}</div>')
+    return block, '<link rel="stylesheet" href="styles/headline.css">'
+
+
 def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty) -> str:
     blocks = []
     for t in timed:
@@ -142,6 +215,13 @@ def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty) -> str:
 
 
 def render_html(data, timed, st, style_id, video, duration, orphans, penalty) -> str:
+    accent = data.get("accent") or "#FF6B1A"
+    hook_block, hook_css = hook_markup(data, accent)
+    gfont = st["gfont"]
+    if hook_block:
+        # a headline usa Poppins em 400/800/900; pedir só o peso da legenda
+        # deixaria o texto cair numa fonte genérica sem erro visível
+        gfont = f"{gfont}&{VARIANTS['headlineGfont']}"
     W, H = data.get("width", 1080), data.get("height", 1920)
     cfg = data.get("captions", {})
     bottom = cfg.get("paddingBottom", VARIANTS["bottom"])
@@ -177,9 +257,10 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width={W}, height={H}" />
-<link href="https://fonts.googleapis.com/css2?{st['gfont']}&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?{gfont}&display=swap" rel="stylesheet">
 {gsap_tag}
 {css}
+{hook_css}
 <style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   html, body {{ width:{W}px; height:{H}px; overflow:hidden; background:#000; }}
@@ -197,6 +278,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
        elemento e o vídeo sai MUDO, sem erro em lugar nenhum além do linter. -->
   <audio id="a-roll-audio" src="{video}" data-start="0" data-duration="{duration:.3f}"
          data-track-index="9" data-volume="1"></audio>
+
+{hook_block}
 
   {container}
 {markup(timed, st, style_id, orphans, penalty)}
@@ -241,7 +324,10 @@ def main() -> None:
     proj = args.output.parent
     proj.mkdir(parents=True, exist_ok=True)
     (proj / "styles").mkdir(exist_ok=True)
-    for f in style_files(style_id, st):
+    files = style_files(style_id, st)
+    if data.get("hook", {}).get("enabled"):
+        files.append("headline.css")
+    for f in files:
         shutil.copy2(STYLES_DIR / f, proj / "styles" / f)
 
     src_video = proj / args.video

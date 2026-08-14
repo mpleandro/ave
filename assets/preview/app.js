@@ -76,7 +76,7 @@ const ICON = {
 // é de propósito: o catálogo é a promessa, isto é o estado.
 const PORTED = {
   captions: new Set(['karaoke', 'simples', 'serifada', 'classica']),
-  headlines: new Set([]),
+  headlines: new Set(['outline', 'card', 'realce', 'misto']),
   edits: new Set(['limpa']),
 };
 

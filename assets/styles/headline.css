@@ -1,0 +1,91 @@
+/* HOOK / headline — quatro estilos: contorno, cartão, realce, misto.
+ *
+ * Fonte ÚNICA com a prévia da aba Estilo: os mesmos números, a mesma aparência.
+ *
+ * Autorado em referência de 1080px e escalado por --hl-scale (prévia passa
+ * clientWidth/1080, composição passa 1). Família, peso e corpo vêm do dado —
+ * o compositor os calcula medindo o texto real, porque a headline é sempre
+ * DUAS linhas ajustadas à largura segura, nunca um corpo fixo.
+ *
+ * Cada headline sai como bloco próprio, com id estável e tempo próprio: é o que
+ * vai permitir arrastá-la no editor sem reescrever o estilo.
+ */
+
+.ave-hook {
+  --hl-scale: 1;
+  --hl-size: 82;
+  --hl-lh: 1.06;
+  --hl-top: 210;
+  --hl-accent: #ff6b1a;
+  --hl-stroke: 12;
+
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--hl-top) * var(--hl-scale) * 1px);
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+  color: #fff;
+  line-height: var(--hl-lh);
+  letter-spacing: calc(-1px * var(--hl-scale));
+  white-space: pre;
+  pointer-events: none;
+}
+
+.ave-hook .hl-line {
+  font-size: calc(var(--hl-size) * var(--hl-scale) * 1px);
+}
+
+/* contorno — texto branco com traço preto grosso, sem cartão. O traço é
+   desenhado ANTES do preenchimento; sem paint-order ele come metade da haste
+   de dentro para fora e a letra afina. */
+.ave-hook.outline {
+  font-weight: 800;
+  -webkit-text-stroke: calc(var(--hl-stroke) * var(--hl-scale) * 1px) #000;
+  paint-order: stroke fill;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+}
+
+/* cartão — caixa cinza-escura, texto em caixa alta, TODAS as linhas no mesmo
+   corpo (nunca uma linha herói e uma menor). */
+.ave-hook.card {
+  display: inline-block;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  font-weight: 900;
+  background: #232326;
+  border-radius: calc(24px * var(--hl-scale));
+  padding: calc(28px * var(--hl-scale)) calc(46px * var(--hl-scale));
+  box-shadow: 0 calc(4px * var(--hl-scale)) calc(12px * var(--hl-scale)) rgba(0, 0, 0, 0.45);
+  text-shadow: 0 calc(1px * var(--hl-scale)) calc(4px * var(--hl-scale)) rgba(0, 0, 0, 0.55);
+}
+
+/* realce — cada linha ganha sua própria tarja no accent. Linhas separadas em
+   vez de um fundo só: uma tarja única atrás de duas linhas de larguras
+   diferentes vira um retângulo, e o efeito é justamente a tarja acompanhar o
+   texto. */
+.ave-hook.realce {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(2px * var(--hl-scale));
+  font-weight: 900;
+}
+
+.ave-hook.realce .hl-line {
+  background: var(--hl-accent);
+  color: #fff;
+  padding: 0.08em 0.3em 0.16em;
+  border-radius: calc(12px * var(--hl-scale));
+  box-shadow: 0 calc(3px * var(--hl-scale)) calc(7px * var(--hl-scale)) rgba(0, 0, 0, 0.45);
+}
+
+/* misto — primeira linha leve e branca, segunda pesada no accent. O contraste
+   de peso é o que faz a segunda linha ser a frase. */
+.ave-hook.misto {
+  filter: drop-shadow(0 calc(2px * var(--hl-scale)) calc(4px * var(--hl-scale)) rgba(0, 0, 0, 0.55));
+}
+
+.ave-hook.misto .hl-line:nth-child(1) { font-weight: 400; color: #fff; }
+.ave-hook.misto .hl-line:nth-child(2) { font-weight: 900; color: var(--hl-accent); }
