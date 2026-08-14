@@ -71,6 +71,15 @@ const ICON = {
  * The user's pick ships to <edit>/preview_style.json; the skill reads it once,
  * at the gate, and builds Fase 2 from it.
  */
+// O que já existe de verdade no motor. O catálogo abaixo descreve o produto
+// inteiro; este mapa diz o que dele está pronto hoje. Manter os dois separados
+// é de propósito: o catálogo é a promessa, isto é o estado.
+const PORTED = {
+  captions: new Set(['karaoke']),
+  headlines: new Set([]),
+  edits: new Set(['limpa']),
+};
+
 const STYLE_CATALOG = {
   edits: [
     {
@@ -1180,9 +1189,15 @@ function renderSetup() {
     const opts = STYLE_CATALOG[group];
     host.innerHTML = '';
     for (const o of opts) {
-      const card = el('div', `opt${o.id === chosen ? ' on' : ''}`, host);
+      // Estilos ainda não portados para o HyperFrames aparecem apagados e não
+      // clicáveis, em vez de sumirem: esconder faria a aba mentir sobre o que o
+      // produto vai ser, e escolher um deles levaria a um beco sem saída na
+      // hora de renderizar.
+      const off = PORTED[group] && !PORTED[group].has(o.id);
+      const card = el('div', `opt${o.id === chosen ? ' on' : ''}${off ? ' unavailable' : ''}`, host);
       card.dataset.group = group;
       card.dataset.id = o.id;
+      if (off) card.title = 'ainda não disponível';
       // headline previews are two short lines — they do not need the caption
       // box's height, and with four groups on one screen that height is scarce
       const kind = o.mock ? 'frame' : o.hl ? 'cap hlbox' : 'cap';
@@ -1229,7 +1244,7 @@ $('styleSetup').addEventListener('click', (e) => {
   // the accent controls manage themselves (live, no rebuild) — keep the card
   // handler off them, or a click in the hex field would count as a style pick
   if (e.target.closest('#optAccent')) return;
-  const opt = e.target.closest('.opt:not(.ghost)');
+  const opt = e.target.closest('.opt:not(.ghost):not(.unavailable)');
   if (opt) {
     const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
     S.style[key] = opt.dataset.id;

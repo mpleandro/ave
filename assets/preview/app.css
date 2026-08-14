@@ -1122,3 +1122,24 @@ button.tl-chip:disabled { cursor: default; }
   border-right: 1px solid rgba(255, 119, 19, 0.75);
 }
 .tl-chip.ghost { opacity: 0.55; }
+
+/* Estilo ainda não portado para o motor: visível, legível, mas claramente
+   fora de alcance. Apagar sem esconder — o usuário precisa ver o que vem. */
+.opt.unavailable {
+  opacity: 0.34;
+  filter: saturate(0.25);
+  cursor: not-allowed;
+}
+.opt.unavailable::after {
+  content: 'em breve';
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.75);
+}
