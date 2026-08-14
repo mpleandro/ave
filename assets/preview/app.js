@@ -865,6 +865,17 @@ function buildInsertsDraft() {
       start: +it.start, end: +it.end, ref: i,
     });
   });
+  // bespoke motion graphics drawn in CustomGraphics.tsx — they have no `src`,
+  // so the label is the graphic's id. Without this the windows are invisible
+  // here: the user sees a full-frame graphic in the player with nothing on the
+  // timeline to grab, and cannot retime or remove it.
+  (d.brollGraphics || []).forEach((g, i) => {
+    list.push({
+      kind: 'broll',
+      label: g.label || (g.id || 'gráfico').replace(/_/g, ' '),
+      start: +g.start, end: +g.end, ref: i,
+    });
+  });
   (d.behind || []).forEach((b, i) => {
     list.push({ kind: 'behind', label: `BEHIND ${b.kind === 'words' ? (b.words || []).map((w) => w.t).join(' ') : (b.src || '').split('/').pop()}`, start: +b.start, end: +b.start + +b.dur, ref: i });
   });
@@ -1049,6 +1060,7 @@ const normHex = (v) => {
  * the colour, and saying so beats letting the user wonder why the previews did
  * not move. Mirrors the template — update both together. */
 const ACCENT_USERS = {headlines: ['realce', 'misto'], captions: ['stacked']};
+/* AVELIN-OVERLAY */ if (window.EDVID_LOCAL) window.EDVID_LOCAL.install({STYLE_CATALOG, CAP_BUILDERS, ACCENT_USERS});
 const ACCENT_DEFAULT = '#ff5200';
 
 function applyAccent() {
@@ -1799,6 +1811,7 @@ $('btnSave').addEventListener('click', async () => {
       inserts: S.insertsDraft.filter((c) => c.kind === 'insert').map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
       splitInserts: S.insertsDraft.filter((c) => c.kind === 'split').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
       splitVideos: S.insertsDraft.filter((c) => c.kind === 'splitvideo').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
+      brollGraphics: S.insertsDraft.filter((c) => c.kind === 'broll').map((c) => ({ ref: c.ref, label: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
       hook: S.insertsDraft.filter((c) => c.kind === 'hook').map((c) => ({ endSec: +c.end.toFixed(3) }))[0] || null,
       behind: S.insertsDraft.filter((c) => c.kind === 'behind').map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), dur: +(c.end - c.start).toFixed(3) })),
       wordAccents: S.insertsDraft.filter((c) => c.kind === 'word').map((c) => ({ ref: c.ref, text: c.label, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
