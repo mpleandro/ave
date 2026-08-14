@@ -32,8 +32,8 @@ HOLD = 0.6  # sobra depois da última palavra antes de a deixa sair
 
 
 def style_files(style_id: str, style: dict) -> list[str]:
-    if style_id == "scatter":
-        return ["scatter.css", "scatter.js"]
+    if style_id in ("scatter", "stacked"):
+        return [f"{style_id}.css", f"{style_id}.js"]
     return ["karaoke.css", "karaoke.js"] if style["animated"] else ["static.css"]
 
 
@@ -103,6 +103,80 @@ def scatter_markup(timed: list[dict], st: dict) -> str:
             f'data-duration="{t["end"] - t["start"]:.3f}" data-track-index="1">'
             f'{"".join(rows)}</div>')
     return "\n".join("    " + b for b in blocks)
+
+
+def fit_font(text: str, base: float, avail: float, factor: float) -> int:
+    """Corpo estimado pela CONTAGEM de caracteres, não pela medida real.
+
+    Deliberadamente igual ao original: o empilhado depende de as linhas de uma
+    deixa guardarem proporção ENTRE SI, e uma estimativa uniforme faz isso
+    melhor que a medida exata — com medida real, uma linha de letras estreitas
+    cresce e quebra a pilha. Aqui a aproximação é a intenção, não um atalho.
+    """
+    n = max(1, len(text.strip()))
+    est = n * base * factor
+    return int(avail / (n * factor)) if est > avail else int(base)
+
+
+def stacked_markup(cues: list[dict], st: dict, duration: float) -> tuple[str, int]:
+    """Deixas do empilhado, do arquivo preparado. Retorna (markup, n_estendidas)."""
+    blocks, stretched = [], 0
+    min_solo = st["minSoloMs"] / 1000
+    for k, c in enumerate(cues):
+        start, end = c["startMs"] / 1000, c["endMs"] / 1000
+        if start >= duration:
+            continue
+        solo = c["preset"] in ("SOLO_BIG", "SOLO_OUTLINE")
+        # Palavra sozinha precisa de DURAÇÃO, não só de peso: abaixo de ~340ms
+        # ela pisca em um quadro e lê como falha. Medido nesta fixture: o
+        # preparador entregou uma deixa SOLO de 20ms.
+        if solo and end - start < min_solo:
+            limit = (cues[k + 1]["startMs"] / 1000 if k + 1 < len(cues) else duration)
+            new_end = min(start + min_solo, limit, duration)
+            if new_end > end:
+                end, stretched = new_end, stretched + 1
+        end = min(end, duration)
+        if end <= start:
+            continue
+
+        rows = []
+        if solo:
+            w = c["lines"][0][0]
+            size = fit_font(w["text"], st["soloBase"], st["maxW"], st["soloFitFactor"])
+            circle = ('<svg class="stk-ellipse" viewBox="0 0 200 100" fill="none">'
+                      '<ellipse cx="100" cy="50" rx="94" ry="42" stroke="#5fd07a" '
+                      'stroke-width="5" stroke-linecap="round" '
+                      'stroke-dasharray="300 40" transform="rotate(-3 100 50)"/></svg>'
+                      if c["preset"] == "SOLO_OUTLINE" else "")
+            rows.append(
+                f'<div class="stk-line" style="position:relative">{circle}'
+                f'<span class="stk-solo s0" data-at="{w["fromMs"] / 1000:.3f}" '
+                f'style="font-size:{size}px">{esc(w["text"])}</span></div>')
+        else:
+            for li, line in enumerate(c["lines"]):
+                styles = c.get("lineStyles") or []
+                idx = styles[li] if li < len(styles) else (li + c.get("styleOffset", 0)) % 4
+                text = " ".join(w["text"] for w in line)
+                size = fit_font(text, st["size"], st["maxW"], st["fitFactor"])
+                if idx == 1:
+                    size = round(size * 0.72)
+                if idx == 2:
+                    size = round(size * 0.95)
+                if (c.get("lineEmph") or [])[li:li + 1] == [True]:
+                    size = round(size * 1.12)
+                if (c.get("lineBoost") or [])[li:li + 1] == [True]:
+                    size = round(size * 1.35)
+                spans = "".join(
+                    f'<span class="s{idx}" data-at="{w["fromMs"] / 1000:.3f}">'
+                    f'{esc(w["text"])}{" " if j < len(line) - 1 else ""}</span>'
+                    for j, w in enumerate(line))
+                rows.append(f'<div class="stk-line" style="font-size:{size}px">{spans}</div>')
+
+        blocks.append(
+            f'<div class="stk-cue clip" data-start="{start:.3f}" '
+            f'data-duration="{end - start:.3f}" data-exit="{c.get("exit", "abrupt")}" '
+            f'data-track-index="1">{"".join(rows)}</div>')
+    return "\n".join("    " + b for b in blocks), stretched
 
 
 def video_duration(path: Path) -> float:
@@ -353,7 +427,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         # deixaria o texto cair numa fonte genérica sem erro visível
         gfont = f"{gfont}&{VARIANTS['headlineGfont']}"
 
-    if style_id == "scatter":
+    if style_id == "stacked":
+        cap_css = ('<link rel="stylesheet" href="styles/stacked.css">\n'
+                   '<script src="styles/stacked.js"></script>')
+        container = (f'<div class="ave-stacked" style="--stk-scale:1;'
+                     f' --stk-offset-y:{cfg.get("stackedOffsetY", st["offsetY"])};'
+                     f' --stk-orange:{st["orange"]}">')
+    elif style_id == "scatter":
         cap_css = ('<link rel="stylesheet" href="styles/scatter.css">\n'
                    '<script src="styles/scatter.js"></script>')
         container = (f'<div class="ave-scatter" style="--scat-scale:1;'
@@ -376,7 +456,9 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     # câmera ou flash. Sem nada em movimento, `data-no-timeline` evita 45s
     # perdidos por render esperando um registro que nunca vem.
     parts = []
-    if style_id == "scatter":
+    if style_id == "stacked":
+        parts.append("  AVE_STACKED.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+    elif style_id == "scatter":
         parts.append("  AVE_SCATTER.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif st["animated"]:
         parts.append("  AVE_KARAOKE.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
@@ -431,7 +513,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {chr(10).join(flash_blocks)}
 
   {container}
-{scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty)}
+{data["_stackedMarkup"] if style_id == "stacked" else (scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty))}
   </div>
 </div>
 
@@ -453,6 +535,8 @@ def main() -> None:
     ap.add_argument("-o", "--output", type=Path, required=True)
     ap.add_argument("--style", default=None)
     ap.add_argument("--end", type=float, default=None)
+    ap.add_argument("--cues", type=Path, default=None,
+                    help="caption-cues.json (obrigatório para o estilo empilhado)")
     ap.add_argument("--edl", type=Path, default=None,
                     help="edl.json — de onde saem as fronteiras de segmento da câmera")
     args = ap.parse_args()
@@ -516,7 +600,18 @@ def main() -> None:
              if w["startMs"] / 1000 < duration]
 
     timed = []
-    if cfg.get("enabled", True):
+    if style_id == "stacked":
+        cues_path = args.cues or (args.captions.parent / "caption-cues.json")
+        if not cues_path.exists():
+            sys.exit("o empilhado precisa do caption-cues.json — rode antes:\n"
+                     f"  uv run python helpers/caption_style.py --transcript "
+                     f"<edit>/transcripts/cut.json -o {cues_path}")
+        cues = json.loads(cues_path.read_text())
+        mk, stretched = stacked_markup(cues, st, duration)
+        data["_stackedMarkup"] = mk
+        data["_stackedCount"] = mk.count("stk-cue")
+        data["_stackedStretched"] = stretched
+    elif cfg.get("enabled", True):
         budget = (cfg.get("safeWidth") if tuned_for else None) or st["maxW"]
         cues = build_cues(words, st, budget)
         timed = time_cues(cues, fps, duration)
@@ -525,6 +620,18 @@ def main() -> None:
     penalty = VARIANTS["orphanPenalty"]
     args.output.write_text(render_html(data, timed, st, style_id, args.video,
                                        duration, orphans, penalty))
+
+    if style_id == "stacked":
+        n = data.get("_stackedCount", 0)
+        extra = data.get("_stackedStretched", 0)
+        print(f"{args.output}")
+        print(f"  estilo stacked (animado) · {st['family']} {st['weight']} @ {st['size']}px")
+        print(f"  {len(words)} palavras → {n} deixas preparadas")
+        if extra:
+            print(f"  {extra} deixa(s) sozinha(s) esticada(s) até {st['minSoloMs']}ms — "
+                  f"abaixo disso a palavra pisca em um quadro e lê como falha")
+        print(f"  duração {duration:.3f}s (stream de vídeo)")
+        return
 
     sizes = [len(t["cue"]) for t in timed]
     hist = {n: sizes.count(n) for n in sorted(set(sizes))}

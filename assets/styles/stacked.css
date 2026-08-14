@@ -1,0 +1,92 @@
+/* Legenda EMPILHADO — palavras empilhadas apertadas, misturando estilos por
+ * linha. O mais elaborado dos seis.
+ *
+ * Quatro estilos de linha, ciclados pelo preparador de deixas:
+ *   s0  Poppins 900 itálico, degradê branco→cinza
+ *   s1  Poppins 400, menor (0.72), mesmo degradê
+ *   s2  Playfair serifada 900 itálico, LARANJA — o acento da deixa
+ *   s3  Poppins 800, mesmo degradê
+ *
+ * O degradê vai na PALAVRA, nunca na linha: os spans carregam um filtro de
+ * sombra, que os pinta em camada própria, e um `-webkit-text-fill-color:
+ * transparent` herdado deixaria texto simplesmente invisível.
+ *
+ * A ancoragem é no CENTRO do bloco, não na base — diferente do karaokê, que é
+ * ancorado embaixo. Trocar um pelo outro põe a legenda na boca de quem fala.
+ */
+
+.ave-stacked {
+  --stk-scale: 1;
+  --stk-offset-y: 0.156;
+  --stk-orange: #ff5200;
+
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% + var(--stk-offset-y) * 100%);
+  height: 0;
+  pointer-events: none;
+}
+
+.ave-stacked .stk-cue {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.ave-stacked .stk-line {
+  white-space: pre;
+  letter-spacing: calc(-1.5px * var(--stk-scale));
+  line-height: 1.12;
+}
+
+/* o aperto entre linhas é o que faz a pilha ler como bloco, e não como lista */
+.ave-stacked .stk-line + .stk-line {
+  margin-top: -0.34em;
+}
+
+.ave-stacked .stk-line span {
+  display: inline-block;
+  padding: 0 0.06em;
+  opacity: 0;
+  filter: drop-shadow(0 calc(5px * var(--stk-scale)) calc(9px * var(--stk-scale)) rgba(0, 0, 0, 0.5));
+  will-change: opacity, translate, filter;
+}
+
+.ave-stacked .s0,
+.ave-stacked .s1,
+.ave-stacked .s3 {
+  background-image: linear-gradient(180deg, #fff 0%, #fff 46%, #cfcfcf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.ave-stacked .s0 { font-family: 'Poppins', sans-serif; font-weight: 900; font-style: italic; }
+.ave-stacked .s1 { font-family: 'Poppins', sans-serif; font-weight: 400; }
+.ave-stacked .s2 { font-family: 'Playfair Display', serif; font-weight: 900; font-style: italic; color: var(--stk-orange); }
+.ave-stacked .s3 { font-family: 'Poppins', sans-serif; font-weight: 800; }
+
+/* palavra sozinha — o preparador a isola quando ela carrega a frase */
+.ave-stacked .stk-solo {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: calc(-3px * var(--stk-scale));
+  line-height: 1.12;
+  padding: 0 0.14em;
+}
+
+/* a versão circulada leva uma elipse desenhada à mão em volta */
+.ave-stacked .stk-ellipse {
+  position: absolute;
+  inset: -18% -12%;
+  pointer-events: none;
+}

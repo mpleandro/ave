@@ -32,16 +32,22 @@ ENV = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
 
 # Estilos que já existem de verdade. A aba Estilo oferece mais do que isto; um
 # pedido fora desta lista precisa falhar com nome, não renderizar outra coisa.
-PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica", "scatter"}
+PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica", "scatter", "stacked"}
 PORTED_HEADLINES = {"outline", "card", "realce", "misto"}
 
 LOUDNORM = "loudnorm=I=-14:TP=-1:LRA=11"
 
 
-def run(cmd, cwd=None, quiet=False):
+def run(cmd, cwd=None, quiet=False, allow_fail=False):
+    """Executa e aborta em falha — salvo quando o código de saída É a resposta.
+
+    O `check` sai com 1 quando encontra erro, que é informação, não acidente:
+    abortar aqui impedia a lógica de tolerância logo abaixo de sequer rodar, e
+    a Fase 2 morria antes de decidir se o erro importava.
+    """
     r = subprocess.run(cmd, cwd=cwd, env=ENV,
                        capture_output=quiet, text=True)
-    if r.returncode != 0:
+    if r.returncode != 0 and not allow_fail:
         if quiet and r.stderr:
             print(r.stderr[-2000:], file=sys.stderr)
         sys.exit(f"falhou: {' '.join(str(c) for c in cmd[:3])}… (código {r.returncode})")
@@ -153,12 +159,29 @@ def main() -> None:
     compose = [sys.executable, str(SKILL / "helpers" / "compose_shortform.py"),
                str(data_path), "--captions", str(caps_path),
                "-o", str(proj / "index.html")]
+    if edit.joinpath("edl.json").exists():
+        compose += ["--edl", str(edit / "edl.json")]
+
+    # O empilhado é o único estilo com passo de preparação: um "diretor" agrupa
+    # as palavras em deixas curtas, escolhe qual leva o acento serifado laranja
+    # e marca as que ficam sozinhas ou circuladas. Gerado aqui quando falta, em
+    # vez de exigir que alguém lembre da ordem.
+    if data.get("captions", {}).get("style") == "stacked":
+        cues = pub / "caption-cues.json"
+        transcript = edit / "transcripts" / "cut.json"
+        if not cues.exists():
+            if not transcript.exists():
+                sys.exit(f"o empilhado precisa da transcrição do corte em {transcript}")
+            print("  preparando as deixas do empilhado…")
+            run([sys.executable, str(SKILL / "helpers" / "caption_style.py"),
+                 "--transcript", str(transcript), "-o", str(cues)])
+        compose += ["--cues", str(cues)]
     if args.end:
         compose += ["--end", str(args.end)]
     run(compose)
 
     print("  verificando…")
-    r = run(HF + ["check"], cwd=proj, quiet=True)
+    r = run(HF + ["check"], cwd=proj, quiet=True, allow_fail=True)
     out = r.stdout or ""
     if "0 error(s)" not in out:
         # `content_overlap` entre as linhas da headline é falso positivo

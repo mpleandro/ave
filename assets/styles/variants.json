@@ -104,6 +104,28 @@
       "spread": 0.45,
       "offsetY": 0.72,
       "hiMinLen": 7
+    },
+    "stacked": {
+      "_note": "Empilhado. Lê caption-cues.json (preparado por caption_style.py), não captions.json. Ancorado no CENTRO do bloco — trocar pela ancoragem de baixo do karaokê põe a legenda na boca de quem fala.",
+      "animated": true,
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:ital,wght@0,400;0,800;0,900;1,900&family=Playfair+Display:ital,wght@1,900",
+      "weight": 900,
+      "size": 86,
+      "maxWords": 6,
+      "lines": 3,
+      "sx": 1,
+      "sy": 1,
+      "tracking": -1.5,
+      "maxW": 900,
+      "offsetY": 0.156,
+      "soloBase": 150,
+      "fitFactor": 0.58,
+      "soloFitFactor": 0.6,
+      "minSoloMs": 340,
+      "orange": "#ff5200",
+      "needsCues": true
     }
   },
   "_headlines_readme": "Geometria das headlines. `weights` é [linha1, linha2]; `cap` é TETO de corpo, não corpo fixo — a headline é sempre duas linhas ajustadas a `safeW` medindo o texto real. `upper` diz se o estilo escreve em caixa alta.",

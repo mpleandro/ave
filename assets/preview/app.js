@@ -75,7 +75,7 @@ const ICON = {
 // inteiro; este mapa diz o que dele está pronto hoje. Manter os dois separados
 // é de propósito: o catálogo é a promessa, isto é o estado.
 const PORTED = {
-  captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter']),
+  captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked']),
   headlines: new Set(['outline', 'card', 'realce', 'misto']),
   edits: new Set(['limpa']),
 };
