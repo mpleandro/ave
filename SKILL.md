@@ -1,9 +1,21 @@
 ---
-name: edvid
-description: Edvid — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — Remotion visuals from a data-driven template: short-form gets karaoke captions, a static hook, a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
+name: ave
+description: A.V.E. (Avelin Video Edit) — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — HyperFrames visuals from a data-driven template: short-form gets karaoke captions, a static hook, a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
 ---
 
-# Edvid
+# A.V.E. — Avelin Video Edit
+
+> **STATUS: PHASE 2 IS STUBBED.** This fork is migrating the visuals layer from
+> Remotion to **HyperFrames** (Apache 2.0). PHASE 1 — transcription, take
+> selection, the cut, the grade, the voice master, the preview interface — is
+> intact and is the supported path today. Anything below describing Phase 2 as
+> Remotion is **historical** until the port lands; the Remotion templates now
+> live in `reference/remotion-legacy/` as the visual spec for that port, not as
+> code to run. Do not scaffold a Remotion project from this repo.
+>
+> Fork of [edvid](https://github.com/fillrochaa/edvid) (MIT, Creator Factory) —
+> see `LICENSE`. Upstream is tracked as the `upstream` remote; keep the diff
+> confined to Phase 2 so Phase-1 improvements keep merging cleanly.
 
 ## Principle
 
@@ -26,9 +38,9 @@ description: Edvid — edit any video by conversation, in phases. Two tracks —
 6. **Cache transcripts per source.** Never re-transcribe unless the source changed.
 7. **Color grade per-segment during extraction**, never post-concat.
 8. **Strategy confirmation before execution.**
-9. **All session outputs in `<videos_dir>/edit/`** — never inside the edvid repo.
-10. **PHASE 2 is Remotion-only** — no ffmpeg/PIL burned text or overlays.
-11. **PHASE 2 is data-driven.** Scaffold by copying the track template; describe the video in `public/edit-data.json`. **Never read or edit the template TSX** (`src/Main.tsx` etc.) — the only editable code file is `src/CustomGraphics.tsx`, only for bespoke graphics.
+9. **All session outputs in `<videos_dir>/edit/`** — never inside the A.V.E. repo.
+10. **PHASE 2 IS STUBBED — do not fake it.** The HyperFrames port is not landed. Never burn text or overlays with ffmpeg/PIL to "deliver something": that was forbidden under Remotion and it is still forbidden. If the user asks for Phase 2, say the port is in progress and offer the approved cut (`cut.mp4`) plus the deliverables Phase 1 already produces (`captions.srt`, `chapters.txt`).
+11. **PHASE 2 stays data-driven when it lands.** The contract is `edit-data.json` describing the video, never per-session engine code — samples in `assets/schema/`. The visual spec to port from is `reference/remotion-legacy/`, which is **reference, not a template to copy**.
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
 13. **Never Read machine data into context**: `transcripts/*.json` (raw), `captions.json`, `track.json`, `segments.json`, matte/track binaries. Read `takes_packed.md` and helper stdout instead.
 
@@ -68,11 +80,11 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
 
 First-time install lives in `install.md`. On cold start just verify:
 
-- `GROQ_API_KEY` resolves (env or `.env` at the edvid repo root). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
+- `GROQ_API_KEY` resolves (env or `.env` at the A.V.E. repo root — this fork has its own, it does not read edvid's). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
 - `ELEVENLABS_API_KEY` (optional) — used for LONG sources (>5 min, e.g. YouTube/course lessons) via ElevenLabs Scribe `scribe_v1`, since Groq's free tier chokes on long uploads. `backend=auto` (default) picks Scribe over 5 min when the key exists, else Groq; short clips stay on Groq. No key → long sources fall back to Groq. Ask for it lazily the first time a >5 min source shows up, write to `.env`.
 - `whispercpp` (optional) — fully local transcription, no key, no upload cap, no network. Opt-in only: `auto` never picks it. Needs whisper.cpp built with a ggml model (auto-detected in `~/whisper.cpp`, or `WHISPERCPP_BIN`/`WHISPERCPP_MODEL` in `.env`). Offer it when the user has no Groq key or hits quota. **Text matches Groq; word TIMES don't** (measured: 66% of words inside a real speech region vs Groq's 97%, median drift 240ms). Phase 1 is unaffected — cut edges come from `speech_regions.py`. For Phase-2 karaoke captions, prefer Groq and say why.
 - `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources (`ingest_url.py`) — install lazily the first time a link shows up (`brew install yt-dlp` / `winget install yt-dlp.yt-dlp`).
-- The `remotion-best-practices` skill for Phase-2 domain knowledge (install from https://github.com/remotion-dev/skills if missing).
+- Phase-2 domain knowledge: the HyperFrames skills, once the port lands. **Do not install or load `remotion-best-practices`** — this fork does not render with Remotion. Until then Phase 2 is stubbed (Hard Rule 10).
 - Lazy keys, ask on first use, write to `.env` (never to `<videos_dir>`): `PEXELS_API_KEY` (images), `GOOGLE_API_KEY`+`GOOGLE_CSE_ID` (brand/people images fallback), `TREBLO_API_KEY` (AI music).
 
 Helpers live in `helpers/`, resolved relative to this SKILL.md (usually `~/.claude/skills/edvid/`, or a symlink/junction pointing there). Run them as `uv run python helpers/<name>.py` — a bare `python` misses the `.venv` that `uv sync` builds.

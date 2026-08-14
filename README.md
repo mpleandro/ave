@@ -1,4 +1,4 @@
-# edvid
+# A.V.E. — Avelin Video Edit
 
 Editor de vídeo por conversa. Você joga o material bruto numa pasta, abre seu
 agente ali dentro e diz *"edita isso num vídeo de lançamento"*. Ele transcreve,
@@ -8,6 +8,23 @@ trilha.
 
 Funciona em **short-form vertical** (Reels/TikTok/Shorts) e **longform
 horizontal** (YouTube).
+
+> **Estado atual: a Fase 2 está em stub.** Este fork está migrando a camada de
+> visuais de Remotion para **HyperFrames** (Apache 2.0), para tirar a restrição
+> de licença comercial do caminho. A Fase 1 — transcrição, escolha de tomadas,
+> corte, correção de cor, master de voz e a interface de preview — está
+> completa e é o caminho suportado hoje.
+>
+> As instruções de instalação abaixo ainda apontam para o repositório do edvid;
+> serão trocadas quando o A.V.E. tiver o seu próprio.
+
+## Origem e licença
+
+A.V.E. é um fork de [edvid](https://github.com/fillrochaa/edvid) (MIT,
+© 2026 Creator Factory), com o aviso de copyright preservado conforme o MIT
+exige. Veja `LICENSE`. O repositório original é rastreado no remote `upstream`,
+e o diff é mantido confinado à Fase 2 para que melhorias no motor de corte
+continuem sendo integráveis.
 
 ---
 
