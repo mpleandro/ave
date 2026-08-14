@@ -754,8 +754,18 @@ def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
 
 
 def assemble_jcut(plan: list[dict], out_path: Path, edit_dir: Path) -> None:
-    """Concat the video track, sum the offset audio tracks, mux them together."""
-    work = edit_dir / "clips_graded"
+    """Concat the video track, sum the offset audio tracks, mux them together.
+
+    The scratch dir is taken from where the segments actually landed, not from
+    a third copy of the draft/preview/graded choice. Hardcoding "clips_graded"
+    here meant a J-cut render in --draft (or --preview) wrote its intermediates
+    to a directory that path never creates: extraction fills clips_draft/, then
+    ffmpeg fails to open the output and exits 254 with its stderr swallowed by
+    quiet=True. It only surfaces in an edit dir that has never had a full
+    render — anywhere clips_graded/ already exists, the bug is invisible.
+    """
+    work = plan[0]["video_path"].parent if plan else edit_dir / "clips_graded"
+    work.mkdir(parents=True, exist_ok=True)
     vlist = edit_dir / "_concat_jcut.txt"
     vlist.write_text("".join(f"file '{p['video_path'].resolve()}'\n" for p in plan))
 
