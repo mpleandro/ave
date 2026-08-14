@@ -70,7 +70,13 @@
 }
 
 .ave-stacked .s0 { font-family: 'Poppins', sans-serif; font-weight: 900; font-style: italic; }
-.ave-stacked .s1 { font-family: 'Poppins', sans-serif; font-weight: 400; }
+.ave-stacked .s1 {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 400;
+  /* corte mais leve no menor corpo — sombra dupla, senão some em fundo claro */
+  filter: drop-shadow(0 calc(5px * var(--stk-scale)) calc(10px * var(--stk-scale)) rgba(0, 0, 0, 0.55))
+          drop-shadow(0 calc(2px * var(--stk-scale)) calc(3px * var(--stk-scale)) rgba(0, 0, 0, 0.55));
+}
 .ave-stacked .s2 { font-family: 'Playfair Display', serif; font-weight: 900; font-style: italic; color: var(--stk-orange); }
 .ave-stacked .s3 { font-family: 'Poppins', sans-serif; font-weight: 800; }
 

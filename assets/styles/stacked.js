@@ -12,6 +12,19 @@
 (function (root) {
   'use strict';
 
+  /* Reemitidas em TODO valor animado de filter.
+   *
+   * Animar `filter` SUBSTITUI o valor inteiro: terminar a entrada em
+   * `blur(0px)` apagava a sombra declarada no CSS, e as palavras brancas
+   * sumiam sobre fundo claro — visto numa camiseta branca, onde só o acento
+   * laranja continuava legível. A sombra é contraste, não enfeite.
+   *
+   * A REFORÇADA (dupla) é da linha em Poppins 400 menor: o corte mais leve no
+   * menor corpo é o que menos se sustenta sozinho. */
+  var SHADOW = ' drop-shadow(0 5px 9px rgba(0,0,0,0.5))';
+  var SHADOW_STRONG = ' drop-shadow(0 5px 10px rgba(0,0,0,0.55))'
+                    + ' drop-shadow(0 2px 3px rgba(0,0,0,0.55))';
+
   var TIMING = {
     FPS_REF: 30,
     ENTER_FRAMES: 8,
@@ -45,10 +58,12 @@
         var enter = Math.max(2 / TIMING.FPS_REF, Math.min(TIMING.ENTER, exitAt - at));
         if (at >= exitAt) at = Math.max(start, exitAt - enter);
 
+        var sh = sp.classList.contains('s1') ? SHADOW_STRONG : SHADOW;
         tl.fromTo(sp,
           { opacity: 0, y: TIMING.RISE * scale,
-            filter: 'blur(' + TIMING.BLUR_IN * scale + 'px)' },
-          { opacity: 1, y: 0, filter: 'blur(0px)', duration: enter, ease: 'expo.out' },
+            filter: 'blur(' + TIMING.BLUR_IN * scale + 'px)' + sh },
+          { opacity: 1, y: 0, filter: 'blur(0px)' + sh,
+            duration: enter, ease: 'expo.out' },
           at);
       }
 
