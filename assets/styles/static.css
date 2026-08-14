@@ -1,0 +1,55 @@
+/* Legendas ESTÁTICAS: simples, serifada, classica.
+ *
+ * Sem animação nenhuma — uma deixa substitui a anterior, e é só. O ritmo vem
+ * da troca, não de movimento. Três estilos num arquivo porque eles diferem
+ * apenas em fonte, corpo e distorção; a caixa é a mesma.
+ *
+ * Autorado em referência de 1080px de largura e escalado por --cap-scale, como
+ * os demais: prévia do editor passa clientWidth/1080, composição passa 1.
+ */
+
+.ave-cap-static {
+  --cap-scale: 1;
+  --cap-bottom: 430;
+  --cap-size: 82;
+  --cap-track: -3;
+  --cap-sx: 1;
+  --cap-sy: 1;
+
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ave-cap-static .ave-cue {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--cap-bottom) * var(--cap-scale) * 1px);
+
+  text-align: center;
+  line-height: 1.14;
+  color: #fff;
+  font-family: var(--cap-family);
+  font-weight: var(--cap-weight);
+  font-size: calc(var(--cap-size) * var(--cap-scale) * 1px);
+  letter-spacing: calc(var(--cap-track) * var(--cap-scale) * 1px);
+
+  /* A distorção é aplicada aqui, no bloco inteiro, e não por linha: escalar
+     linha a linha faria o espaçamento vertical encolher junto e as duas linhas
+     da `classica` se aproximariam de um jeito que ninguém pediu. */
+  transform: scale(var(--cap-sx), var(--cap-sy));
+  transform-origin: center bottom;
+
+  text-shadow: 0 calc(4px * var(--cap-scale)) calc(20px * var(--cap-scale))
+    rgba(0, 0, 0, 0.55);
+}
+
+/* Família e peso vêm do dado, não daqui.
+ *
+ * A primeira versão fixava as três variantes neste arquivo. O checker reprovou,
+ * e com razão: a página só carrega a fonte do estilo ESCOLHIDO, então as regras
+ * das outras duas referenciavam famílias sem @font-face e o texto cairia numa
+ * fonte genérica sem ninguém perceber até assistir. Uma folha que descreve três
+ * estilos e uma página que carrega um só é uma contradição que o CSS não
+ * reclama sozinho. */

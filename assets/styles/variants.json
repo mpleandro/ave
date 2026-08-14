@@ -1,0 +1,74 @@
+{
+  "_readme": "Números dos estilos de legenda, lidos pela prévia do editor E pelo compositor. Existe para que os dois não possam divergir: o algoritmo de agrupamento é curto e estável, mas os NÚMEROS (tamanho, peso, largura máxima) são o que sempre desandava quando viviam em dois lugares.",
+
+  "_orphans_pt": "Palavras funcionais curtas que não devem TERMINAR uma linha. A quebra de duas linhas equilibra largura, mas equilíbrio puro deixa a linha acabar em 'de' o tempo todo — coisa que legenda de verdade nunca faz.",
+  "orphansPt": ["o", "a", "os", "as", "e", "é", "de", "do", "da", "em", "no", "na", "um", "uma", "que", "se", "ao", "à", "por", "com"],
+  "orphanPenalty": 200,
+
+  "bottom": 430,
+
+  "styles": {
+    "karaoke": {
+      "animated": true,
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@900",
+      "weight": 900,
+      "size": 76,
+      "maxWords": 3,
+      "lines": 1,
+      "sx": 1,
+      "sy": 1,
+      "tracking": -1,
+      "maxW": 720,
+      "gapEm": 0.2368
+    },
+
+    "simples": {
+      "_note": "Poppins não tem corte condensado, então o sx 0.9 é uma regular distorcida — ela afina as hastes nos dois sentidos. Se ficar leve demais, subir o peso, nunca comprimir mais.",
+      "animated": false,
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@600",
+      "weight": 600,
+      "size": 82,
+      "maxWords": 3,
+      "lines": 1,
+      "sx": 0.9,
+      "sy": 0.9,
+      "tracking": -3,
+      "maxW": 860
+    },
+
+    "serifada": {
+      "animated": false,
+      "family": "Libre Baskerville",
+      "cssFamily": "'Libre Baskerville', serif",
+      "gfont": "family=Libre+Baskerville:wght@700",
+      "weight": 700,
+      "size": 84,
+      "maxWords": 3,
+      "lines": 1,
+      "sx": 1,
+      "sy": 1,
+      "tracking": -1,
+      "maxW": 860
+    },
+
+    "classica": {
+      "_note": "Legenda clássica de duas linhas. maxWords alto de propósito: quem manda aqui é a largura, não a contagem.",
+      "animated": false,
+      "family": "Inter",
+      "cssFamily": "'Inter', sans-serif",
+      "gfont": "family=Inter:wght@500",
+      "weight": 500,
+      "size": 52,
+      "maxWords": 14,
+      "lines": 2,
+      "sx": 1,
+      "sy": 1,
+      "tracking": 0,
+      "maxW": 840
+    }
+  }
+}
