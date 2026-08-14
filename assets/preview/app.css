@@ -1143,3 +1143,15 @@ button.tl-chip:disabled { cursor: default; }
   background: rgba(0, 0, 0, 0.55);
   color: rgba(255, 255, 255, 0.75);
 }
+
+/* Parte do trecho que sai no aparo — escurecida no lugar, enquanto o bloco
+   segue congelado no tamanho antigo. Mostra o que se perde antes de perder. */
+.clip .trim-cut {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(8, 11, 16, 0.72);
+  backdrop-filter: saturate(0.2);
+  pointer-events: none;
+  z-index: 3;
+}

@@ -639,13 +639,23 @@ function jcutGeom(i) {
  * every clip after the first sat late by the accumulated lead. Each item also
  * carries its AUDIO placement (aout/adur), which is what the A1/A2 lanes draw —
  * derived here so the lanes follow the user's trims instead of going stale. */
-function draftLayout() {
+/* `freeze` congela UM trecho no tamanho que ele tinha antes do arrasto.
+ *
+ * Sem isso, puxar o início de um trecho encolhe o bloco pela direita — a borda
+ * esquerda está presa pelo trecho anterior, porque esta é a linha do tempo do
+ * CORTE, não da fonte. O resultado é que a alça que a pessoa está segurando não
+ * se move e a outra ponta sim, que lê como "mexi no começo e ele arrastou o
+ * fim". Congelando durante o arrasto, nada se desloca: a parte removida aparece
+ * escurecida e a alça acompanha o cursor. O rearranjo acontece ao soltar, uma
+ * vez só, que é quando a pessoa espera por ele. */
+function draftLayout(freeze) {
   let t = 0;
   let at = 0;
   return S.draft.map((r, i) => {
     if (r.removed) return { ...r, out: t, dur: 0, aout: at, adur: 0 };
     const g = jcutGeom(i);
-    const span = r.end - r.start;
+    const frozen = freeze != null && i === freeze;
+    const span = frozen ? r.orig.end - r.orig.start : r.end - r.start;
     const adur = Math.max(0, span - g.tail);
     const dur = Math.max(0, adur - g.lead);
     const item = { ...r, out: t, dur, aout: Math.max(0, at - g.lead), adur, lead: g.lead };
@@ -1298,9 +1308,15 @@ $('setupGo').addEventListener('click', async () => {
   }
 });
 
+// Declarado ANTES de renderClips porque ela lê o arrasto em curso para
+// congelar o trecho sendo aparado; um `let` depois do primeiro uso cai na
+// zona morta temporal e derruba a primeira renderização.
+let drag = null; // {type:'scrub'|'trim'|'chip-trim'|'chip-move', ...}
+
 function renderClips() {
   laneVideo.innerHTML = '';
-  const dl = draftLayout();
+  const trimming = drag && drag.type === 'trim' ? drag.i : null;
+  const dl = draftLayout(trimming);
   const rl = renderedLayout();
   const editable = S.tab === 1;
   dl.forEach((r, i) => {
@@ -1319,6 +1335,24 @@ function renderClips() {
     c.dataset.i = i;
     if (i === S.selected) c.classList.add('selected');
     if (r.start !== r.orig.start || r.end !== r.orig.end) c.classList.add('dirty');
+
+    // Enquanto este trecho está sendo aparado, ele fica no tamanho antigo e o
+    // que sai aparece escurecido nas pontas — assim a alça acompanha o cursor
+    // em vez de a outra borda se mexer.
+    if (i === trimming) {
+      const head = (r.start - r.orig.start) * S.pps;
+      const tail = (r.orig.end - r.end) * S.pps;
+      if (head > 0.5) {
+        const g = el('div', 'trim-cut', c);
+        g.style.left = '0px';
+        g.style.width = `${head}px`;
+      }
+      if (tail > 0.5) {
+        const g = el('div', 'trim-cut', c);
+        g.style.right = '0px';
+        g.style.width = `${tail}px`;
+      }
+    }
 
     // filmstrip from the rendered cut
     if (S.thumbCount > 0 && rl[i]) {
@@ -1340,8 +1374,14 @@ function renderClips() {
     dur.textContent = `${r.dur.toFixed(2)}s`;
 
     if (editable) {
-      el('div', 'handle l', c).dataset.i = i;
-      el('div', 'handle r', c).dataset.i = i;
+      const hl = el('div', 'handle l', c); hl.dataset.i = i;
+      const hr = el('div', 'handle r', c); hr.dataset.i = i;
+      // no trecho congelado a alça senta na BORDA DO CORTE, não na do bloco —
+      // é ela que tem que acompanhar o cursor
+      if (i === trimming) {
+        hl.style.left = `${(r.start - r.orig.start) * S.pps}px`;
+        hr.style.right = `${(r.orig.end - r.end) * S.pps}px`;
+      }
     }
   });
 }
@@ -1592,7 +1632,6 @@ function seekDraft(tDraft) {
 }
 
 // ---------- interactions ----------
-let drag = null; // {type:'scrub'|'trim'|'chip-trim'|'chip-move', ...}
 
 panel.addEventListener('pointerdown', (e) => {
   // The gutter is chrome, not timeline. Without this guard a pointerdown on a
@@ -1683,7 +1722,14 @@ panel.addEventListener('pointermove', (e) => {
 });
 
 ['pointerup', 'pointercancel'].forEach((ev) =>
-  panel.addEventListener(ev, () => { drag = null; hideTooltip(); })
+  panel.addEventListener(ev, () => {
+    const wasTrim = drag && drag.type === 'trim';
+    drag = null;
+    hideTooltip();
+    // o rearranjo acontece agora, ao soltar: durante o arrasto o trecho ficava
+    // congelado para a alça acompanhar o cursor
+    if (wasTrim) { renderClips(); drawWave(); refreshHeader(); }
+  })
 );
 
 // double-click a clip = reset it
