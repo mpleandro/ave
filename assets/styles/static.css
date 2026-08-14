@@ -41,7 +41,7 @@
   transform: scale(var(--cap-sx), var(--cap-sy));
   transform-origin: center bottom;
 
-  text-shadow: 0 calc(4px * var(--cap-scale)) calc(20px * var(--cap-scale))
+  text-shadow: 0 calc(4px * var(--cap-scale)) calc(18px * var(--cap-scale))
     rgba(0, 0, 0, 0.55);
 }
 

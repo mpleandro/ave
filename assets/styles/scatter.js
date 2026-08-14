@@ -8,6 +8,12 @@
 (function (root) {
   'use strict';
 
+  /* Reemitida em TODO valor animado de filter: animar `filter` substitui o
+     valor inteiro, então uma sombra declarada só no CSS sumiria no primeiro
+     quadro da animação — justamente na palavra destacada, a que mais precisa
+     dela. */
+  var SHADOW = ' drop-shadow(0 4px 14px rgba(0,0,0,0.5))';
+
   var TIMING = {
     FPS_REF: 30,
     STEP: 0.22,        // atraso entre uma palavra e a seguinte
@@ -52,8 +58,8 @@
         tl.fromTo(sp, { opacity: 0 }, { opacity: 1, duration: dur, ease: 'cubic.out' }, at);
         if (hi) {
           tl.fromTo(sp,
-            { filter: 'blur(' + TIMING.BLUR_IN * scale + 'px)' },
-            { filter: 'blur(0px)', duration: dur, ease: 'cubic.out' }, at);
+            { filter: 'blur(' + TIMING.BLUR_IN * scale + 'px)' + SHADOW },
+            { filter: 'blur(0px)' + SHADOW, duration: dur, ease: 'cubic.out' }, at);
         }
       }
       // a deixa inteira sai junto; só a destacada se dissolve em desfoque
@@ -61,7 +67,7 @@
       var his = cue.querySelectorAll('span.hi');
       if (his.length) {
         tl.to(his, {
-          filter: 'blur(' + TIMING.BLUR_OUT * scale + 'px)',
+          filter: 'blur(' + TIMING.BLUR_OUT * scale + 'px)' + SHADOW,
           duration: TIMING.EXIT, ease: 'none',
         }, exitAt);
       }

@@ -43,7 +43,7 @@
   font-weight: 800;
   -webkit-text-stroke: calc(var(--hl-stroke) * var(--hl-scale) * 1px) #000;
   paint-order: stroke fill;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+  filter: drop-shadow(0 calc(6px * var(--hl-scale)) calc(14px * var(--hl-scale)) rgba(0, 0, 0, 0.45));
 }
 
 /* cartão — caixa cinza-escura, texto em caixa alta, TODAS as linhas no mesmo
@@ -57,7 +57,7 @@
   background: #232326;
   border-radius: calc(24px * var(--hl-scale));
   padding: calc(28px * var(--hl-scale)) calc(46px * var(--hl-scale));
-  box-shadow: 0 calc(4px * var(--hl-scale)) calc(12px * var(--hl-scale)) rgba(0, 0, 0, 0.45);
+  box-shadow: 0 calc(18px * var(--hl-scale)) calc(50px * var(--hl-scale)) rgba(0, 0, 0, 0.45);
   text-shadow: 0 calc(1px * var(--hl-scale)) calc(4px * var(--hl-scale)) rgba(0, 0, 0, 0.55);
 }
 
@@ -84,7 +84,7 @@
 /* misto — primeira linha leve e branca, segunda pesada no accent. O contraste
    de peso é o que faz a segunda linha ser a frase. */
 .ave-hook.misto {
-  filter: drop-shadow(0 calc(2px * var(--hl-scale)) calc(4px * var(--hl-scale)) rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 calc(6px * var(--hl-scale)) calc(16px * var(--hl-scale)) rgba(0, 0, 0, 0.55));
 }
 
 .ave-hook.misto .hl-line:nth-child(1) { font-weight: 400; color: #fff; }

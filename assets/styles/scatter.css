@@ -63,6 +63,12 @@
   -webkit-text-fill-color: transparent;
   color: transparent;
   opacity: 0;
+  /* A sombra NÃO é enfeite: sem ela a legenda clara some sobre fundo claro —
+     camiseta branca, parede, céu. Ela vive no `filter` junto com o desfoque
+     porque a palavra destacada anima o desfoque, e uma animação de `filter`
+     SUBSTITUI o valor inteiro: declarar a sombra à parte a apagaria no primeiro
+     quadro da animação. Por isso o módulo de tempos reemite as duas juntas. */
+  filter: drop-shadow(0 calc(4px * var(--scat-scale)) calc(14px * var(--scat-scale)) rgba(0, 0, 0, 0.5));
   will-change: opacity, filter;
 }
 
