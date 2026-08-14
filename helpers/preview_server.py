@@ -32,6 +32,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -234,7 +235,33 @@ class Handler(BaseHTTPRequestHandler):
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2))
         tmp.replace(out)
-        self._json({"ok": True, "file": str(out)})
+        started = self._maybe_auto_apply(name)
+        self._json({"ok": True, "file": str(out), "applying": started})
+
+    def _maybe_auto_apply(self, name: str) -> bool:
+        """Dispara o refazimento em segundo plano, quando ligado com --auto.
+
+        Em segundo plano porque refazer um corte leva minutos, e a resposta do
+        salvar não pode esperar: a interface travaria com o usuário achando que
+        o clique não pegou. O andamento chega pelo state.json, que a interface
+        já consulta sozinha.
+
+        Só o que é mecânico dispara. As marcações escritas continuam sendo
+        pedidos em texto — ninguém deve executá-las sem ler.
+        """
+        if not getattr(self.server, "auto_apply", False):
+            return False
+        script = "apply_edits.py" if name == "preview_edits.json" else "phase2.py"
+        try:
+            subprocess.Popen(
+                [sys.executable, str(Path(__file__).resolve().parent / script),
+                 str(self.root)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return True
+        except OSError:
+            return False
 
     # ---- dynamic bits ----
     def _state(self) -> None:
@@ -316,6 +343,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Edvid preview interface server")
     ap.add_argument("--root", type=Path, required=True, help="the session <edit> dir")
     ap.add_argument("--port", type=int, default=4820)
+    ap.add_argument("--auto", action="store_true",
+                    help="salvar no editor já refaz o corte / a Fase 2, "
+                         "sem depender de alguém rodar um comando depois")
     args = ap.parse_args()
 
     root = args.root.resolve()
@@ -326,7 +356,9 @@ def main() -> None:
 
     Handler.root = root
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"Edvid preview → http://127.0.0.1:{args.port}  (root: {root})", flush=True)
+    srv.auto_apply = args.auto
+    modo = " · salvar já refaz" if args.auto else ""
+    print(f"A.V.E. preview → http://127.0.0.1:{args.port}  (root: {root}){modo}", flush=True)
     srv.serve_forever()
 
 
