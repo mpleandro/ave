@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -31,7 +32,77 @@ HOLD = 0.6  # sobra depois da última palavra antes de a deixa sair
 
 
 def style_files(style_id: str, style: dict) -> list[str]:
+    if style_id == "scatter":
+        return ["scatter.css", "scatter.js"]
     return ["karaoke.css", "karaoke.js"] if style["animated"] else ["static.css"]
+
+
+def scat_hash(n: float) -> float:
+    """Mesmo hash da prévia e do módulo do estilo: seno truncado.
+
+    Determinístico por índice — a mesma deixa cai sempre no mesmo lugar. É o
+    substituto de um aleatório, e o motivo é duro: aleatório de verdade
+    re-sorteia o layout a cada quadro (texto tremendo) e faria dois renders do
+    mesmo projeto saírem diferentes, matando o determinismo do motor.
+    """
+    x = math.sin(n * 127.1 + 311.7) * 43758.5453
+    return x - math.floor(x)
+
+
+def scatter_markup(timed: list[dict], st: dict) -> str:
+    """Deixas do disperso: linhas irregulares, uma palavra destacada por deixa."""
+    gap = st["gap"]
+    blocks = []
+    for ci, t in enumerate(timed):
+        words = [w["text"].lower() for w in t["cue"]]
+        # tempo ABSOLUTO de cada palavra: ela aparece quando é FALADA.
+        # Um passo fixo (0.22s da prévia) supõe deixa longa — com 8 palavras
+        # numa deixa de 1.39s a entrada levaria 1.76s e as últimas nunca
+        # apareceriam, com a deixa já saindo. Seguir a fala é mais simples e
+        # mais correto: é o que uma legenda faz.
+        ats = [w["startMs"] / 1000 for w in t["cue"]]
+        # destaque: a palavra mais longa da deixa, e só se ela tiver peso
+        hi_idx, hi_len = -1, st["hiMinLen"] - 1
+        for i, w in enumerate(words):
+            if len(w) > hi_len:
+                hi_idx, hi_len = i, len(w)
+
+        lines, cur = [], []
+        for i, w in enumerate(words):
+            if i == hi_idx:
+                if cur:
+                    lines.append(cur)
+                lines.append([(i, w, True)])   # a destacada fica sozinha na linha
+                cur = []
+                continue
+            cur.append((i, w, False))
+            if len(cur) >= (4 if scat_hash(31 + i) > 0.5 else 3):
+                lines.append(cur)
+                cur = []
+        if cur:
+            lines.append(cur)
+
+        rows = []
+        for li, ln in enumerate(lines):
+            width = 0.0
+            for _, w, hi in ln:
+                size = st["size"] * (st["hiScale"] if hi else 1)
+                weight = 600 if hi else st["weight"]
+                width += measure(w, st["family"], size, weight) + gap
+            room = max(0.0, (st["maxW"] - width) / 2) * st["spread"]
+            dx = (scat_hash(17 + li * 5 + 3) * 2 - 1) * room
+            spans = "".join(
+                f'<span{" class=\"hi\"" if hi else ""} data-at="{ats[i]:.3f}">'
+                f'{esc(w)}</span>'
+                for i, w, hi in ln)
+            rows.append(f'<div class="scat-line" style="translate:{dx:.1f}px 0px">'
+                        f'{spans}</div>')
+
+        blocks.append(
+            f'<div class="scat-cue clip" data-start="{t["start"]:.3f}" '
+            f'data-duration="{t["end"] - t["start"]:.3f}" data-track-index="1">'
+            f'{"".join(rows)}</div>')
+    return "\n".join("    " + b for b in blocks)
 
 
 def video_duration(path: Path) -> float:
@@ -282,7 +353,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         # deixaria o texto cair numa fonte genérica sem erro visível
         gfont = f"{gfont}&{VARIANTS['headlineGfont']}"
 
-    if st["animated"]:
+    if style_id == "scatter":
+        cap_css = ('<link rel="stylesheet" href="styles/scatter.css">\n'
+                   '<script src="styles/scatter.js"></script>')
+        container = (f'<div class="ave-scatter" style="--scat-scale:1;'
+                     f' --scat-size:{size}; --scat-gap:{st["gap"]};'
+                     f' --scat-offset-y:{cfg.get("scatterOffsetY", st["offsetY"])}">')
+    elif st["animated"]:
         cap_css = ('<link rel="stylesheet" href="styles/karaoke.css">\n'
                    '<script src="styles/karaoke.js"></script>')
         container = (f'<div class="ave-cap {style_id}" style="--cap-scale:1;'
@@ -299,7 +376,9 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     # câmera ou flash. Sem nada em movimento, `data-no-timeline` evita 45s
     # perdidos por render esperando um registro que nunca vem.
     parts = []
-    if st["animated"]:
+    if style_id == "scatter":
+        parts.append("  AVE_SCATTER.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+    elif st["animated"]:
         parts.append("  AVE_KARAOKE.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     if cam_js:
         parts.append(cam_js)
@@ -352,7 +431,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {chr(10).join(flash_blocks)}
 
   {container}
-{markup(timed, st, style_id, orphans, penalty)}
+{scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty)}
   </div>
 </div>
 

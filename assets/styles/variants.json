@@ -84,6 +84,26 @@
       "sy": 1,
       "tracking": 0,
       "maxW": 840
+    },
+    "scatter": {
+      "_note": "Disperso. O bloco vive sobre o PEITO (0.72 da altura), não no centro — o meio do quadro é o rosto. maxWords alto porque a deixa ocupa várias linhas irregulares.",
+      "animated": true,
+      "family": "Lora",
+      "cssFamily": "'Lora', serif",
+      "gfont": "family=Lora:ital,wght@0,400;1,600",
+      "weight": 400,
+      "size": 72,
+      "maxWords": 8,
+      "lines": 3,
+      "sx": 1,
+      "sy": 1,
+      "tracking": 0,
+      "maxW": 820,
+      "gap": 12,
+      "hiScale": 1.62,
+      "spread": 0.45,
+      "offsetY": 0.72,
+      "hiMinLen": 7
     }
   },
   "_headlines_readme": "Geometria das headlines. `weights` é [linha1, linha2]; `cap` é TETO de corpo, não corpo fixo — a headline é sempre duas linhas ajustadas a `safeW` medindo o texto real. `upper` diz se o estilo escreve em caixa alta.",

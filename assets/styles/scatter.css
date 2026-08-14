@@ -1,0 +1,74 @@
+/* Legenda DISPERSO — Lora serifada, minúscula, uma palavra por vez em linhas
+ * curtas e irregulares.
+ *
+ * Duas regras que só a filmagem real ensinou, e que o CSS sozinho não explica:
+ *
+ * 1. O MEIO DO QUADRO É O ROSTO. O bloco vive sobre o peito (72% da altura),
+ *    não no centro. Só sobe quando o que está atrás não é uma pessoa.
+ * 2. Movimento em toda palavra é movimento em nada. As palavras comuns só
+ *    APARECEM, sem deslocamento; o desfoque que resolve na palavra destacada só
+ *    lê porque todo o resto está parado.
+ *
+ * O degradê fica na PALAVRA, não no bloco: aplicado ao bloco inteiro ele vira
+ * uma lavagem, em vez de peso de tinta.
+ */
+
+.ave-scatter {
+  --scat-scale: 1;
+  --scat-size: 72;
+  --scat-gap: 12;
+  --scat-offset-y: 0.72;
+
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--scat-offset-y) * 100%);
+  height: 0;
+  pointer-events: none;
+}
+
+/* TODAS as deixas ocupam a MESMA caixa, centrada na âncora.
+ *
+ * A primeira versão deixava a deixa como item de um contêiner flex e absoluta
+ * ao mesmo tempo: sem left/top explícitos, cada uma caía na sua posição
+ * estática e as deixas apareciam em alturas diferentes — com duas visíveis ao
+ * mesmo tempo na virada, uma sumindo em cima e outra entrando embaixo. Posição
+ * ambígua não é estilo, é sorte. */
+.ave-scatter .scat-cue {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ave-scatter .scat-line {
+  display: flex;
+  align-items: baseline;
+  white-space: pre;
+  line-height: 1.03;
+  gap: calc(var(--scat-gap) * var(--scat-scale) * 1px);
+}
+
+.ave-scatter .scat-line span {
+  font-family: 'Lora', serif;
+  font-weight: 400;
+  font-size: calc(var(--scat-size) * var(--scat-scale) * 1px);
+  background-image: linear-gradient(180deg, #f8f5ef 0%, #f4f1e9 54%, #d5cec1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  opacity: 0;
+  will-change: opacity, filter;
+}
+
+/* a palavra destacada — uma por deixa, a mais longa, e só se tiver peso */
+.ave-scatter .scat-line span.hi {
+  font-weight: 600;
+  font-style: italic;
+  font-size: calc(var(--scat-size) * 1.62 * var(--scat-scale) * 1px);
+}

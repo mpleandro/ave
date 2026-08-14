@@ -32,7 +32,7 @@ ENV = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
 
 # Estilos que já existem de verdade. A aba Estilo oferece mais do que isto; um
 # pedido fora desta lista precisa falhar com nome, não renderizar outra coisa.
-PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica"}
+PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica", "scatter"}
 PORTED_HEADLINES = {"outline", "card", "realce", "misto"}
 
 LOUDNORM = "loudnorm=I=-14:TP=-1:LRA=11"
