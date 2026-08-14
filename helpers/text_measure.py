@@ -32,14 +32,52 @@ def slug(family: str) -> str:
     return family.strip().lower().replace(" ", "-")
 
 
+def warm_cache(family: str, weight: int = 400, italic: bool = False) -> None:
+    """Faz o HyperFrames baixar a família, montando uma página mínima que a pede.
+
+    O cache só se enche quando o compilador do HyperFrames processa uma
+    composição que referencia a fonte. Sem isto haveria ordem obrigatória
+    ("renderize antes de medir"), que é uma pegadinha para quem chama o
+    compositor pela primeira vez num projeto com fonte nova. Quem precisa da
+    fonte é este helper, então é ele que sabe buscá-la.
+    """
+    import subprocess
+    import tempfile
+
+    style = "ital@1" if italic else f"wght@{weight}"
+    fam = family.replace(" ", "+")
+    href = (f"https://fonts.googleapis.com/css2?family={fam}:"
+            f"{'ital,wght@1,' + str(weight) if italic else 'wght@' + str(weight)}&display=swap")
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        (d / "package.json").write_text('{"name":"warm","private":true,"type":"module"}')
+        (d / "hyperframes.json").write_text('{"paths":{"blocks":"compositions"}}')
+        (d / "index.html").write_text(
+            f'<!doctype html><html><head><meta charset="UTF-8">'
+            f'<link href="{href}" rel="stylesheet"></head><body>'
+            f'<div id="root" data-composition-id="warm" data-start="0" data-duration="1" '
+            f'data-width="64" data-height="64" data-no-timeline>'
+            f'<div class="clip" data-start="0" data-duration="1" data-track-index="0" '
+            f'style="font-family:\'{family}\';font-weight:{weight};'
+            f'{"font-style:italic;" if italic else ""}">Aa</div></div></body></html>'
+        )
+        subprocess.run(
+            ["npx", "--yes", "hyperframes@0.7.109", "check"],
+            cwd=d, capture_output=True,
+            env={**__import__("os").environ, "HYPERFRAMES_SKIP_SKILLS": "1"},
+        )
+
+
 def font_files(family: str, weight: int = 400, italic: bool = False) -> list[Path]:
     """Todos os subsets do peso/estilo pedido, do cache do HyperFrames."""
     d = FONT_CACHE / slug(family)
     if not d.is_dir():
+        warm_cache(family, weight, italic)
+    if not d.is_dir():
         raise FileNotFoundError(
-            f"fonte '{family}' não está no cache do HyperFrames ({d}).\n"
-            f"Rode um `hyperframes check`/`render` na composição que a usa — o "
-            f"compilador baixa e cacheia — ou confira o nome da família."
+            f"fonte '{family}' não está no cache do HyperFrames ({d}) e a tentativa "
+            f"de baixá-la falhou.\nConfira o nome da família como o Google Fonts a "
+            f"escreve, ou rode um `hyperframes check` na composição que a usa."
         )
     style = "italic" if italic else "normal"
     hits = sorted(d.glob(f"{weight}-{style}-*.woff2"))

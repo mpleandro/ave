@@ -1,0 +1,70 @@
+/* Estilo de legenda: KARAOKÊ — fonte ÚNICA, lida pela prévia do editor e pela
+ * composição HyperFrames.
+ *
+ * Por que compartilhado: até agora cada estilo existia duas vezes — uma vez em
+ * HTML/CSS na prévia da aba Estilo, outra em TSX no template Remotion. O
+ * SKILL.md documenta a consequência como anti-padrão recorrente ("uma prévia
+ * que mente sobre o estilo é pior que nenhuma prévia"). Com o render também em
+ * HTML/CSS, a duplicação deixa de ter motivo.
+ *
+ * Como escalar: tudo é autorado em coordenadas de referência de 1080px de
+ * largura e multiplicado por `--cap-scale`. A prévia do editor passa
+ * `clientWidth / 1080`; a composição passa 1. Nenhum dos dois lados redefine
+ * medida — só o fator.
+ *
+ * Tunáveis vindos de edit-data.json `captions`: --cap-size (fontSize),
+ * --cap-gap, --cap-bottom (paddingBottom). Um valor novo entra aqui como
+ * variável, nunca hardcoded no compositor.
+ */
+
+.ave-cap {
+  --cap-scale: 1;
+  --cap-size: 76;    /* captions.fontSize */
+  --cap-gap: 18;     /* espaço entre palavras, ref 1080 */
+  --cap-bottom: 430; /* captions.paddingBottom */
+  --cap-rise: 34;    /* subida da palavra na entrada */
+
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ave-cap .ave-cap-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--cap-bottom) * var(--cap-scale) * 1px);
+
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  white-space: nowrap;
+
+  /* Poppins 900 é o karaokê do edvid, e a prévia da aba mostra exatamente
+     isto. Um port não é o momento de trocar a marca de um estilo: se o
+     karaokê passar a usar Open Sans, ele muda para todo projeto que já o
+     escolheu. A identidade Avelin tem estilo próprio (`editorial`). */
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+  letter-spacing: calc(-1px * var(--cap-scale));
+  font-size: calc(var(--cap-size) * var(--cap-scale) * 1px);
+
+  /* NOTA: sombra preta, herdada do edvid. O avelin.json pede sombra tingida de
+     azul-noite, "nunca preto" — mas isso vale para os estilos da Avelin, e
+     mudar aqui alteraria o karaokê de todos os projetos existentes. Registrado
+     como divergência conhecida, não corrigido de passagem. */
+  text-shadow: 0 calc(4px * var(--cap-scale)) calc(20px * var(--cap-scale))
+    rgba(0, 0, 0, 0.55);
+}
+
+.ave-cap .ave-cap-line span {
+  display: inline-block;
+  margin-right: calc(var(--cap-gap) * var(--cap-scale) * 1px);
+  will-change: opacity, translate;
+}
+
+.ave-cap .ave-cap-line span:last-child {
+  margin-right: 0;
+}
