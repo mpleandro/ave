@@ -683,7 +683,12 @@ function renderedLayout() {
     return item;
   });
 }
-const draftTotal = () => draftLayout().reduce((a, r) => a + r.dur, 0);
+// Durante um aparo, o total também congela: se ele encolhesse, a régua e a
+// largura da linha do tempo se reescalariam no meio do arrasto e TUDO andaria
+// debaixo do cursor.
+const draftTotal = () =>
+  draftLayout(drag && drag.type === 'trim' ? drag.i : null)
+    .reduce((a, r) => a + r.dur, 0);
 
 // draft time → rendered time (for scrubbing the old render while editing)
 function draftToRendered(t) {
@@ -1414,14 +1419,33 @@ function renderJcutAudio() {
   t2.classList.toggle('hidden', !on);
   if (!on) return;
 
-  // drawn off the DRAFT layout so the blocks move with the user's trims
-  draftLayout().forEach((r, i) => {
+  // Desenhadas sobre o layout do RASCUNHO, com o mesmo congelamento da trilha
+  // de vídeo. Sem ele o bloco de áudio encolhia pela DIREITA quando a pessoa
+  // puxava o início — o corte "andava" para o lado oposto ao que ela mexia.
+  const trimming = drag && drag.type === 'trim' ? drag.i : null;
+  draftLayout(trimming).forEach((r, i) => {
     if (r.removed && r.adur === 0) return;
     const lane = i % 2 === 0 ? l1 : l2;
     const b = el('div', 'ablock', lane);
     b.style.left = `${r.aout * S.pps}px`;
     b.style.width = `${Math.max(r.adur * S.pps, 6)}px`;
     el('div', 'ablock-label', b).textContent = r.beat || r.source || '';
+
+    // o que sai do áudio, escurecido na ponta em que está saindo
+    if (i === trimming) {
+      const head = (r.start - r.orig.start) * S.pps;
+      const tail = (r.orig.end - r.end) * S.pps;
+      if (head > 0.5) {
+        const g = el('div', 'trim-cut', b);
+        g.style.left = '0px';
+        g.style.width = `${head}px`;
+      }
+      if (tail > 0.5) {
+        const g = el('div', 'trim-cut', b);
+        g.style.right = '0px';
+        g.style.width = `${tail}px`;
+      }
+    }
 
     // the lead: sound already playing while the previous take is still on screen
     if (r.lead > 1e-6) {
@@ -1699,6 +1723,7 @@ panel.addEventListener('pointermove', (e) => {
       if (srcDur) r.end = Math.min(r.end, srcDur);
     }
     renderClips();
+    renderJcutAudio();
     drawWave();
     refreshHeader();
     const d = drag.side === 'l' ? r.start - r.orig.start : r.end - r.orig.end;
@@ -1728,7 +1753,9 @@ panel.addEventListener('pointermove', (e) => {
     hideTooltip();
     // o rearranjo acontece agora, ao soltar: durante o arrasto o trecho ficava
     // congelado para a alça acompanhar o cursor
-    if (wasTrim) { renderClips(); drawWave(); refreshHeader(); }
+    // renderAll: ao soltar, o rearranjo vale para TUDO — vídeo, áudio, régua e
+    // largura da linha do tempo, que ficaram congelados durante o arrasto
+    if (wasTrim) { renderAll(); refreshHeader(); }
   })
 );
 
