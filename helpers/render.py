@@ -731,7 +731,16 @@ def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
 
         tail = 0.0
         avail = trailing_silence(src, start, end) if i < n - 1 else None
-        if avail is not None and cfg["tail_trim_frames"]:
+        # `jcut_tail_frames` no range sobrepõe o aparo automático — 0 faz o áudio
+        # terminar EXATAMENTE na borda. É o que uma borda posta à mão exige: o
+        # aparo automático mede o silêncio disponível, então quanto ele corta
+        # muda conforme onde a pessoa cortou, e o áudio sai num ponto que ela não
+        # escolheu. Regra: borda que a máquina achou, a máquina apara; borda que
+        # a pessoa pôs, ninguém encosta.
+        override = r.get("jcut_tail_frames")
+        if override is not None:
+            tail = max(0, int(override)) / fps
+        elif avail is not None and cfg["tail_trim_frames"]:
             budget = max(0.0, avail - 0.010)          # keep 10ms of room tone
             usable_frames = min(cfg["tail_trim_frames"], int(budget * fps))
             tail = usable_frames / fps

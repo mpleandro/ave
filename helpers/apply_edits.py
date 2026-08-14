@@ -70,6 +70,15 @@ def apply_to_edl(edl: dict, payload_edl: dict) -> tuple[dict, list[str]]:
             continue
         ds, de = t["start"] - f["start"], t["end"] - f["end"]
         hit["start"], hit["end"] = t["start"], t["end"]
+        # Borda posta à mão manda no J-cut daquela junção. Sem isto, a entrada
+        # de imagem chega alguns quadros depois do ponto escolhido e o áudio
+        # termina antes dele, porque o aparo automático mede o silêncio
+        # disponível — e quanto ele apara muda conforme onde a pessoa cortou.
+        # O corte então sai num lugar que ninguém escolheu.
+        if abs(ds) > TOL:
+            hit["jcut_lead_frames"] = 0
+        if abs(de) > TOL:
+            hit["jcut_tail_frames"] = 0
         log.append(f"  ~ {ch['source']} {f['start']:.3f}→{t['start']:.3f} "
                    f"({ds:+.3f}s)  {f['end']:.3f}→{t['end']:.3f} ({de:+.3f}s)")
 
