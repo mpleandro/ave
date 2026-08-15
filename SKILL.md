@@ -5,13 +5,18 @@ description: A.V.E. (Avelin Video Edit) — edit any video by conversation, in p
 
 # A.V.E. — Avelin Video Edit
 
-> **STATUS: PHASE 2 IS STUBBED.** This fork is migrating the visuals layer from
-> Remotion to **HyperFrames** (Apache 2.0). PHASE 1 — transcription, take
-> selection, the cut, the grade, the voice master, the preview interface — is
-> intact and is the supported path today. Anything below describing Phase 2 as
-> Remotion is **historical** until the port lands; the Remotion templates now
-> live in `reference/remotion-legacy/` as the visual spec for that port, not as
-> code to run. Do not scaffold a Remotion project from this repo.
+> **PHASE 2 RENDERS WITH HYPERFRAMES** (Apache 2.0), not Remotion. One command
+> takes it end to end — `helpers/phase2.py <edit>` — and the visual vocabulary
+> is ported: six caption styles, four headlines, three edit types, the dynamic
+> camera, and the four longform layers.
+>
+> **Never scaffold a Remotion project from this repo.** The old templates live
+> in `reference/remotion-legacy/` as the VISUAL SPEC the port was written
+> against — reference, never code to run.
+>
+> Still missing, and say so rather than faking: eye-tracking (`tracking`), the
+> behind-the-subject layer, and the caption dodge on split for the `disperso`
+> and `empilhado` styles.
 >
 > Fork of [edvid](https://github.com/fillrochaa/edvid) (MIT, Creator Factory) —
 > see `LICENSE`. Upstream is tracked as the `upstream` remote; keep the diff
@@ -39,14 +44,14 @@ description: A.V.E. (Avelin Video Edit) — edit any video by conversation, in p
 7. **Color grade per-segment during extraction**, never post-concat.
 8. **Strategy confirmation before execution.**
 9. **All session outputs in `<videos_dir>/edit/`** — never inside the A.V.E. repo.
-10. **PHASE 2 IS STUBBED — do not fake it.** The HyperFrames port is not landed. Never burn text or overlays with ffmpeg/PIL to "deliver something": that was forbidden under Remotion and it is still forbidden. If the user asks for Phase 2, say the port is in progress and offer the approved cut (`cut.mp4`) plus the deliverables Phase 1 already produces (`captions.srt`, `chapters.txt`).
-11. **PHASE 2 stays data-driven when it lands.** The contract is `edit-data.json` describing the video, never per-session engine code — samples in `assets/schema/`. The visual spec to port from is `reference/remotion-legacy/`, which is **reference, not a template to copy**.
+10. **PHASE 2 IS HYPERFRAMES-ONLY** — never burn text or overlays with ffmpeg/PIL. A style that is not ported yet is REFUSED BY NAME (`helpers/phase2.py` does this), never substituted by something that looks close.
+11. **PHASE 2 is data-driven.** `edit-data.json` describes the video; the LOOK lives in `assets/styles/` and the NUMBERS in `assets/styles/variants.json` — the same files the editor's Estilo previews are meant to read, so the two can never disagree. Bespoke graphics are the one escape hatch: an HTML of your own under `<projeto>/compositions/<id>.html`, mounted as a sub-composition. Never hand-write a style inside the composer.
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
 13. **Never Read machine data into context**: `transcripts/*.json` (raw), `captions.json`, `track.json`, `segments.json`, matte/track binaries. Read `takes_packed.md` and helper stdout instead.
 
 ## Execution medium — ffmpeg pipeline (default) vs Adobe Premiere (MCP)
 
-The default engine is the ffmpeg/Remotion pipeline below. **If the user wants the
+The default engine is the ffmpeg/HyperFrames pipeline below. **If the user wants the
 edit done inside Adobe Premiere Pro via the `premiere-pro` MCP** (e.g. "edite a
 sequência no Premiere", "corte via MCP"), the METHOD here is unchanged (audio-primary,
 cut on silence, phase gate, grade with taste) but the hands change — **read
@@ -70,10 +75,18 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
     ├── verify/                  ← montages / flagged-boundary views
     ├── captions.srt + chapters.txt   ← longform deliverables
     ├── final.mp4                ← delivered render (Phase 2 + 3, loudnorm'd)
-    └── remotion/                ← Remotion project (Phase 2 + 3)
-        ├── public/              ← cut.mp4, edit-data.json (THE edit), captions.json,
-        │                          track.json, segments.json, pexels/ web/ brand/, sfx/, trilha.mp3
-        └── src/                 ← immutable template code + CustomGraphics.tsx
+    ├── hyperframes/             ← projeto da Fase 2 (montado sozinho)
+    │   ├── index.html           ← A COMPOSIÇÃO — gerada, nunca editada à mão
+    │   ├── styles/              ← cópias de assets/styles/ (o look)
+    │   ├── sfx/                 ← efeitos usados
+    │   ├── compositions/        ← gráficos sob medida (a escotilha)
+    │   └── renders/             ← saídas do motor
+    └── remotion/public/         ← ONDE OS DADOS AINDA MORAM (nome histórico do
+                                   edvid, mantido para uma sessão do edvid e uma
+                                   do A.V.E. lerem a mesma pasta):
+                                   edit-data.json ← A EDIÇÃO
+                                   captions.json, caption-cues.json
+                                   pexels/ web/ brand/ film/ broll/, trilha.mp3
 ```
 
 ## Setup
@@ -84,7 +97,7 @@ First-time install lives in `install.md`. On cold start just verify:
 - `ELEVENLABS_API_KEY` (optional) — used for LONG sources (>5 min, e.g. YouTube/course lessons) via ElevenLabs Scribe `scribe_v1`, since Groq's free tier chokes on long uploads. `backend=auto` (default) picks Scribe over 5 min when the key exists, else Groq; short clips stay on Groq. No key → long sources fall back to Groq. Ask for it lazily the first time a >5 min source shows up, write to `.env`.
 - `whispercpp` (optional) — fully local transcription, no key, no upload cap, no network. Opt-in only: `auto` never picks it. Needs whisper.cpp built with a ggml model (auto-detected in `~/whisper.cpp`, or `WHISPERCPP_BIN`/`WHISPERCPP_MODEL` in `.env`). Offer it when the user has no Groq key or hits quota. **Text matches Groq; word TIMES don't** (measured: 66% of words inside a real speech region vs Groq's 97%, median drift 240ms). Phase 1 is unaffected — cut edges come from `speech_regions.py`. For Phase-2 karaoke captions, prefer Groq and say why.
 - `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources (`ingest_url.py`) — install lazily the first time a link shows up (`brew install yt-dlp` / `winget install yt-dlp.yt-dlp`).
-- Phase-2 domain knowledge: the HyperFrames skills, once the port lands. **Do not install or load `remotion-best-practices`** — this fork does not render with Remotion. Until then Phase 2 is stubbed (Hard Rule 10).
+- Fase 2: nada a instalar. `npx hyperframes@0.7.109` resolve do cache compartilhado (~365MB em `~/.cache/hyperframes`, uma vez para todos os projetos) e o projeto da sessão fica SEM `node_modules`. **Nunca carregue `remotion-best-practices`** — este fork não renderiza com Remotion.
 - Lazy keys, ask on first use, write to `.env` (never to `<videos_dir>`): `PEXELS_API_KEY` (images), `GOOGLE_API_KEY`+`GOOGLE_CSE_ID` (brand/people images fallback), `TREBLO_API_KEY` (AI music).
 
 Helpers live in `helpers/`, resolved relative to this SKILL.md (usually `~/.claude/skills/edvid/`, or a symlink/junction pointing there). Run them as `uv run python helpers/<name>.py` — a bare `python` misses the `.venv` that `uv sync` builds.
@@ -107,14 +120,15 @@ Phase 1:
 - **`watch_video.py <video> [--mode scene|keyframe|uniform] [--times t1 t2 …] [--start/--end] [--max-frames 24]`** — "what is IN this footage?" when you *don't* know where to look: scene-change detection (auto-fallback to uniform sampling on static/talking-head sources) + perceptual dedup (near-identical frames collapse — a held take becomes a handful of tiles) → labeled contact sheets in `edit/verify/watch_<stem>/`, one Read per sheet. Use for visual inventory of unknown material, eyeballing takes across sources, and surveying `cut.mp4` beyond verify_cut's numbers. `--times` pins transcript-cue frames: deictic moments from `takes_packed.md` ("olha isso", "como você pode ver") are LOW visual change and invisible to scene detection — pin them to decide B-roll/callout/zoom placement in Phase 2.
 
 Phase 2/3 (see the track references for usage):
-- **`captions_for_remotion.py`** (karaoke JSON) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`phase2.py`** (Fase 2 inteira, um comando) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor)
+- **`captions_for_remotion.py`** (karaoke JSON — nome histórico, o formato serve ao HyperFrames) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
 
 Interface:
 - **`preview_server.py --root <edit> [--port 4820]`** — serves the standard preview interface (see the Preview interface section). App code lives at `assets/preview/` and is IMMUTABLE.
 
 ## Preview interface (standard — launch it at the start of every edit)
 
-Every edit session gets the same interactive interface in the user's preview panel: a video-editor timeline (video track with filmstrip + audio track with waveform), a live playhead that scrubs the render in real time, per-take trim handles and take removal, and — from Phase 2 — caption and insert tracks. The layout follows the source aspect on its own: **vertical** sources put a tall player on the right with the transport + timeline on the left; **horizontal** sources keep the player stacked above the timeline. Dark glass, Edvid brand. **Never build a UI per session and never edit `assets/preview/`** — it is data-driven, like the Remotion templates.
+Every edit session gets the same interactive interface in the user's preview panel: a video-editor timeline (video track with filmstrip + audio track with waveform), a live playhead that scrubs the render in real time, per-take trim handles and take removal, and — from Phase 2 — caption and insert tracks. The layout follows the source aspect on its own: **vertical** sources put a tall player on the right with the transport + timeline on the left; **horizontal** sources keep the player stacked above the timeline. Dark glass, Edvid brand. **Never build a UI per session and never edit `assets/preview/`** — it is data-driven, like the styles in `assets/styles/`.
 
 **Launch (do this when a session starts, even before the first render — the UI shows a waiting state):**
 1. Write `<edit>/state.json`:
@@ -268,6 +282,95 @@ Goal: best take of every beat, cut on silence, graded image, clean `cut.mp4` for
    (see "The Estilo tab"). Do NOT ask this in chat. Only then read the track
    reference: **`references/shortform.md`** or **`references/longform.md`**.
 
+## PHASE 2 — HyperFrames
+
+**One command, start to finish.** It applies the Estilo pick, scaffolds the
+project, composes, runs `check`, renders, loudnorms the delivery and writes the
+paths the editor reads:
+
+```bash
+uv run python helpers/phase2.py <videos_dir>/edit
+```
+
+Everything below is what that command does, and what to do when it stops.
+
+### The check is a gate, not a formality
+
+`hyperframes check` runs before every render and BLOCKS on errors. It has
+already caught three defects that would have shipped:
+
+- `<audio>` without an `id` → the renderer never discovers it and **the video is
+  silent**, with no error anywhere else.
+- a composition with no timeline and no `data-no-timeline` → **45 seconds lost
+  on every render** waiting for a registration that never comes.
+- the hook under a split-screen art band → *text hidden beneath an opaque
+  element*, caught before a single frame was rendered.
+
+One tolerated exception, by name: `content_overlap` between the two `hl-line`
+of a headline. Tight leading makes the line BOXES touch though the glyphs do
+not — verified in the render. Any other error still blocks.
+
+### What exists, and what is refused
+
+| | |
+|---|---|
+| Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` |
+| Headlines | `outline` `card` `realce` `misto` |
+| Edição | `limpa` `split` `split2` |
+| Câmera | zoom por corte, aproximação lenta, flash na transição |
+| Curta | inserts, palavras em destaque, gráficos sob medida |
+| Longform | B-roll, lower-thirds, cards de capítulo, callouts |
+| Som | efeitos por evento + trilha |
+
+**Not ported: `tracking` (eye-tracking) and the behind-the-subject layer.** A
+style outside the ported set is refused BY NAME — never substituted.
+
+`empilhado` is the only style with a prep step (a director groups the words and
+picks the orange serif accent). `phase2.py` generates it when missing.
+
+### The two things that decide whether it looks right
+
+**Measure the backdrop, not the intention.** `#FF6B1A` has MID luminance
+(L=0.318): it only passes contrast against a dark or a bright backdrop, and sits
+at 1.09–2.46 in between. `backdrop_luma.py` picks the palette variant per
+window — canonical orange always, escalating only when it fails. But measured on
+real footage, **choosing the colour is not enough**: the night-blue stroke is
+what carries it (1.05 → 1.70 with the adaptive colour → 2.81 with the stroke).
+
+**Animating `filter` REPLACES the whole value.** A shadow declared in CSS
+vanishes on the first frame of any filter animation. Styles that animate blur
+(`disperso`, `empilhado`) re-emit the shadow in every animated value. This bug
+shipped twice before being understood — white words simply dissolved into a
+white t-shirt.
+
+### Sound
+
+Effects live natively in the composition. **No re-mux.** Under Remotion the
+delivery re-muxed to fix audio drift and that DISCARDED the effects, forcing ~20
+of them to be rebuilt by hand in ffmpeg. Drift here is zero (measured: 9 windows
+up to 780s, lag of exactly 0 samples), so they simply stay.
+
+Two checks that only surface by LISTENING — the mix looks right and nothing is
+heard. `helpers/sfx.py` does both: level (below −12 dB the effect disappears
+under speech; the pack has two such files) and where the attack sits INSIDE the
+file (`caption-click` has 158ms of lead-in silence — scheduled at the event, it
+lands late). The compensation is measured at compose time, never tabled, so
+swapping a file cannot reintroduce silent delay.
+
+### Bespoke graphics — the escape hatch
+
+Replaces `CustomGraphics.tsx`. Write `<projeto>/compositions/<id>.html` as a
+COMPLETE composition document (its own `data-composition-id`, dimensions and
+body) and reference it from `brollGraphics` in edit-data. Without the file the
+composition renders WITHOUT ERROR and the absence only shows when watching — the
+composer warns by name.
+
+### Delivery
+
+Loudness is re-measured on the OUTPUT (−14 LUFS), not inherited from `cut.mp4`:
+Phase 2 adds a soundtrack and effects, so the final mix is a different one.
+
+
 ## J-cut — the default Phase-1 cleanup
 
 Takes are OVERLAPPED, not butted. The outgoing take's audio runs to its natural
@@ -364,7 +467,7 @@ not permission to skip the approval.
   VERIFY on the rendered cut: `ffprobe -v error -select_streams v:0
   -show_entries stream=color_space,color_primaries,color_range cut.mp4` must read
   bt709 / bt709 / tv. Anything else means a second interpretation is still alive
-  downstream: Chrome (Remotion's decoder in Phase 2) re-reads those tags and
+  downstream: Chrome (the Phase-2 decoder, now HyperFrames) re-reads those tags and
   silently re-grades the image — typically ~1.2 gamma darker with a hue shift — so
   the Phase-2 render stops matching the cut the user approved. Phone/mirrorless
   sources routinely write bt2020 primaries with `color_transfer=unknown`; that is
@@ -459,7 +562,7 @@ The cut is approved and the user picked the style in the UI (`preview_style.json
 - **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, static hook headline, dynamic camera, inserts, behind-the-subject, SFX, soundtrack.
 - **Horizontal / YouTube / tutorial / vlog → read `references/longform.md`.** Retention cut is there too (read it BEFORE Phase 1 on longform jobs), B-roll, lower-thirds, chapter cards, callouts, .srt + chapters, soundtrack.
 
-Both tracks: scaffold with one `cp -R` of the template, describe the video in `public/edit-data.json`, verify with montage stills, render, loudnorm, deliver `edit/final.mp4`. Load the `remotion-best-practices` skill when writing any Remotion code (CustomGraphics).
+Both tracks: `helpers/phase2.py <edit>` faz tudo — aplica a escolha da aba Estilo, monta o projeto, compõe, roda o `check`, renderiza, normaliza a loudness e devolve os caminhos ao editor. A edição inteira é o `edit-data.json`; nada de código por sessão fora dos gráficos sob medida em `compositions/`. **Não carregue a skill `remotion-best-practices`.**
 
 ## Memory — `project.md`
 
@@ -515,9 +618,11 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Cutting exactly at a word's offset (clips the sibilant) — leave the 50–80ms trail.
 - Committing a grade without the one-frame candidates montage + user pick.
 - Shipping a `cut.mp4` that is not tagged bt709/tv — Phase 2 will re-interpret it and the approved grade drifts.
-- Delivering Phase 2 with Remotion's own audio track — it drifts progressively against the source (+0.66s by 78s on a 95s edit). Re-mux `cut.mp4`'s audio and mix the soundtrack in ffmpeg (recipe in the track reference).
+- Re-muxing the delivery audio "to fix drift". That was the Remotion workaround and it DISCARDED every baked SFX. Measured on HyperFrames: drift is zero across 780s, so the effects live in the composition and the re-mux must not come back.
 - Judging A/V sync with short correlation windows — speech is quasi-periodic and a 2–3s window happily locks onto the wrong syllable, inventing a drift. Use 15s+ windows, and remember a PARTIAL render cannot show drift that accumulates over the full timeline.
-- Burning captions/overlays with ffmpeg/PIL — Phase 2 is Remotion-only.
+- Burning captions/overlays with ffmpeg/PIL — Phase 2 is HyperFrames-only.
+- Trusting an SFX file without measuring it: two files in the pack are inaudible under speech, and several have >140ms of silence before the attack.
+- Declaring a shadow only in CSS on a style that animates `filter` — the animation replaces the whole value and the shadow vanishes on frame one.
 - Asking "NORMAL ou LOG?" — that is `detect_color.py`'s job now. Ask only on `confidence: low`.
 - Butt-joining the takes. The J-cut is the default; `--no-jcut` is a deliberate exception, not a shortcut.
 - Tightening a J-cut seam by raising the lead. That buys tightness by shoving the picture deeper into the incoming take's speech. Trim the outgoing TAIL instead.
