@@ -231,6 +231,53 @@ def split_markup(wins: list[dict]) -> str:
     return "\n".join("  " + b for b in blocks)
 
 
+def sfx_blocks(events: list[tuple[float, str]], proj: Path, duration: float,
+               track: int = 8) -> tuple[list[str], list[str]]:
+    """Elementos de áudio dos efeitos. Retorna (blocos, avisos).
+
+    Duas coisas que a referência documenta como já vividas e que só aparecem
+    OUVINDO — a mixagem parece certa e não se escuta nada:
+
+    - o arquivo começa ANTES do evento, compensando o silêncio inicial MEDIDO.
+      Sem isso o clique do `caption-click` chega 158ms atrasado, depois de um
+      efeito de 230ms já ter acabado.
+    - o nível é conferido: abaixo de -12 dB o efeito some sob a fala, e o pacote
+      tem dois arquivos assim.
+
+    Isto só é possível porque o áudio da composição NÃO precisa de remux. No
+    Remotion o remux existia para corrigir drift e descartava os efeitos junto,
+    obrigando a reconstruir ~20 deles à mão no ffmpeg. Com drift zero medido,
+    eles simplesmente ficam.
+    """
+    from sfx import probe
+
+    blocks, warns, seen = [], [], set()
+    for i, (at, kind) in enumerate(events):
+        spec = VARIANTS["sfx"].get(kind)
+        if not spec:
+            continue
+        f = proj / "sfx" / spec["file"]
+        if not f.exists():
+            if kind not in seen:
+                warns.append(f"  aviso: efeito '{spec['file']}' não encontrado — {kind} mudo")
+                seen.add(kind)
+            continue
+        info = probe(str(f))
+        if info["quiet"] and spec["file"] not in seen:
+            warns.append(f"  aviso: {spec['file']} tem pico de {info['peak']:.1f} dB "
+                         f"— vai sumir sob a fala")
+            seen.add(spec["file"])
+        start = max(0.0, at - info["lead"])
+        dur = min(info["duration"], duration - start)
+        if dur <= 0:
+            continue
+        blocks.append(
+            f'  <audio id="sfx{i}" src="sfx/{spec["file"]}" data-start="{start:.3f}" '
+            f'data-duration="{dur:.3f}" data-track-index="{track}" '
+            f'data-volume="{spec["volume"]}"></audio>')
+    return blocks, warns
+
+
 def video_duration(path: Path) -> float:
     """Duração do stream de VÍDEO, nunca do container nem do áudio decodificado.
 
@@ -491,6 +538,17 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     cfg = data.get("captions", {})
     bottom = cfg.get("paddingBottom", VARIANTS["bottom"])
     size = cfg.get("fontSize") or st["size"]
+    # Eventos de efeito: cada um no instante em que a coisa acontece.
+    events = []
+    if data.get("hook", {}).get("enabled"):
+        events.append((0.0, "hook"))
+    for tr in (data.get("transitions") or []):
+        at = float(tr.get("at", 0))
+        if at < duration:
+            events.append((at, "flash"))
+    for c in (data.get("_soloCues") or []):
+        events.append(c)
+
     splits = split_windows(data, H, duration)
     hook_block, hook_css = hook_markup(data, accent, splits)
     # A câmera é DESLIGADA enquanto a tela dividida está no ar: ela move o
@@ -544,6 +602,21 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     if cam_js:
         parts.append(cam_js)
     needs_tl = bool(parts)
+
+    proj = Path(data.get("_proj", "."))
+    sfx_list, sfx_warns = sfx_blocks(events, proj, duration)
+    for w in sfx_warns:
+        print(w, file=sys.stderr)
+    sfx_html = "\n".join(sfx_list)
+
+    # Trilha sonora como leito, sob tudo. Volume baixo por padrão: ela sustenta,
+    # não disputa com a voz.
+    snd = data.get("soundtrack") or {}
+    track_block = ""
+    if snd.get("enabled") and snd.get("file"):
+        track_block = (f'  <audio id="soundtrack" src="{snd["file"]}" data-start="0" '
+                       f'data-duration="{duration:.3f}" data-track-index="7" '
+                       f'data-volume="{snd.get("volume", 0.1)}"></audio>')
 
     split_block = split_markup(splits) if splits else ""
     split_css = '<link rel="stylesheet" href="styles/split.css">' if splits else ""
@@ -602,6 +675,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {hook_block}
 {split_block}
 {chr(10).join(flash_blocks)}
+{track_block}
+{sfx_html}
 
   {container}
 {data["_stackedMarkup"] if style_id == "stacked" else (scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty, splits))}
@@ -655,6 +730,15 @@ def main() -> None:
         files.append("headline.css")
     if data.get("splitInserts"):
         files += ["split.css", "split.js"]
+
+    # os efeitos vão para o projeto: o renderer resolve caminho relativo a ele
+    sfxdir = proj / "sfx"
+    sfxdir.mkdir(exist_ok=True)
+    for spec in VARIANTS["sfx"].values():
+        src = SKILL_DIR / "assets" / "sfx" / spec["file"]
+        if src.exists():
+            shutil.copy2(src, sfxdir / spec["file"])
+
     if (data.get("camera", {}).get("enabled", True)
             and any((data.get("elements") or {}).get(k, True) for k in ("zoomCuts", "zoomAuto"))) \
             or data.get("transitions"):
@@ -702,6 +786,12 @@ def main() -> None:
         cues = json.loads(cues_path.read_text())
         mk, stretched = stacked_markup(cues, st, duration)
         data["_stackedMarkup"] = mk
+        data["_soloCues"] = [
+            (c["startMs"] / 1000,
+             "circled" if c["preset"] == "SOLO_OUTLINE" else "soloWord")
+            for c in cues
+            if c["preset"] in ("SOLO_BIG", "SOLO_OUTLINE")
+            and c["startMs"] / 1000 < duration]
         data["_stackedCount"] = mk.count("stk-cue")
         data["_stackedStretched"] = stretched
     elif cfg.get("enabled", True):
@@ -711,6 +801,7 @@ def main() -> None:
 
     orphans = set(VARIANTS["orphansPt"])
     penalty = VARIANTS["orphanPenalty"]
+    data["_proj"] = str(proj)
     args.output.write_text(render_html(data, timed, st, style_id, args.video,
                                        duration, orphans, penalty))
 

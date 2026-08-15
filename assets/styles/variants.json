@@ -224,5 +224,36 @@
       "seam": false,
       "hookTop": 920
     }
+  },
+  "_sfx_readme": "Efeitos por evento. Volumes vêm do original. O arquivo é escolhido por NÍVEL medido: click2.mp3 (-25 dB) é inaudível sob fala e por isso não aparece aqui; cut-click.mp3 (-2 dB) é o que lê. O silêncio inicial de cada arquivo é medido em tempo de composição e compensado — não está fixado aqui de propósito, para que trocar o arquivo não introduza atraso silencioso.",
+  "sfx": {
+    "hook": {
+      "file": "whoosh.mp3",
+      "volume": 0.1
+    },
+    "flash": {
+      "file": "cut-click.mp3",
+      "volume": 0.35
+    },
+    "soloWord": {
+      "file": "caption-click.mp3",
+      "volume": 0.45
+    },
+    "circled": {
+      "file": "caption-scratch.mp3",
+      "volume": 0.16
+    },
+    "callout": {
+      "file": "pop.mp3",
+      "volume": 0.1
+    },
+    "chapter": {
+      "file": "whoosh.mp3",
+      "volume": 0.1
+    },
+    "broll": {
+      "file": "whoosh.mp3",
+      "volume": 0.08
+    }
   }
 }
