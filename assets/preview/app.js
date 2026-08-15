@@ -806,7 +806,9 @@ async function applyState(data) {
   S.savedPending = !!data.hasPendingEdits;
 
   $('projectName').textContent = S.state.project || 'Edvid';
-  $('stateMessage').textContent = S.state.message || '';
+  // o recado de estado saiu do cabeçalho; ainda chega pelo title da janela,
+  // que é onde ele não disputa espaço com nada
+  document.title = S.state.project ? `${S.state.project} — Avelin` : 'Avelin — Editor';
 
   const ranges = (data.edl && data.edl.ranges) || [];
   // J-cut timeline, written by render.py. Under a J-cut the picture of every take
@@ -1219,9 +1221,11 @@ function updateAccentNote() {
  * rebuilding every demo. Skipping it there left the footer naming the previous
  * colour while the previews already showed the new one. */
 function updateSummary() {
+  const box = $('setupSummary');
+  if (!box) return;   // o resumo saiu da tela — nada a escrever
   const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
   const accentBit = accentUsed() ? ` · destaque ${accentName(S.style.accent)}` : '';
-  $('setupSummary').textContent =
+  box.textContent =
     `${styleName('edits', S.style.edit)} · headline ${styleName('headlines', S.style.headline)}` +
     ` · legenda ${styleName('captions', S.style.captions)}${accentBit} · ` +
     (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
@@ -1932,7 +1936,6 @@ function renderLive() {
     box.style.setProperty('--cap-color', S.style.capColor || '#fff');
     el('div', 'ave-cue', box).textContent = cue.text;
   }
-  if (cue.sample) el('div', 'live-sample', ov).textContent = 'exemplo — a legenda real entra na finalização';
 }
 
 // ---------- canvases (viewport-sized, redrawn on scroll) ----------

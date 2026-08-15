@@ -623,16 +623,6 @@ kbd {
   width: 2px;
   background: var(--mark);
 }
-.note-pending::after {
-  content: 'IN';
-  position: absolute;
-  top: 2px;
-  left: 4px;
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.6px;
-  color: var(--mark-soft);
-}
 
 .note-editor {
   position: fixed;
@@ -1385,18 +1375,6 @@ button.tl-chip:disabled { cursor: default; }
   overflow: hidden;
   pointer-events: none;
   border-radius: 10px;
-}
-.live-sample {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 58px; /* acima do HUD de reprodução, que agora mora no rodapé */
-  text-align: center;
-  font-size: 10px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.5);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 
 
