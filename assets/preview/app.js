@@ -937,7 +937,6 @@ async function applyState(data) {
     }
   }
 
-  refreshSrcToggle();
   fitZoom();
   renderAll();
   renderSetup();
@@ -947,11 +946,24 @@ async function applyState(data) {
 // Fase 1 plays the clean cut; Fase 2 plays the Phase-2 render (state.finalVideo)
 // when it exists, so captions/inserts are visible. Keeps the playback position.
 function updateVideoSrc() {
-  // A fonte é ESCOLHA do usuário, não efeito colateral de trocar de aba. Antes,
-  // mudar de aba trocava o arquivo em silêncio e dava para passar minutos
-  // ouvindo o render antigo achando que era o corte novo.
-  const wantFinal = S.showFinal && S.state.finalVideo;
-  const rel = wantFinal ? S.state.finalVideo : (S.state.video || 'cut.mp4');
+  /* A FONTE SE RESOLVE SOZINHA, e o botão de alternar saiu.
+   *
+   * A pergunta nunca foi "qual dos dois você quer ver" — é sempre o mais
+   * completo que ainda seja VERDADE. Antes da finalização só existe o corte;
+   * depois, o final. E se o corte mudar, o final vira um render do corte
+   * ANTERIOR: a linha do tempo passa a dizer uma coisa e o vídeo a mostrar
+   * outra, sem nada avisar. Aí a resposta certa é voltar ao corte, não deixar
+   * o usuário perceber sozinho.
+   *
+   * Obsoleto = o corte é mais novo que o final, OU há ajuste ainda não enviado.
+   * Os dois querem dizer a mesma coisa: o que está na tela não é o que a
+   * timeline descreve. */
+  const mt = S.mtimes || {};
+  const stale = !S.state.finalVideo
+    || (mt.video && mt.finalVideo && mt.video > mt.finalVideo)
+    || dirtyCount() > 0;
+  S.showFinal = !stale;
+  const rel = S.showFinal ? S.state.finalVideo : (S.state.video || 'cut.mp4');
   const vsrc = `/media/${rel}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || 0}`;
   if (video.dataset.src === vsrc) return;
   const t = video.currentTime;
@@ -2466,24 +2478,6 @@ panel.addEventListener('scroll', () => requestAnimationFrame(() => { drawRuler()
 // resize (or the short-pane media query kicking in) has to rebuild them
 window.addEventListener('resize', () => { fitZoom(); renderAll(); renderSetup(); });
 
-// alterna entre o CORTE e o render final. Só aparece quando o final existe —
-// oferecer a troca sem ter o que trocar é prometer um estado que não há.
-$('srcToggle').addEventListener('click', () => {
-  S.showFinal = !S.showFinal;
-  refreshSrcToggle();
-  updateVideoSrc();
-  LIVE.key = null;
-  renderLive();   // a prévia some quando o render final entra
-});
-
-function refreshSrcToggle() {
-  const b = $('srcToggle');
-  const has = !!S.state.finalVideo;
-  b.classList.toggle('hidden', !has);
-  if (!has) S.showFinal = false;
-  b.textContent = S.showFinal ? 'final' : 'corte';
-  b.classList.toggle('on', !!S.showFinal);
-}
 
 // ---------- save / discard ----------
 async function sendTimeline() {
