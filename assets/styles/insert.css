@@ -1,0 +1,30 @@
+/* INSERTS — cartão de imagem no terço SUPERIOR, sincronizado com o substantivo
+ * dito. Ken-Burns lento enquanto está no ar.
+ *
+ * A zona é o ponto: inserts em cima, legenda embaixo, rosto livre no meio. Um
+ * insert centralizado tapa justamente quem está falando.
+ */
+
+.ave-insert {
+  --ins-scale: 1;
+  --ins-w: 780;
+  --ins-h: 500;
+  --ins-top: 90;
+
+  position: absolute;
+  left: 50%;
+  top: calc(var(--ins-top) * var(--ins-scale) * 1px);
+  width: calc(var(--ins-w) * var(--ins-scale) * 1px);
+  height: calc(var(--ins-h) * var(--ins-scale) * 1px);
+  margin-left: calc(var(--ins-w) * var(--ins-scale) * -0.5px);
+  border-radius: calc(28px * var(--ins-scale));
+  overflow: hidden;
+  box-shadow: 0 calc(18px * var(--ins-scale)) calc(50px * var(--ins-scale)) rgba(0, 0, 0, 0.45);
+  opacity: 0;
+}
+
+.ave-insert img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

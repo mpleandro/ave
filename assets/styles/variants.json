@@ -255,5 +255,11 @@
       "file": "whoosh.mp3",
       "volume": 0.08
     }
+  },
+  "insert": {
+    "_readme": "Cartão de insert no terço SUPERIOR. Zonas: insert em cima, legenda embaixo, rosto livre no meio.",
+    "w": 780,
+    "h": 500,
+    "top": 90
   }
 }

@@ -603,6 +603,22 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         parts.append(cam_js)
     needs_tl = bool(parts)
 
+    # inserts: cartão de imagem no terço superior
+    ins = VARIANTS["insert"]
+    insert_blocks = []
+    for i, it in enumerate(data.get("inserts") or []):
+        st_, en = float(it.get("start", 0)), float(it.get("end", 0))
+        en = min(en, duration)
+        if st_ >= duration or en <= st_ or not (it.get("src") or it.get("ref")):
+            continue
+        insert_blocks.append(
+            f'  <div id="ins{i}" class="ave-insert clip" data-start="{st_:.3f}" '
+            f'data-duration="{en - st_:.3f}" data-track-index="3" '
+            f'style="--ins-scale:1; --ins-w:{ins["w"]}; --ins-h:{ins["h"]}; '
+            f'--ins-top:{ins["top"]}">'
+            f'<img src="{it.get("src") or it.get("ref")}" alt=""></div>')
+        events.append((st_, "hook"))   # whoosh na entrada do cartão
+
     proj = Path(data.get("_proj", "."))
     sfx_list, sfx_warns = sfx_blocks(events, proj, duration)
     for w in sfx_warns:
@@ -617,6 +633,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         track_block = (f'  <audio id="soundtrack" src="{snd["file"]}" data-start="0" '
                        f'data-duration="{duration:.3f}" data-track-index="7" '
                        f'data-volume="{snd.get("volume", 0.1)}"></audio>')
+
+    insert_html = "\n".join(insert_blocks)
+    insert_css = '<link rel="stylesheet" href="styles/insert.css">' if insert_blocks else ""
+    insert_tag = '<script src="styles/insert.js"></script>' if insert_blocks else ""
+    if insert_blocks:
+        parts.append("  AVE_INSERT.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+        needs_tl = True
 
     split_block = split_markup(splits) if splits else ""
     split_css = '<link rel="stylesheet" href="styles/split.css">' if splits else ""
@@ -647,10 +670,12 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {gsap_tag}
 {cam_tag}
 {split_tag}
+{insert_tag}
 {cap_css}
 {hook_css}
 {extra_css}
 {split_css}
+{insert_css}
 <style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   html, body {{ width:{W}px; height:{H}px; overflow:hidden; background:#000; }}
@@ -675,6 +700,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {hook_block}
 {split_block}
 {chr(10).join(flash_blocks)}
+{insert_html}
 {track_block}
 {sfx_html}
 
@@ -730,6 +756,8 @@ def main() -> None:
         files.append("headline.css")
     if data.get("splitInserts"):
         files += ["split.css", "split.js"]
+    if data.get("inserts"):
+        files += ["insert.css", "insert.js"]
 
     # os efeitos vão para o projeto: o renderer resolve caminho relativo a ele
     sfxdir = proj / "sfx"
