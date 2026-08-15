@@ -13,7 +13,7 @@ Grouping: word-level times → readable cues.
 
 Usage:
     python helpers/captions_srt.py --transcript <edit>/transcripts/cut.json -o <edit>/captions.srt
-    python helpers/captions_srt.py --captions <edit>/remotion/public/captions.json -o <edit>/captions.srt
+    python helpers/captions_srt.py --captions <edit>/hyperframes/captions.json -o <edit>/captions.srt
 """
 from __future__ import annotations
 

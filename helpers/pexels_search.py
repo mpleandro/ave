@@ -1,6 +1,6 @@
-"""Search Pexels and download images into a Remotion project's public/ folder.
+"""Search Pexels and download images into the Phase-2 project folder.
 
-PHASE 2 helper. Needs PEXELS_API_KEY (env or .env at the edvid repo root).
+PHASE 2 helper. Needs PEXELS_API_KEY (env or .env at the Avelin repo root).
 Get a free key at https://www.pexels.com/api/.
 
 Prints each downloaded file's local path and photographer credit (keep the
@@ -8,7 +8,7 @@ credits for attribution).
 
 Usage:
     python helpers/pexels_search.py "hollywood film set" \
-        --out-dir <edit>/remotion/public/pexels --count 3 --orientation portrait
+        --out-dir <edit>/hyperframes/pexels --count 3 --orientation portrait
 """
 from __future__ import annotations
 
@@ -61,9 +61,9 @@ def slugify(s: str) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Download Pexels images into a Remotion public/ folder")
+    ap = argparse.ArgumentParser(description="Download Pexels images into the Phase-2 project folder")
     ap.add_argument("query", help="Search query")
-    ap.add_argument("--out-dir", type=Path, required=True, help="Destination folder (e.g. remotion/public/pexels)")
+    ap.add_argument("--out-dir", type=Path, required=True, help="Destination folder (e.g. hyperframes/pexels)")
     ap.add_argument("--count", type=int, default=3, help="How many images to download (default 3)")
     ap.add_argument("--orientation", choices=["landscape", "portrait", "square"], default=None)
     ap.add_argument("--size", choices=["original", "large2x", "large", "medium"], default="large2x",

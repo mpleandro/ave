@@ -2,7 +2,7 @@
  * composição HyperFrames.
  *
  * Por que compartilhado: até agora cada estilo existia duas vezes — uma vez em
- * HTML/CSS na prévia da aba Estilo, outra em TSX no template Remotion. O
+ * HTML/CSS na prévia da aba Estilo, outra em TSX no template antigo. O
  * SKILL.md documenta a consequência como anti-padrão recorrente ("uma prévia
  * que mente sobre o estilo é pior que nenhuma prévia"). Com o render também em
  * HTML/CSS, a duplicação deixa de ter motivo.
@@ -41,7 +41,7 @@
   align-items: baseline;
   white-space: nowrap;
 
-  /* Poppins 900 é o karaokê do edvid, e a prévia da aba mostra exatamente
+  /* Poppins 900 é o karaokê herdado, e a prévia da aba mostra exatamente
      isto. Um port não é o momento de trocar a marca de um estilo: se o
      karaokê passar a usar Open Sans, ele muda para todo projeto que já o
      escolheu. A identidade Avelin tem estilo próprio (`editorial`). */
@@ -52,7 +52,7 @@
   letter-spacing: calc(-1px * var(--cap-scale));
   font-size: calc(var(--cap-size) * var(--cap-scale) * 1px);
 
-  /* NOTA: sombra preta, herdada do edvid. O avelin.json pede sombra tingida de
+  /* NOTA: sombra preta, herdada da origem. O avelin.json pede sombra tingida de
      azul-noite, "nunca preto" — mas isso vale para os estilos da Avelin, e
      mudar aqui alteraria o karaokê de todos os projetos existentes. Registrado
      como divergência conhecida, não corrigido de passagem. */

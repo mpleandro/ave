@@ -5,7 +5,7 @@ background).
 Uses Robust Video Matting (RVM) — a recurrent video matting model with clean,
 temporally-stable hair edges. Reads a video, estimates the person + alpha per
 frame (carrying recurrent state for stability), and writes an **alpha WebM**
-(VP9 `yuva420p`) of the person over transparency. In Remotion, layer:
+(VP9 `yuva420p`) of the person over transparency. In the composition, layer:
 
     <DynamicVideo src="cut.mp4">     {/* base: background + person */}
       {behindElement}                {/* the thing that goes behind */}
@@ -15,7 +15,7 @@ frame (carrying recurrent state for stability), and writes an **alpha WebM**
 Needs the `matting` extra (torch): `uv sync --extra matting`.
 
 Usage:
-    python helpers/person_matte.py cut.mp4 -o remotion/public/fg.webm
+    python helpers/person_matte.py cut.mp4 -o hyperframes/fg.webm
     python helpers/person_matte.py cut.mp4 -o fg.webm --model resnet50   # higher quality, slower
     python helpers/person_matte.py cut.mp4 -o fg.webm --start 8 --duration 6
 """
@@ -90,7 +90,7 @@ def main() -> None:
 
     # ffmpeg sink: raw RGBA frames → alpha video. ProRes 4444 (.mov) is the
     # reliable alpha format across ffmpeg builds AND is decoded with alpha by
-    # Remotion's renderer. VP9/VP8 WebM alpha is lighter but silently drops the
+    # the Phase-2 renderer. VP9/VP8 WebM alpha is lighter but silently drops the
     # alpha channel on some libvpx builds (e.g. Homebrew ffmpeg 8.x) — so .mov
     # is the default. `.webm` is honored if you explicitly ask for it.
     args.output.parent.mkdir(parents=True, exist_ok=True)

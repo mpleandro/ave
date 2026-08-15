@@ -2,13 +2,13 @@
 
 Detects the largest frontal face per frame (OpenCV Haar), takes the eye-line
 point (~42% down the face box), fills gaps, and smooths the path. Outputs a
-normalized per-frame point that Remotion uses to keep the eyes at a fixed
+normalized per-frame point the composition uses to keep the eyes at a fixed
 target while zoomed in (a gentle follow, no black edges).
 
 Output JSON: {fps, width, height, count, points: [[cx,cy], ...]}  (cx,cy in 0..1)
 
 Usage:
-    python helpers/face_track.py cut.mp4 -o remotion/public/track.json
+    python helpers/face_track.py cut.mp4 -o hyperframes/track.json
 """
 from __future__ import annotations
 

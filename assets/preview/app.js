@@ -88,7 +88,7 @@ const ICON = {
 };
 
 /* ---------- style catalog (the Fase 1 → Fase 2 gate) ----------
- * The one place that knows which looks Edvid can build. It is APP-level, not
+ * The one place that knows which looks Avelin can build. It is APP-level, not
  * session-level: a new editing style or caption style is a new entry here plus
  * its implementation in the track reference — never a per-session UI.
  * The user's pick ships to <edit>/preview_style.json; the skill reads it once,
@@ -110,7 +110,10 @@ const STYLE_CATALOG = {
       // default for every new project — a clean full-frame cut, with inserts as
       // something the user opts into.
       id: 'limpa',
-      name: 'Limpa',
+      // O RÓTULO muda, o id não: `limpa`/`split`/`split2` são carga estrutural
+      // em compose_shortform.py, variants.json, split.css/js e no edit-data de
+      // todo projeto já salvo. Renomear o id por cosmética quebraria os três.
+      name: 'Nenhum',
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
@@ -126,7 +129,7 @@ const STYLE_CATALOG = {
     },
     {
       id: 'split',
-      name: 'Tela dividida',
+      name: 'Dividida ↑',
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="36" rx="5" fill="rgb(var(--orange-rgb) / .16)"/>
@@ -144,7 +147,7 @@ const STYLE_CATALOG = {
     },
     {
       id: 'split2',
-      name: 'Tela dividida 2',
+      name: 'Dividida ↓',
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="65" rx="5" fill="rgba(255,255,255,.05)"/>
@@ -625,7 +628,7 @@ let S = {
   // A1/A2 live folded inside the audio track. They answer "where is the J-cut",
   // which is a question you ask once — so the default is closed, and the choice
   // is remembered rather than re-made every reload.
-  jcutOpen: localStorage.getItem('edvid.jcutOpen') === '1',
+  jcutOpen: localStorage.getItem('avelin.jcutOpen') === '1',
 };
 
 function defaultStyle() {
@@ -886,7 +889,7 @@ async function applyState(data) {
   S.fps = S.state.fps || 24;
   S.savedPending = !!data.hasPendingEdits;
 
-  $('projectName').textContent = S.state.project || 'Edvid';
+  $('projectName').textContent = S.state.project || 'Avelin';
   // o recado de estado saiu do cabeçalho; ainda chega pelo title da janela,
   // que é onde ele não disputa espaço com nada
   document.title = S.state.project ? `${S.state.project} — Avelin` : 'Avelin — Editor';
@@ -2644,7 +2647,7 @@ document.querySelectorAll('.tl-chip[data-icon]').forEach((c) => {
 $('jcutToggle').addEventListener('click', () => {
   if (!(S.jcut && S.jcut.length)) return;
   S.jcutOpen = !S.jcutOpen;
-  localStorage.setItem('edvid.jcutOpen', S.jcutOpen ? '1' : '0');
+  localStorage.setItem('avelin.jcutOpen', S.jcutOpen ? '1' : '0');
   renderJcutAudio();
   updateScrollRange();
   positionNeedle();

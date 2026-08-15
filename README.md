@@ -9,14 +9,14 @@ trilha.
 Funciona em **short-form vertical** (Reels/TikTok/Shorts) e **longform
 horizontal** (YouTube).
 
-> **Estado atual: a Fase 2 está em stub.** Este fork está migrando a camada de
-> visuais de Remotion para **HyperFrames** (Apache 2.0), para tirar a restrição
-> de licença comercial do caminho. A Fase 1 — transcrição, escolha de tomadas,
-> corte, correção de cor, master de voz e a interface de preview — está
-> completa e é o caminho suportado hoje.
+> **Estado atual.** A Fase 2 renderiza em **HyperFrames** (Apache 2.0) — sem a
+> restrição de licença comercial do motor anterior. Portados: seis estilos de
+> legenda, quatro headlines, três tipos de edição, a câmera dinâmica e as quatro
+> camadas de longform. Ainda falta a camada *atrás do sujeito* — a skill recusa
+> pelo nome em vez de substituir por algo parecido.
 >
-> As instruções de instalação abaixo ainda apontam para o repositório do edvid;
-> serão trocadas quando o A.V.E. tiver o seu próprio.
+> A URL de clone abaixo é um marcador: troque `<REPO>` pelo endereço do seu
+> repositório.
 
 ## Origem e licença
 
@@ -65,13 +65,13 @@ falhar de um jeito bem menos claro.
 **3. Baixe a skill:**
 
 ```powershell
-git clone https://github.com/fillrochaa/edvid "$env:USERPROFILE\.claude\skills\edvid"
+git clone <REPO> "$env:USERPROFILE\.claude\skills\ave"
 ```
 
 **4. Instale as dependências Python:**
 
 ```powershell
-uv sync --directory "$env:USERPROFILE\.claude\skills\edvid"
+uv sync --directory "$env:USERPROFILE\.claude\skills\ave"
 ```
 
 Cole os comandos exatamente como estão. O `$env:USERPROFILE` é uma variável que
@@ -101,13 +101,13 @@ Se algum disser *"command not found"*, resolva antes de continuar.
 **3. Baixe a skill:**
 
 ```bash
-git clone https://github.com/fillrochaa/edvid "$HOME/.claude/skills/edvid"
+git clone <REPO> "$HOME/.claude/skills/ave"
 ```
 
 **4. Instale as dependências Python:**
 
 ```bash
-uv sync --directory "$HOME/.claude/skills/edvid"
+uv sync --directory "$HOME/.claude/skills/ave"
 ```
 
 Cole os comandos exatamente como estão — o `$HOME` é uma variável que o Terminal
@@ -133,18 +133,18 @@ Pegue uma chave gratuita em
 **Windows (PowerShell):**
 
 ```powershell
-Set-Content -Path "$env:USERPROFILE\.claude\skills\edvid\.env" -Value "GROQ_API_KEY=cole_sua_chave_aqui"
+Set-Content -Path "$env:USERPROFILE\.claude\skills\ave\.env" -Value "GROQ_API_KEY=cole_sua_chave_aqui"
 ```
 
 **macOS / Linux:**
 
 ```bash
-echo "GROQ_API_KEY=cole_sua_chave_aqui" > "$HOME/.claude/skills/edvid/.env"
+echo "GROQ_API_KEY=cole_sua_chave_aqui" > "$HOME/.claude/skills/ave/.env"
 ```
 
 Substitua `cole_sua_chave_aqui` pela chave de verdade — essa parte sim você
 edita. Se preferir, abra o Claude Code e peça: *"coloca minha chave do Groq no
-.env da edvid"*.
+.env do Avelin"*.
 
 ### Chaves opcionais
 
@@ -164,30 +164,16 @@ chave.
 
 ---
 
-## Skill do Remotion (necessária só na Fase 2)
+## Fase 2 — nada a instalar
 
-A Fase 1 — corte, cor, áudio — funciona sem isso. Para legendas, gráficos e
-imagens (Fase 2) a edvid precisa de uma segunda skill, a do Remotion.
+A Fase 2 (legendas, gráficos, imagens) roda em **HyperFrames**, resolvido na hora
+por `npx`. Não há segunda skill para clonar nem `node_modules` por projeto: o
+motor fica num cache compartilhado (~365 MB em `~/.cache/hyperframes`, baixado
+uma vez para todos os vídeos). A primeira Fase 2 da máquina leva alguns minutos
+baixando isso; as seguintes começam na hora.
 
-Ela mora numa subpasta do repositório dela, então não dá pra clonar direto como
-a edvid. Como o repo inteiro tem ~400 KB, o caminho mais simples é copiar — e
-rodar o mesmo comando de novo é como se atualiza:
-
-**Windows (PowerShell):**
-
-```powershell
-$t="$env:TEMP\rmskills"; Remove-Item -Recurse -Force $t,"$env:USERPROFILE\.claude\skills\remotion-best-practices" -EA SilentlyContinue; git clone -q --depth 1 https://github.com/remotion-dev/skills $t; Copy-Item -Recurse "$t\skills\remotion" "$env:USERPROFILE\.claude\skills\remotion-best-practices"; Remove-Item -Recurse -Force $t
-```
-
-**macOS / Linux:**
-
-```bash
-git clone -q --depth 1 https://github.com/remotion-dev/skills /tmp/rmskills && rm -rf "$HOME/.claude/skills/remotion-best-practices" && cp -R /tmp/rmskills/skills/remotion "$HOME/.claude/skills/remotion-best-practices" && rm -rf /tmp/rmskills
-```
-
-Na primeira vez que a Fase 2 rodar, ela ainda vai baixar as dependências do
-Remotion (uns minutos). Nos vídeos seguintes é bem mais rápido, porque fica em
-cache.
+O Node.js 18+ dos pré-requisitos é o que o `npx` precisa — já instalado no passo
+1 da instalação.
 
 ---
 
@@ -212,7 +198,7 @@ Depois é só pedir esse backend:
 uv run python helpers/transcribe.py video.mp4 --backend whispercpp
 ```
 
-A edvid acha o binário e o modelo sozinha em `~/whisper.cpp`. Se você instalou
+O Avelin acha o binário e o modelo sozinho em `~/whisper.cpp`. Se você instalou
 em outro lugar, aponte com `WHISPERCPP_BIN` e `WHISPERCPP_MODEL` no `.env`.
 
 Instalar o whisper.cpp **não muda nada** por si só: o Groq continua o padrão até
@@ -253,13 +239,13 @@ Para trazer a versão mais nova:
 **Windows:**
 
 ```powershell
-git -C "$env:USERPROFILE\.claude\skills\edvid" pull --ff-only
+git -C "$env:USERPROFILE\.claude\skills\ave" pull --ff-only
 ```
 
 **macOS / Linux:**
 
 ```bash
-git -C "$HOME/.claude/skills/edvid" pull --ff-only
+git -C "$HOME/.claude/skills/ave" pull --ff-only
 ```
 
 `clone` baixa pela primeira vez; `pull` atualiza o que já existe. Rodar o
@@ -300,7 +286,7 @@ instalar.
 **`ModuleNotFoundError` ao usar a skill** — faltou o passo 4, o `uv sync`.
 
 **O Claude não encontra a skill** — confirme que a pasta está exatamente em
-`.claude/skills/edvid` dentro da sua pasta de usuário, e reinicie o Claude Code.
+`.claude/skills/ave` dentro da sua pasta de usuário, e reinicie o Claude Code.
 
 ---
 

@@ -11,13 +11,13 @@ Each role also picks its own entry animation, because the two are not independen
 a serif word grows from 0.8, a number explodes from scale 0, a punch blooms out of
 blur. The template only plays what this file assigns.
 
-Input is the transcript of the FINAL cut (same as captions_for_remotion.py) so
+Input is the transcript of the FINAL cut (same as captions_words.py) so
 word times are already on the output timeline.
 
 Usage:
-    python ~/.claude/edvid-avelin/helpers/caption_style_editorial.py \
+    python helpers/caption_style_editorial.py \
         --transcript <edit>/transcripts/cut.json \
-        -o <edit>/remotion/public/caption-editorial.json
+        -o <edit>/hyperframes/caption-editorial.json
     # optional: --lang pt (default) tunes the accent/connective word lists
 
 Shares its word loading, normalisation and cue grouping with caption_style.py —
@@ -31,15 +31,16 @@ import json
 import sys
 from pathlib import Path
 
-# This file lives in the Avelin overlay, OUTSIDE the edvid repo, so that a
-# `git pull` cannot touch it — which also means caption_style.py stopped being a
-# sibling. Reach into the skill for it instead of forking 200 lines of pt-BR word
-# lists that would then silently drift apart.
-_SKILL_HELPERS = Path.home() / ".claude" / "skills" / "edvid" / "helpers"
-if str(_SKILL_HELPERS) not in sys.path:
-    sys.path.insert(0, str(_SKILL_HELPERS))
+# `caption_style.py` É irmão deste arquivo — importe-o COMO irmão. Antes saía
+# daqui um `sys.path.insert` apontando para `~/.claude/skills/edvid/helpers`,
+# herança de quando este arquivo morava num overlay FORA daquele repo. Dentro
+# deste fork aquilo virou atalho para OUTRA skill: se as listas de palavras
+# pt-BR daqui divergirem, a versão do outro repo entra no lugar e o estilo sai
+# diferente, sem erro nenhum. Conferido na troca: os dois arquivos ainda batem,
+# então o defeito nunca chegou a aparecer — que é o que o tornava difícil de ver.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from caption_style import (  # noqa: E402  (resolved through _SKILL_HELPERS above)
+from caption_style import (  # noqa: E402  (irmão, resolvido na linha acima)
     EMPH,
     ENDBREAK,
     NEG,

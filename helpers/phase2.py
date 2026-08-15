@@ -40,6 +40,36 @@ PORTED_HEADLINES = {"outline", "card", "realce", "misto"}
 LOUDNORM = "loudnorm=I=-14:TP=-1:LRA=11"
 
 
+def adopt_legacy_data(edit: Path, proj: Path) -> None:
+    """Traz `edit/remotion/public/` para a raiz do projeto HyperFrames.
+
+    Os dados moravam num `public/` porque o Remotion SERVIA essa pasta; o
+    HyperFrames não serve nada — ele resolve mídia a partir da raiz do projeto.
+    Manter as duas pastas não era só nome feio: a composição procura os arquivos
+    em `<proj>/<src>` (vídeo, `sfx/`, imagens) enquanto o pipeline os escrevia em
+    `<edit>/remotion/public/<src>`, então NENHUM `src` de edit-data resolvia. A
+    pasta antiga fica vazia e é removida; nada é sobrescrito.
+    """
+    legacy = edit / "remotion" / "public"
+    if not legacy.is_dir():
+        return
+    proj.mkdir(parents=True, exist_ok=True)
+    moved = 0
+    for item in sorted(legacy.iterdir()):
+        dest = proj / item.name
+        if dest.exists() or dest.is_symlink():
+            continue                      # o novo já existe: ele manda
+        shutil.move(str(item), str(dest))
+        moved += 1
+    for d in (legacy, legacy.parent):     # só saem se ficaram vazias
+        try:
+            d.rmdir()
+        except OSError:
+            pass
+    if moved:
+        print(f"  {moved} arquivo(s) de remotion/public → hyperframes/")
+
+
 def run(cmd, cwd=None, quiet=False, allow_fail=False):
     """Executa e aborta em falha — salvo quando o código de saída É a resposta.
 
@@ -169,7 +199,11 @@ def main() -> None:
         sys.exit(f"não achei o corte aprovado em {cut} — a Fase 1 precisa ter rodado")
 
     proj = edit / "hyperframes"
-    pub = edit / "remotion" / "public"          # onde os dados já moram hoje
+    adopt_legacy_data(edit, proj)
+    # Um destino só. A composição resolve `src`, `sfx/` e o vídeo a partir da
+    # RAIZ do projeto, então os dados moram nela — sem `public/`, que era uma
+    # exigência do servidor do Remotion e não do HyperFrames.
+    pub = proj
     data_path = pub / "edit-data.json"
     caps_path = pub / "captions.json"
     if not caps_path.exists():
@@ -187,7 +221,7 @@ def main() -> None:
             run([sys.executable, str(HELPERS / "transcribe.py"), str(cut),
                  "--edit-dir", str(edit), "--language", "pt"], quiet=True)
         pub.mkdir(parents=True, exist_ok=True)
-        run([sys.executable, str(HELPERS / "captions_for_remotion.py"),
+        run([sys.executable, str(HELPERS / "captions_words.py"),
              "--transcript", str(tr), "-o", str(caps_path)], quiet=True)
         if not caps_path.exists():
             sys.exit("falhou ao gerar as legendas do corte")
@@ -266,8 +300,8 @@ def main() -> None:
     state = load(edit / "state.json", {})
     state.update({
         "phase": 2,
-        "captions": "remotion/public/captions.json",
-        "editData": "remotion/public/edit-data.json",
+        "captions": "hyperframes/captions.json",
+        "editData": "hyperframes/edit-data.json",
         "finalVideo": "final.mp4",
         "message": f"Fase 2 pronta — legenda {data.get('captions', {}).get('style', 'karaoke')}",
     })

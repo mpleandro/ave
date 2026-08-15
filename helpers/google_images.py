@@ -9,7 +9,7 @@ reusable licenses when you can; prefer Wikimedia/official press images for
 commercial use. Keep the source page URL the helper prints for attribution.
 
 Usage:
-    python helpers/google_images.py "A24 studio logo" --out-dir remotion/public/web --count 3
+    python helpers/google_images.py "A24 studio logo" --out-dir hyperframes/web --count 3
     python helpers/google_images.py "<query>" --out-dir <dir> --rights cc
 """
 from __future__ import annotations

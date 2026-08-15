@@ -1,6 +1,6 @@
 """Survey a video visually — scene-aware frames, deduped, tiled into contact sheets.
 
-Ports the /watch skill's frame-selection engine into edvid. contact_sheet.py
+Ports the /watch skill's frame-selection engine into Avelin. contact_sheet.py
 answers "show me these N timestamps" (you must already know where to look);
 this answers "what is IN this footage?": ffmpeg scene-change detection picks
 the distinct moments, a perceptual dedup pass collapses near-identical frames

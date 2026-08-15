@@ -9,7 +9,7 @@ approved. Everything here rides on the **data-driven template** at
 - **Frame rate:** render at **30fps when the source is 30fps or higher** (natural
   motion, matches Instagram/TikTok/Shorts capture); only slower sources use 24.
   `render.py` picks this automatically for `cut.mp4` — then set `edit-data.json`
-  `fps` to the SAME value as `cut.mp4` (ffprobe it) so the Remotion render matches.
+  `fps` to the SAME value as `cut.mp4` (ffprobe it) so the Phase-2 render matches.
 - **Base:** 1080×1920 (fps per the rule above), `<OffthreadVideo src=cut.mp4>` with the **dynamic
   camera**, whose three parts are separate picks on the Estilo tab: hard zoom per
   cut segment (`zoomCuts`, ~1.10–1.22, cycles), slow push-in (`zoomAuto`,
@@ -44,8 +44,8 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 
 | Pick | What it means |
 |---|---|
-| `edit: "limpa"` | **the default** — NO split inserts, full frame throughout. See the "Limpa" section |
-| `edit: "split" \| "split2"` | the split-screen variant below — every image insert uses it |
+| `edit: "limpa"` | rotulado **"Nenhum"** e **o padrão** — NO split inserts, full frame throughout. See that section |
+| `edit: "split" \| "split2"` | **"Dividida ↑"** / **"Dividida ↓"** — the split-screen variant below; every image insert uses it |
 | `headline: "outline" \| "card" \| "realce" \| "misto"` | `hook.style` in edit-data.json |
 | `captions: "karaoke" \| "stacked" \| "scatter" \| "simples" \| "serifada" \| "classica"` | `captions.style` in edit-data.json (+ the director step for stacked) |
 | `accent` (hex) | `hook.accent` + `captions.accent`. Only `realce`/`misto`/`stacked` paint it; `accentUsed:false` means the picked styles have none |
@@ -59,17 +59,18 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 An unchecked box is an explicit NO, not a silence. Copy the picks into
 `state.json` as `style`, clear `awaitingStyle`, delete `preview_style.json`.
 
-1. **Scaffold (one command, never read the TSX):**
-   ```bash
-   cp -R <skill>/assets/shortform/. <edit>/remotion/ && cd <edit>/remotion && npm install
-   ```
-2. **Generate machine data into `remotion/public/`:**
-   - `cp cut.mp4 remotion/public/`
+**`helpers/phase2.py <edit>` faz os passos 1 a 5 sozinho.** O que segue é o que
+ele faz por dentro — leia quando ele parar, não para executar à mão.
+
+1. **Scaffold.** `phase2.py` monta `<edit>/hyperframes/` e linka o `cut.mp4`. Não
+   existe mais template para copiar: a composição é GERADA por
+   `compose_shortform.py` a partir dos dados.
+2. **Dados na RAIZ do projeto (`<edit>/hyperframes/`, sem `public/`):**
    - `transcribe.py cut.mp4 --edit-dir <edit>` → `transcripts/cut.json`
      (cut times are already on the output timeline — never map the source EDL)
-   - `captions_for_remotion.py --transcript transcripts/cut.json -o public/captions.json`
+   - `captions_words.py --transcript transcripts/cut.json -o hyperframes/captions.json`
    - **Caption style** — from the Estilo tab pick. `stacked` ALSO needs
-     `caption_style.py --transcript transcripts/cut.json -o public/caption-cues.json`
+     `caption_style.py --transcript transcripts/cut.json -o hyperframes/caption-cues.json`
      plus `captions.style:"stacked"` (see the "Caption style" section).
    - `face_track.py cut.mp4 -o public/track.json` — **only when
      `elements.tracking` is on.** Off, the frame stays put — but the file must
@@ -126,7 +127,7 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
      json.dump({"segments": [{"start": round(cum[i]/fps,4),
                               "dur": round((cum[i+1]-cum[i])/fps,4)}
                              for i in range(len(cum)-1)]},
-               open("remotion/public/segments.json","w"), indent=2)
+               open("hyperframes/segments.json","w"), indent=2)
      EOF
      ```
    - **VERIFY segments.json against the picture — do not trust it.** `scdet`
@@ -141,19 +142,20 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
      `OffthreadVideo` lag `VIDEO_LAG` exists for. Both numbers together are the
      proof: cut spike at frame F in cut.mp4, at F+1 in the render, overlay
      window opening at F+1.
-   - `pexels_search.py "<query>" --out-dir public/pexels --count 3 --orientation portrait`
-3. **Write `public/edit-data.json`** — the whole edit in one file (schema in
-   `assets/shortform/README.md`): durationSec (exact ffprobe of cut.mp4),
-   camera zooms, hook lines/logo/sign, captions config, inserts[], behind[],
-   soundtrack (leave `enabled:false` until Phase 3).
-4. **Verify with stills, batched:** `npx remotion still Reels --frame=<n> f.png`
-   for the hook still (user approval), then ONE contact sheet for spot checks:
-   `contact_sheet.py <render> --times t1 t2 t3 -o sheet.png` — one image, not N.
-5. **Render:** `npx remotion render Reels out/render.mp4`, then loudnorm →
-   `edit/final.mp4` (see Phase 3).
+   - `pexels_search.py "<query>" --out-dir hyperframes/pexels --count 3 --orientation portrait`
+3. **Write `hyperframes/edit-data.json`** — the whole edit in one file:
+   durationSec (exact ffprobe of cut.mp4), camera zooms, hook lines/logo/sign,
+   captions config, inserts[], behind[], soundtrack (leave `enabled:false` until
+   Phase 3). Every `src` in it is relative to `hyperframes/`.
+4. **Verify with stills, batched:** one contact sheet, not N images —
+   `contact_sheet.py <render> --times t1 t2 t3 -o sheet.png`. The hook still goes
+   to the user for approval before the full render.
+5. **Render + deliver:** `phase2.py` runs `hyperframes check` (a gate — it blocks
+   on errors), then `hyperframes render`, then loudnorms to `edit/final.mp4`.
 
-Never edit `src/Main.tsx`. Bespoke graphics go in `src/CustomGraphics.tsx`
-(the ONE editable file — read it only when the video needs a custom graphic).
+Never hand-edit `hyperframes/index.html` — it is generated on every compose and
+your edit is gone at the next run. Bespoke graphics go in
+`<projeto>/compositions/<id>.html`, mounted as sub-compositions.
 
 ## Headline styles — always two lines
 
@@ -234,7 +236,7 @@ still there as a montage over real footage if a still is useful.)
   `scatterOffsetY` (block centre, default 0.72), `scatterFontSize` (72),
   `scatterSafeWidth` (820); `SPREAD` in the component caps how far a line wanders.
   Three things it took real footage to learn:
-  - **Never `Math.random()`.** Remotion renders frames independently, so a true
+  - **Never `Math.random()`.** The engine renders frames independently, so a true
     random re-rolls the layout every frame and the text shakes. Positions are
     hashed off the cue index.
   - **The middle of the frame is the FACE.** The reference look lives over B-roll;
@@ -250,10 +252,10 @@ still there as a montage over real footage if a still is useful.)
   **click** on every solo word, a **scratch** when a word is circled.
 
 For stacked, the ONE extra data step is the director (reads the same cut
-transcript as `captions_for_remotion.py`):
+transcript as `captions_words.py`):
 ```bash
 uv run python helpers/caption_style.py --transcript <edit>/transcripts/cut.json \
-    -o remotion/public/caption-cues.json
+    -o hyperframes/caption-cues.json
 ```
 Then set `captions.style:"stacked"` in edit-data.json (keep the other caption
 fields — they stay valid). Defaults match the user-approved look: the stack sits
@@ -335,12 +337,12 @@ transition means something. Optional per entry: `intensity` (default 1), `sfx`,
   came from had 180ms of silence before the hit; delayed to the cut it would have
   landed 180ms late — after a 230ms effect had already finished. Trim the lead-in
   so the transient is at t=0, then delay by the cut time.
-- **The delivered click is mixed by ffmpeg, not by Remotion.** The delivery
-  re-mux discards Remotion's audio (it drifts), so add the SFX as another input
-  with `adelay=<frame/fps*1000>`. The `<Sfx>` in the component only sounds in a
-  plain `remotion render`.
+- **O clique vive na composição, e é entregue de lá.** No motor antigo ele
+  tinha de ser remixado no ffmpeg, porque a cura do drift jogava fora o áudio do
+  render. Sem drift, o efeito fica onde foi autorado e chega inteiro na entrega —
+  `sfx_blocks()` já compensa o silêncio inicial MEDIDO de cada arquivo.
 
-## Style: "Limpa" (`edit: "limpa"`) — no split inserts
+## Style: "Nenhum" (`edit: "limpa"`) — no split inserts
 
 The whole frame stays on the speaker. **Leave `splitInserts` out of
 `edit-data.json` entirely** (an empty array is fine; a populated one is not) and
@@ -358,12 +360,12 @@ Two consequences of the frame never being split, both easy to miss:
   the caption off a split seam. Leave the array empty; a stale window from a
   previous render shoves the caption up for no reason.
 
-**This is the default** (`STYLE_CATALOG.edits[0]`), so it is also what a user who
+**This is the default** (`STYLE_CATALOG.edits[0]`, rotulado "Nenhum"), so it is also what a user who
 never opens the Estilo tab gets. Split inserts are opted INTO, not out of. It is a
 legitimate final look — a talking-head cut, images to be placed by hand later, or
 simply no B-roll worth showing — not a placeholder.
 
-## Style: "tela dividida" (split screen) — two variants
+## Style: "Dividida ↑ / ↓" (split screen) — two variants
 
 Both pin the FACE to a fixed region and give the rest of the frame to the image.
 Data lives in `edit-data.json` `splitInserts[]` (`layout: "top" | "bottom"`); the
@@ -372,7 +374,7 @@ every window snapped to a take cut, consecutive images contiguous, and
 `captions.windows` moves the caption to the seam while a window is up. Full rules
 in `assets/shortform/README.md`.
 
-| | **Tela dividida** (`top`) | **Tela dividida 2** (`bottom`) |
+| | **Dividida ↑** (`top`) | **Dividida ↓** (`bottom`) |
 |---|---|---|
 | Art | top band (750) | bottom band (750) |
 | Head | raised underneath, `zoom 1.25 / focusY 400` | held high above, `zoom 1.0 / focusY 225` |
@@ -402,7 +404,7 @@ on tight close-ups anchor elements to the TOP (template already does). Needs
 the matting extra: `uv sync --extra matting` (torch).
 
 ```bash
-uv run python helpers/person_matte.py cut.mp4 -o remotion/public/fg_<name>.mov --start <s> --duration <d>
+uv run python helpers/person_matte.py cut.mp4 -o hyperframes/fg_<name>.mov --start <s> --duration <d>
 ```
 
 Then describe each window in `edit-data.json` `behind[]` (kind image/words,
@@ -431,23 +433,55 @@ arquivo, o composer avisa pelo nome e a render segue sem ele. **`scaffold()` nã
 apaga `compositions/`** — o que você escreve ali sobrevive às re-renderizações;
 o `index.html` não.
 
-Quatro coisas medidas montando a roleta da série "170 Questões":
+Medido montando a roleta da série "170 Questões":
 
-- **`mix-blend-mode` NÃO atravessa a fronteira da sub-composição.** Ela é outro
-  contexto de empilhamento, então não há como misturar com o vídeo da composição
-  pai. Para tirar o fundo de uma gravação de tela não existe blend: ou você
-  assume a chapa (cantos redondos + fio + sombra, que lê como cartão) ou você
-  precisa de alfa de verdade no arquivo. **Assuma a chapa** — é determinístico.
-  (Dentro da MESMA composição o blend vale; aí sim a regra de sempre: nunca
-  `opacity<1` acima de um `mix-blend-mode`, o fade vai por `filter: brightness()`.)
-- **`src` relativo resolve a partir de `compositions/`**, não da raiz do projeto.
-  Deixe a mídia do gráfico ao lado do HTML.
-- **Esmague o fundo do app antes**, com `colorlevels` medido no próprio quadro
-  (pegue o máximo de um trecho de fundo e ponha o `imin` logo acima). Fundo preto
-  de verdade some contra a chapa; fundo "quase preto" aparece como uma mancha.
+- **A MÍDIA PRECISA DE DUAS CÓPIAS, porque os dois resolvedores discordam.** O
+  extrator de quadros procura o `src` a partir da RAIZ do projeto; o navegador,
+  a partir de `compositions/`. Com uma cópia só, um dos dois erra — e o erro do
+  extrator é o barulhento: `Video "x" captured 0 of expected N frames`, com a
+  render abortando. Ele avisa antes, numa linha de WARNING que some no meio do
+  log (*"could not be resolved on disk"*) — **é essa linha que você procura**,
+  não a mensagem de erro, que não diz o motivo. Deixe o arquivo em
+  `<raiz>/nome.webm` **e** em `<raiz>/compositions/nome.webm`, com
+  `src="nome.webm"`. Feio, mas é o único jeito de os dois acharem.
+- **Anime o INVÓLUCRO, nunca o `<video>`.** Um `<div>` posicionado por fora, o
+  vídeo parado dentro dele.
 - **Um gráfico que entra sem som lê como falha de render.** O composer já emite o
   whoosh de entrada, igual aos cartões de inserção — não acrescente à mão no
   `index.html`, ele é regerado.
+
+### "Quero o vídeo transparente" — SEMPRE avalie o overlay primeiro
+
+Quando o usuário pedir um vídeo transparente, ou pedir para tirar o fundo de uma
+gravação de tela, **a pergunta a responder é qual dos dois mecanismos serve** —
+e ela se responde OLHANDO a arte, não escolhendo por hábito:
+
+| | quando serve | como fica |
+|---|---|---|
+| **`mix-blend-mode: screen`** | arte **clara** sobre fundo escuro: texto branco, linhas, brilho, fumaça, faísca | o escuro vira transparente de graça, sem matte nenhuma |
+| **alfa de verdade** (VP9 `yuva420p`) | a arte tem partes **escuras que importam**: texto escuro, sombra, contorno preto | tudo chega intacto |
+
+O screen não escolhe o que apagar: ele apaga **todo** pixel escuro. Numa gravação
+de tela com card creme e texto escuro isso significa que o texto some junto —
+medido nesta série, o texto saiu AZUL (misturado com a parede atrás) e a lombada
+laranja saiu ROSA.
+
+**Decida com evidência, não com teoria — e é barato.** Componha o quadro à mão
+antes de gastar render: `1-(1-a)*(1-b)` sobre um quadro real do corte, lado a
+lado com a versão opaca. Trinta segundos de numpy respondem o que uma render de
+dois minutos responderia.
+
+Se for **screen**: o fundo tem de ser preto ZERO (`colorlevels` com o `imin`
+medido no próprio quadro, nunca chutado — cinza residual vira véu), e o fade vai
+por `filter: brightness()`, NUNCA por `opacity` — opacidade abaixo de 1 cria
+contexto de empilhamento e mata a mistura.
+
+Se for **alfa**: `libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0`. E a matte **não
+sai da luminância** — o que é escuro e importa sairia semitransparente, com o
+fundo aparecendo através das letras. Sai da SILHUETA: limiar + fechamento
+morfológico (dilata R, erode R), com R maior que o maior buraco a tapar (o vão
+entre duas linhas de texto) e menor que a menor separação entre dois elementos
+distintos.
 
 **Sincronia:** o gráfico serve a fala, não o contrário. Meça a janela de silêncio
 em `cut.mp4` com `speech_regions.py` e encaixe o gráfico DENTRO dela, terminando
@@ -479,77 +513,50 @@ return sound effects instead of a song. `treblo_music.py` auto-frames the vibe
 as a composed instrumental and bans SFX/vocals, but the vibe you pass still has
 to read musical.
 ```bash
-uv run python helpers/treblo_music.py "upbeat modern electronic, catchy synth melody, warm analog bass, crisp light drums, ~110 BPM, bright and motivational" -o public/trilha.mp3 --length-min 30 --length-max 60
+uv run python helpers/treblo_music.py "upbeat modern electronic, catchy synth melody, warm analog bass, crisp light drums, ~110 BPM, bright and motivational" -o hyperframes/trilha.mp3 --length-min 30 --length-max 60
 ```
 Then flip `soundtrack.enabled: true` in edit-data.json. **Volume:** start ~0.25
 and check it's clearly audible under wall-to-wall narration (a bed at 0.12 is
 usually inaudible once the mix is loudnorm'd to the voice — confirm by listening,
 not just by the meter). Re-render. Finish with the mandatory loudnorm:
 
-**Take the PICTURE from Remotion and the AUDIO from `cut.mp4`.** Remotion's own
-audio track drifts against the source — measured on a 95s edit: the voice is
-+90ms late by 8s and +660ms by 78s, i.e. it slides progressively out of lip sync,
-unnoticeable at the start and obvious by the end. Its audio track also comes out
-~0.7s longer than its video. So never re-encode Remotion's audio; re-mux the
-approved master instead and mix the soundtrack here:
+**A entrega é o `deliver()` do `phase2.py` — não monte um re-mux.** Ele pega o
+render do HyperFrames, aplica `loudnorm=I=-14:TP=-1:LRA=11` e escreve
+`edit/final.mp4`. A Fase 1 já normalizou o corte, mas a Fase 2 acrescenta trilha
+e efeitos: a mistura final é outra e o alvo tem que ser reaferido na saída.
 
-**Remotion's picture is FULL-RANGE and mis-tagged — never `-c:v copy` it.** Its
-output is `yuvj420p`, `color_range=pc`, `color_primaries=bt470bg` (PAL!), transfer
-unknown. Measured: luma 0–255 where `cut.mp4` sits at 16–235. Copying the stream
-carries all of that into the delivery, so a compliant player shifts the hue off the
-PAL primaries and a player that ignores the range tag crushes the blacks — the
-Phase-1 grade the user approved drifts at the very last step. Convert the range and
-stamp the tags. `setparams` is what makes them stick: the bare `-color_primaries` /
-`-color_trc` output flags silently leave both `unknown` here.
+**O re-mux do áudio está BANIDO** — está na lista de anti-padrões do SKILL.md, e
+a razão é concreta. Ele existia porque o áudio do renderizador ANTIGO derivava
+(+90ms aos 8s, +660ms aos 78s num corte de 95s), e a cura descartava junto todo
+efeito embutido na composição — ~20 SFX para reconstruir à mão no ffmpeg, um por
+um, adivinhando. No HyperFrames o drift medido é ZERO ao longo de 780s, então os
+efeitos ficam onde nasceram: dentro da composição. Se algum dia você suspeitar de
+drift, MEÇA por correlação em três janelas de 15s+ antes de mexer — e se o desvio
+for constante, não é drift, é latência fixa e não pede re-mux nenhum.
 
-```bash
-VD=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=nw=1:nk=1 out/render.mp4)
-FADE=$(python3 -c "print(f'{$VD-1.5:.3f}')")
-ffmpeg -y -i out/render.mp4 -i ../cut.mp4 -i public/trilha.mp3 \
-  -filter_complex "[0:v]scale=in_range=full:out_range=limited,format=yuv420p,\
-setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv[vid];\
-                   [1:a]adelay=33:all=1[v];\
-                   [2:a]volume=0.10,afade=t=in:st=0:d=0.4,afade=t=out:st=$FADE:d=1.5[m];\
-                   [v][m]amix=inputs=2:duration=first:normalize=0[mix];\
-                   [mix]loudnorm=I=-14:TP=-1:LRA=11[out]" \
-  -map "[vid]" -map "[out]" -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p \
-  -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
-  -c:a aac -b:a 192k -ar 48000 -t "$VD" -movflags +faststart ../final.mp4
-```
+**Confira as tags de cor da entrega na PRIMEIRA vez que rodar um projeto novo.**
+Herança medida no renderizador antigo, ainda NÃO reaferida no HyperFrames: a
+saída dele vinha `yuvj420p`, `color_range=pc`, `color_primaries=bt470bg` (PAL!) e
+transfer desconhecido — luma 0–255 onde o `cut.mp4` está em 16–235. Como o
+`deliver()` copia o vídeo (`-c:v copy`), tags erradas na origem passam INTEIRAS
+para a entrega, e o grade que o usuário aprovou na Fase 1 escorrega no último
+passo: um player que respeita as tags desloca o matiz, um que ignora o range
+esmaga os pretos.
 
-**Verify the delivery carries the same tags as the cut** — `bt709 / bt709 / bt709 /
-tv`, exactly what left Phase 1:
 ```bash
 ffprobe -v error -select_streams v:0 \
   -show_entries stream=color_space,color_primaries,color_transfer,color_range \
-  -of default=nw=1 ../final.mp4
+  -of default=nw=1 edit/final.mp4
 ```
 
-**Keeping Remotion's audio is sometimes the right call — measure, don't assume.**
-The re-mux above exists because Remotion's audio drifts, and on a 95s edit it does
-(+660ms by 78s). But the `stacked` caption bakes a click on nearly every word plus
-the flash clicks, and the re-mux throws all of that away — reconstructing ~20 SFX
-by hand from the cue file is guesswork. Correlate first (15s+ windows, or the whole
-clip when it is short): if the offset is CONSTANT across start/middle/end there is
-no drift, and Remotion's own audio keeps the SFX with the sync intact. Measured on
-a 7.6s edit: +42.7ms at the head, the tail and the whole — constant, and only ~10ms
-from the picture's own +33ms lag. There, `-map 0:a` through the same loudnorm beats
-the re-mux. Say which one you used and why.
-
-`adelay=33` is one frame at 30fps: OffthreadVideo draws the source frame one
-composition frame late (the same VIDEO_LAG the overlays compensate for), so the
-picture sits a frame behind cut.mp4's timeline and the voice must follow it.
-`-t "$VD"` keeps the audio from outliving the video. **Verify** by correlating the
-delivered voice against `cut.mp4` at three points — the offset must be CONSTANT
-(≈+33ms). Use 15s windows: short windows lock onto the wrong syllable and report
-a drift that is not there. Drop this re-mux ONLY if Phase 2 baked SFX into the
-audio (stacked captions' click/scratch), and then verify sync by hand.
-
-If the video has no soundtrack, the same shape without input 2:
+Tem de sair `bt709 / bt709 / bt709 / tv` — exatamente o que saiu da Fase 1. Se
+não sair, o `-c:v copy` não serve para este motor: reencode convertendo o range e
+carimbando as tags, e é o `setparams` que as faz colar (os flags de saída
+`-color_primaries` / `-color_trc` sozinhos deixavam ambos `unknown`).
 
 ```bash
-ffmpeg -y -i out/render.mp4 -i ../cut.mp4 -filter_complex "[1:a]adelay=33:all=1,loudnorm=I=-14:TP=-1:LRA=11[out]" \
-  -map 0:v -map "[out]" -c:v copy -c:a aac -b:a 192k -ar 48000 -t "$VD" -movflags +faststart ../final.mp4
+-vf "scale=in_range=full:out_range=limited,format=yuv420p,\
+setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv"
 ```
 
-Verify `max_volume ≤ -1 dB` (`-af volumedetect`). Copy to `edit/final.mp4`.
+Confirme também `max_volume ≤ -1 dB` (`-af volumedetect`) na entrega.

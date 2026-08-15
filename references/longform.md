@@ -56,16 +56,13 @@ Same helpers (`transcribe` → `pack` → editor sub-agent → `speech_regions` 
 
 ## Phase 2 — 16:9 visuals (data-driven template)
 
-Scaffold + describe, same pattern as short-form:
+Scaffold + describe, same pattern as short-form: **`helpers/phase2.py <edit>`
+faz tudo** — monta `<edit>/hyperframes/`, linka o corte, compõe, roda o `check`,
+renderiza e normaliza a entrega. Não há template para copiar.
 
-```bash
-cp -R <skill>/assets/longform/. <edit>/remotion/ && cd <edit>/remotion && npm install
-cp ../cut.mp4 public/
-```
-
-Write `public/edit-data.json` (schema in `assets/longform/README.md`):
-width/height/fps/durationSec **matching cut.mp4 exactly**, accent color, and
-the four layers — graphics **punctuate, they don't saturate**:
+Write `<edit>/hyperframes/edit-data.json` — width/height/fps/durationSec
+**matching cut.mp4 exactly**, accent color, and the four layers. Todo `src` é
+relativo à raiz do projeto. Graphics **punctuate, they don't saturate**:
 
 - **broll[]** — full-frame image (Ken-Burns) or muted video cutaways over
   narration; the core of longform visual variety. Sync to what's said.
@@ -76,7 +73,8 @@ the four layers — graphics **punctuate, they don't saturate**:
 
 Reuse short-form extras sparingly if a moment calls for it (dynamic camera,
 behind-the-subject, SFX) — longform ≠ Reel density. Verify with ONE
-`contact_sheet.py` over the graphic moments, render
-`npx remotion render Longform out/render.mp4`, loudnorm → `edit/final.mp4`.
+`contact_sheet.py` over the graphic moments; o `phase2.py` renderiza e
+loudnorma para `edit/final.mp4`.
 
-Never edit `src/Main.tsx` — it's data-driven; the JSON is the edit.
+Never hand-edit `hyperframes/index.html` — it is regenerated on every compose.
+The JSON is the edit.

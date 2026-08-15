@@ -1,4 +1,4 @@
-"""Edvid preview server — serves the standard editing interface + session media.
+"""Avelin preview server — serves the standard editing interface + session media.
 
 The interface app (assets/preview/) is IMMUTABLE and lives in the skill repo;
 per-session it is fed by data only:
@@ -378,7 +378,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Edvid preview interface server")
+    ap = argparse.ArgumentParser(description="Avelin preview interface server")
     ap.add_argument("--root", type=Path, required=True, help="the session <edit> dir")
     ap.add_argument("--port", type=int, default=4820)
     ap.add_argument("--auto", action="store_true",

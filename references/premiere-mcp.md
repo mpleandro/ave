@@ -39,7 +39,7 @@ If the user asks to START a short-form edit in Premiere (no sequence yet), creat
 the sequence with these defaults:
 
 - **Resolution 1080×1920** (vertical 9:16).
-- **Frame rate 30 fps** when the source is ≥30 fps (else 24) — mirrors the Edvid
+- **Frame rate 30 fps** when the source is ≥30 fps (else 24) — mirrors the Avelin
   short-form fps rule.
 - **Maximum Bit Depth: ON** and **Maximum Render Quality: ON** — always check both
   in the sequence settings (`set_sequence_settings` / at creation).
@@ -266,13 +266,12 @@ don't trust that as proof. To PROVE a scale/keyframe change renders, compare the
 68, `export_frame` at the same t — same pose, only scale differs. For keyframes,
 compare a keyframed frame at t against a static-50 frame at the same t.
 
-## Inserts — image / animation overlays (Remotion → Premiere)
+## Inserts — image / animation overlays (Fase 2 → Premiere)
 
 The user drops inserts onto the cut one at a time (exact content + timecode +
-"tela cheia" or "card"). Build each in the Remotion track (`references/shortform.md`
-insert style — one Composition per insert, `durationInFrames` = the exact frame
-count of the timecode range), preview in **Remotion Studio** for approval, then
-render + place.
+"tela cheia" or "card"). Build each in the Phase-2 track (`references/shortform.md`
+insert style — one composition per insert, spanning the exact frame count of the
+timecode range), render a still for approval, then render + place.
 
 **Render as ProRes `4444` — NOT `hq`/422.** `--codec=prores --prores-profile=4444`
 (comes out `yuv422p12le`, opaque; use it even for opaque full-screen inserts).
@@ -325,7 +324,7 @@ only holds your rendered inserts.
 After approval, ask whether Phase-2 visuals (captions, hook, inserts, graphics)
 should be (a) built inside Premiere (real MOGRTs via `import_mogrt`, essential
 graphics, `add_text_overlay`) — the server does NOT invent final-quality design
-assets, so bring real MOGRTs/LUTs/audio — or (b) done in the Remotion track
+assets, so bring real MOGRTs/LUTs/audio — or (b) done in the Phase-2 track
 (`references/shortform.md` / `longform.md`) and delivered as `final.mp4`. For
 branded/ad assemblies the server prefers `assemble_product_spot` /
 `build_brand_spot_from_mogrt_and_assets` with a clipPlan.
@@ -342,7 +341,7 @@ branded/ad assemblies the server prefers `assemble_product_spot` /
 | Cut across layers | `razor_timeline_at_time {time}` |
 | Ripple-remove a clip | `remove_from_timeline {clipId, deleteMode:"ripple"}` (video AND audio) |
 | Grade | `color_correct {clipId,…}` / `apply_lut` |
-| Insert (overlay) | Remotion → ProRes **`4444`** (never `hq`/422) → bin `Inserções` → `add_to_timeline {trackIndex, time, insertMode:"overwrite", linkAudio:false}` |
+| Insert (overlay) | Fase 2 → ProRes **`4444`** (never `hq`/422) → bin `Inserções` → `add_to_timeline {trackIndex, time, insertMode:"overwrite", linkAudio:false}` |
 | Static clip scale | `set_clip_scale` / ExtendScript `setValue` (base fit 4K→1080 = 50) |
 | Zoom keyframes | `add_keyframe`/`get_keyframes` (Motion→Scale, **SOURCE time = inPoint→outPoint**) or ExtendScript batch |
 | Voice / audio FX | `apply_audio_effect_to_all_clips`, `apply_audio_effect` |

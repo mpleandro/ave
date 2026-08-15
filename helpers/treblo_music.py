@@ -3,10 +3,10 @@
 Async: start a generation → poll until SUCCESS → download the mp3. On FAILURE
 no credit is charged. Result URLs expire ~168h, so we download immediately.
 
-Needs TREBLO_API_KEY (env or .env at the edvid repo root).
+Needs TREBLO_API_KEY (env or .env at the Avelin repo root).
 
 Usage:
-    python helpers/treblo_music.py "warm lo-fi ambient, unobtrusive" -o remotion/public/trilha.mp3
+    python helpers/treblo_music.py "warm lo-fi ambient, unobtrusive" -o hyperframes/trilha.mp3
     python helpers/treblo_music.py "<vibe>" -o out.mp3 --length-min 30 --length-max 60
 """
 from __future__ import annotations

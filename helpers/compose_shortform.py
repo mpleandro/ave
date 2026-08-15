@@ -301,7 +301,8 @@ def sfx_blocks(events: list[tuple[float, str]], proj: Path, duration: float,
       tem dois arquivos assim.
 
     Isto só é possível porque o áudio da composição NÃO precisa de remux. No
-    Remotion o remux existia para corrigir drift e descartava os efeitos junto,
+    renderizador antigo o remux existia para corrigir drift e descartava os
+    efeitos junto,
     obrigando a reconstruir ~20 deles à mão no ffmpeg. Com drift zero medido,
     eles simplesmente ficam.
     """
@@ -667,7 +668,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     track_js, track_warn = "", ""
     els = data.get("elements") or {}
     if els.get("tracking") and not data.get("splitInserts"):
-        tk = Path(data.get("_proj", ".")).parent / "remotion" / "public" / "track.json"
+        tk = Path(data.get("_proj", ".")) / "track.json"
         path, track_warn = tracking_path(data, W, H, duration, tk)
         if path:
             track_js = ("  AVE_TRACKING.buildTimeline(document.getElementById('a-roll'), "
@@ -775,7 +776,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
             f'style="--wa-scale:1; --wa-accent:{col}">{esc(text)}</div>')
 
     # Gráficos sob medida: substituem o CustomGraphics.tsx, que era "o único
-    # arquivo de código editável" do template Remotion. Aqui cada um é um HTML
+    # arquivo de código editável" do template antigo. Aqui cada um é um HTML
     # próprio montado como sub-composição — mecanismo nativo do HyperFrames.
     # Sem arquivo, o gráfico não aparece; avisar é obrigatório, porque a
     # composição renderiza sem erro e a falta só se vê assistindo.

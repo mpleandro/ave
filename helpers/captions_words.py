@@ -1,4 +1,4 @@
-"""Emit a @remotion/captions Caption[] JSON for the Remotion (Phase 2) project.
+"""Emit the word-level caption JSON the Phase-2 composition reads.
 
 Two modes:
   --transcript <cut.json>   PREFERRED. Transcribe the FINAL cut.mp4 first
@@ -12,11 +12,11 @@ Two modes:
 Each spoken word becomes one Caption (word-level) so the word-highlight /
 karaoke component can drive per-word timing.
 
-Caption shape (from @remotion/captions): { text, startMs, endMs, timestampMs, confidence }
+Caption shape: { text, startMs, endMs, timestampMs, confidence }
 
 Usage:
-    python helpers/captions_for_remotion.py --transcript <edit>/transcripts/cut.json -o captions.json
-    python helpers/captions_for_remotion.py <edl.json> -o captions.json
+    python helpers/captions_words.py --transcript <edit>/transcripts/cut.json -o captions.json
+    python helpers/captions_words.py <edl.json> -o captions.json
 """
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ def build_captions(edl: dict, edit_dir: Path) -> list[dict]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="→ @remotion/captions Caption[] JSON")
+    ap = argparse.ArgumentParser(description="→ JSON de legendas palavra a palavra")
     ap.add_argument("edl", type=Path, nargs="?", help="edl.json (fallback mode)")
     ap.add_argument("--transcript", type=Path, default=None,
                     help="Transcript of the final cut.mp4 (preferred mode)")

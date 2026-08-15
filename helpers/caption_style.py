@@ -6,12 +6,12 @@ semantic style (bold-italic / small-regular / orange-serif accent / bold). Solo
 punch words are flagged so the template fires a click, and emphasis words are
 circled (green pencil) and fire a scratch.
 
-Input is the transcript of the FINAL cut (same as captions_for_remotion.py) so
+Input is the transcript of the FINAL cut (same as captions_words.py) so
 word times are already on the output timeline.
 
 Usage:
     python helpers/caption_style.py --transcript <edit>/transcripts/cut.json \
-        -o <edit>/remotion/public/caption-cues.json
+        -o <edit>/hyperframes/caption-cues.json
     # optional: --lang pt (default) tunes the accent/negation word lists
 """
 from __future__ import annotations

@@ -166,7 +166,13 @@ def main() -> None:
         print("  (o edl anterior ficou salvo como edl.prev.json)")
 
     if has_data:
-        pub = edit / "remotion" / "public"
+        # A raiz do projeto HyperFrames é o destino único dos dados. O
+        # `remotion/public` legado só é respeitado enquanto ainda for o que
+        # existe no disco — o `phase2.py` o adota na primeira rodada.
+        pub = edit / "hyperframes"
+        legacy = edit / "remotion" / "public"
+        if not (pub / "edit-data.json").exists() and (legacy / "edit-data.json").exists():
+            pub = legacy
         pub.mkdir(parents=True, exist_ok=True)
         dp = pub / "edit-data.json"
         data = load(dp, {})

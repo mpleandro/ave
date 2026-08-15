@@ -63,7 +63,7 @@
   },
 
   "motion": {
-    "_note": "The site keeps two motion layers separate — CSS easing/loops for hover and continuous things, GSAP+ScrollTrigger for entrances — and so does this file. In Remotion both become useCurrentFrame() + interpolate(); CSS transitions do not render. Durations in seconds.",
+    "_note": "The site keeps two motion layers separate — CSS easing/loops for hover and continuous things, GSAP+ScrollTrigger for entrances — and so does this file. In the composition both become GSAP timeline tweens; CSS transitions do not render. Durations in seconds.",
 
     "ease": {
       "_note": "cubic-bezier(.2,.8,.2,1) is the site's easing-mãe: every CSS transition uses it. Default to it for anything Avelin. `dec` is the overshoot-free decelerate kept for pops and clip reveals.",

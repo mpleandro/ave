@@ -148,7 +148,7 @@ def is_hdr_source(video: Path) -> bool:
 # Wide-gamut SDR (BT.2020 primaries with an ordinary transfer) is NOT caught by
 # is_hdr_source — phone/mirrorless cameras routinely write bt2020 primaries with
 # color_transfer=unknown. Left unconverted, cut.mp4 inherits the bt2020 tags and
-# every downstream decoder re-interprets them: Chrome (which Remotion composites
+# every downstream decoder re-interprets them: Chrome (which the Phase-2 renderer composites
 # through) darkens the image by roughly a 1.2 gamma and shifts hue, so the Phase-2
 # render no longer matches the Phase-1 grade the user approved. Convert to Rec.709
 # at extraction so exactly one interpretation exists from the grade onwards.
@@ -398,7 +398,7 @@ def extract_segment(
         # Every path above lands on Rec.709 (tonemap for HDR, wide_gamut_chain for
         # BT.2020 SDR, passthrough for the rest), so tag it explicitly. Without this
         # the segments can inherit the source's tags and downstream decoders
-        # (Chrome/Remotion in Phase 2) silently re-interpret the graded image.
+        # (Chrome, in Phase 2) silently re-interpret the graded image.
         cmd += ["-colorspace", "bt709", "-color_primaries", "bt709",
                 "-color_trc", "bt709", "-color_range", "tv"]
         if target_fps:
@@ -487,7 +487,7 @@ def snap_ranges_to_frames(edl: dict, fps: int) -> int:
     exact requested length, so a range whose duration is not a frame multiple
     produces a clip whose audio is a few ms shorter than its picture. Across a
     28-cut edit that summed to +0.44s of video over audio here, and cut.mp4 came
-    out with an audio track LONGER than its video. Remotion then stretches that
+    out with an audio track LONGER than its video. The Phase-2 renderer then stretches that
     audio across the composition and the voice slides progressively out of sync —
     barely visible at the start, half a second adrift by the end.
 

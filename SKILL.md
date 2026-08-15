@@ -49,6 +49,7 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
 11. **PHASE 2 is data-driven.** `edit-data.json` describes the video; the LOOK lives in `assets/styles/` and the NUMBERS in `assets/styles/variants.json` — the same files the editor's Estilo previews are meant to read, so the two can never disagree. Bespoke graphics are the one escape hatch: an HTML of your own under `<projeto>/compositions/<id>.html`, mounted as a sub-composition. Never hand-write a style inside the composer.
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
 13. **Never Read machine data into context**: `transcripts/*.json` (raw), `captions.json`, `track.json`, `segments.json`, matte/track binaries. Read `takes_packed.md` and helper stdout instead.
+14. **Pediu vídeo "transparente"? AVALIE O OVERLAY ANTES DE ESCOLHER.** Toda vez que o usuário quiser um vídeo transparente, ou tirar o fundo de uma gravação de tela, decida entre `mix-blend-mode: screen` (o escuro some de graça — só serve para arte CLARA) e alfa de verdade em VP9 `yuva420p` (a arte tem escuro que importa: texto escuro, sombra, contorno). **Olhe a arte e prove antes de renderizar** — compor `1-(1-a)*(1-b)` sobre um quadro real do corte custa segundos e responde o que uma render responderia em minutos. Screen apaga TODO pixel escuro, não só o fundo. A tabela de decisão, as armadilhas e a receita da matte estão em `references/shortform.md`, seção "Quero o vídeo transparente".
 
 ## Execution medium — ffmpeg pipeline (default) vs Adobe Premiere (MCP)
 
@@ -76,32 +77,39 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
     ├── verify/                  ← montages / flagged-boundary views
     ├── captions.srt + chapters.txt   ← longform deliverables
     ├── final.mp4                ← delivered render (Phase 2 + 3, loudnorm'd)
-    ├── hyperframes/             ← projeto da Fase 2 (montado sozinho)
-    │   ├── index.html           ← A COMPOSIÇÃO — gerada, nunca editada à mão
-    │   ├── styles/              ← cópias de assets/styles/ (o look)
-    │   ├── sfx/                 ← efeitos usados
-    │   ├── compositions/        ← gráficos sob medida (a escotilha)
-    │   └── renders/             ← saídas do motor
-    └── remotion/public/         ← ONDE OS DADOS AINDA MORAM (nome histórico do
-                                   edvid, mantido para uma sessão do edvid e uma
-                                   do Avelin lerem a mesma pasta):
-                                   edit-data.json ← A EDIÇÃO
-                                   captions.json, caption-cues.json
-                                   pexels/ web/ brand/ film/ broll/, trilha.mp3
+    └── hyperframes/             ← projeto da Fase 2 (montado sozinho) E OS DADOS
+        ├── edit-data.json       ← A EDIÇÃO
+        ├── captions.json, caption-cues.json, track.json, segments.json
+        ├── cut.mp4              ← link para o corte aprovado
+        ├── pexels/ web/ brand/ film/ broll/, trilha.mp3
+        ├── index.html           ← A COMPOSIÇÃO — gerada, nunca editada à mão
+        ├── styles/              ← cópias de assets/styles/ (o look)
+        ├── sfx/                 ← efeitos usados
+        ├── compositions/        ← gráficos sob medida (a escotilha)
+        └── renders/             ← saídas do motor
 ```
+
+**Um destino só, e é a RAIZ do projeto.** Os dados moravam num `remotion/public/`
+por duas razões que morreram juntas: o Remotion SERVIA essa pasta, e o nome
+deixava uma sessão do fork de origem e uma do Avelin lerem o mesmo lugar. O
+HyperFrames não serve nada — ele resolve `src`, `sfx/` e o vídeo a partir da raiz
+do projeto. Enquanto as duas pastas coexistiram nenhum `src` de edit-data
+resolvia: a composição procurava em `<proj>/<src>` e o pipeline escrevia em
+`<edit>/remotion/public/<src>`. Projeto antigo é adotado sozinho na primeira
+rodada do `phase2.py` — move o conteúdo, não sobrescreve nada.
 
 ## Setup
 
 First-time install lives in `install.md`. On cold start just verify:
 
-- `GROQ_API_KEY` resolves (env or `.env` at the Avelin repo root — this fork has its own, it does not read edvid's). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
+- `GROQ_API_KEY` resolves (env or `.env` at the Avelin repo root — this fork has its own). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
 - `ELEVENLABS_API_KEY` (optional) — used for LONG sources (>5 min, e.g. YouTube/course lessons) via ElevenLabs Scribe `scribe_v1`, since Groq's free tier chokes on long uploads. `backend=auto` (default) picks Scribe over 5 min when the key exists, else Groq; short clips stay on Groq. No key → long sources fall back to Groq. Ask for it lazily the first time a >5 min source shows up, write to `.env`.
 - `whispercpp` (optional) — fully local transcription, no key, no upload cap, no network. Opt-in only: `auto` never picks it. Needs whisper.cpp built with a ggml model (auto-detected in `~/whisper.cpp`, or `WHISPERCPP_BIN`/`WHISPERCPP_MODEL` in `.env`). Offer it when the user has no Groq key or hits quota. **Text matches Groq; word TIMES don't** (measured: 66% of words inside a real speech region vs Groq's 97%, median drift 240ms). Phase 1 is unaffected — cut edges come from `speech_regions.py`. For Phase-2 karaoke captions, prefer Groq and say why.
 - `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources (`ingest_url.py`) — install lazily the first time a link shows up (`brew install yt-dlp` / `winget install yt-dlp.yt-dlp`).
-- Fase 2: nada a instalar. `npx hyperframes@0.7.109` resolve do cache compartilhado (~365MB em `~/.cache/hyperframes`, uma vez para todos os projetos) e o projeto da sessão fica SEM `node_modules`. **Nunca carregue `remotion-best-practices`** — este fork não renderiza com Remotion.
+- Fase 2: nada a instalar. `npx hyperframes@0.7.109` resolve do cache compartilhado (~365MB em `~/.cache/hyperframes`, uma vez para todos os projetos) e o projeto da sessão fica SEM `node_modules`. **Nunca carregue `remotion-best-practices`** — não é o motor desta skill.
 - Lazy keys, ask on first use, write to `.env` (never to `<videos_dir>`): `PEXELS_API_KEY` (images), `GOOGLE_API_KEY`+`GOOGLE_CSE_ID` (brand/people images fallback), `TREBLO_API_KEY` (AI music).
 
-Helpers live in `helpers/`, resolved relative to this SKILL.md (usually `~/.claude/skills/edvid/`, or a symlink/junction pointing there). Run them as `uv run python helpers/<name>.py` — a bare `python` misses the `.venv` that `uv sync` builds.
+Helpers live in `helpers/`, resolved relative to this SKILL.md (usually `~/.claude/skills/ave/`, or a symlink/junction pointing there). Run them as `uv run python helpers/<name>.py` — a bare `python` misses the `.venv` that `uv sync` builds.
 
 ## Helpers
 
@@ -122,20 +130,20 @@ Phase 1:
 
 Phase 2/3 (see the track references for usage):
 - **`phase2.py`** (Fase 2 inteira, um comando) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor)
-- **`captions_for_remotion.py`** (karaoke JSON — nome histórico, o formato serve ao HyperFrames) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`captions_words.py`** (legendas palavra a palavra, a base de todos os estilos) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
 
 Interface:
 - **`preview_server.py --root <edit> [--port 4820]`** — serves the standard preview interface (see the Preview interface section). App code lives at `assets/preview/` and is IMMUTABLE.
 
 ## Preview interface (standard — launch it at the start of every edit)
 
-Every edit session gets the same interactive interface in the user's preview panel: a video-editor timeline (video track with filmstrip + audio track with waveform), a live playhead that scrubs the render in real time, per-take trim handles and take removal, and — from Phase 2 — caption and insert tracks. The layout follows the source aspect on its own: **vertical** sources put a tall player on the right with the transport + timeline on the left; **horizontal** sources keep the player stacked above the timeline. Dark glass, Edvid brand. **Never build a UI per session and never edit `assets/preview/`** — it is data-driven, like the styles in `assets/styles/`.
+Every edit session gets the same interactive interface in the user's preview panel: a video-editor timeline (video track with filmstrip + audio track with waveform), a live playhead that scrubs the render in real time, per-take trim handles and take removal, and — from Phase 2 — caption and insert tracks. The layout follows the source aspect on its own: **vertical** sources put a tall player on the right with the transport + timeline on the left; **horizontal** sources keep the player stacked above the timeline. Dark glass, marca Avelin. **Never build a UI per session and never edit `assets/preview/`** — it is data-driven, like the styles in `assets/styles/`.
 
 **Launch (do this when a session starts, even before the first render — the UI shows a waiting state):**
 1. Write `<edit>/state.json`:
    ```json
    {"project": "Nome — C0000", "phase": 1, "video": "cut.mp4", "edl": "edl.json",
-    "captions": "remotion/public/captions.json", "editData": "remotion/public/edit-data.json",
+    "captions": "hyperframes/captions.json", "editData": "hyperframes/edit-data.json",
     "finalVideo": "final.mp4", "fps": 24, "message": "Fase 1 — cortando",
     "sourceDurations": {"C0000": 1038.5},
     "awaitingStyle": false,
@@ -146,8 +154,8 @@ Every edit session gets the same interactive interface in the user's preview pan
 2. Ensure `.claude/launch.json` has the config (adjust `--root` per session). The
    server takes the port by flag only, so pass the harness-assigned `$PORT` and
    set `autoPort` — port 4820 is often held by another session:
-   `{"name": "edvid-preview", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "exec python3 <skill>/helpers/preview_server.py --root '<edit>' --port \"$PORT\""], "autoPort": true, "port": 4820}`
-3. `preview_start` with name `edvid-preview`.
+   `{"name": "avelin-preview", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "exec python3 <skill>/helpers/preview_server.py --root '<edit>' --port \"$PORT\""], "autoPort": true, "port": 4820}`
+3. `preview_start` with name `avelin-preview`.
 4. **Arm the watcher IN THE SAME TURN as `preview_start`** — never later, never
    "when the user starts editing":
    `Monitor(command="python3 <skill>/helpers/watch_edits.py '<edit>'", description="escolhas e marcações salvas no preview", persistent=true)`
@@ -199,10 +207,10 @@ The cut is approved and nothing about the LOOK of Fase 2 is decided yet. **Do no
 ask the style questions in chat** — set `"awaitingStyle": true` in `state.json`
 and the UI opens its own tab, sitting between FASE 1 and FASE 2:
 
-- **Tipo de edição** — `limpa` ("Limpa": no split inserts, full frame throughout —
+- **Tipo de edição** — `limpa` ("Nenhum": no split inserts, full frame throughout —
   **the default**, and the right pick for a talking-head cut or when the user will
-  place images by hand later), `split` ("Tela dividida"), `split2` ("Tela
-  dividida 2").
+  place images by hand later), `split` ("Dividida ↑", art on top), `split2`
+  ("Dividida ↓", art on the bottom).
 - **Cor de destaque** — `accent`, a hex. Sits BEFORE the text styles, because it
   is what they paint with. One spectral swatch (the OS picker) plus a hex field,
   synced both ways — no preset row. Only `realce`/`misto` headlines and the
@@ -234,8 +242,8 @@ new choices, don't treat it as a first pick.
 **The catalog lives in `STYLE_CATALOG` (app.js), not in a session.** A new editing
 or caption style is one entry there plus its implementation in the track
 reference; adding it in chat only, for one project, makes it invisible to every
-other project. What is in it today is the **short-form** vocabulary (tela
-dividida, karaokê/empilhado) — on a longform job the gate has nothing to offer
+other project. What is in it today is the **short-form** vocabulary (dividida
+↑/↓, karaokê/empilhado) — on a longform job the gate has nothing to offer
 yet, so skip `awaitingStyle` and ask the layer questions in chat until longform
 entries exist here.
 
@@ -351,9 +359,9 @@ white t-shirt.
 
 ### Sound
 
-Effects live natively in the composition. **No re-mux.** Under Remotion the
-delivery re-muxed to fix audio drift and that DISCARDED the effects, forcing ~20
-of them to be rebuilt by hand in ffmpeg. Drift here is zero (measured: 9 windows
+Effects live natively in the composition. **No re-mux.** No motor antigo a
+entrega era remixada para corrigir o drift do áudio e isso DESCARTAVA os efeitos,
+obrigando a refazer ~20 deles à mão no ffmpeg. Drift here is zero (measured: 9 windows
 up to 780s, lag of exactly 0 samples), so they simply stay.
 
 Two checks that only surface by LISTENING — the mix looks right and nothing is
@@ -568,7 +576,7 @@ The cut is approved and the user picked the style in the UI (`preview_style.json
 - **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, static hook headline, dynamic camera, inserts, behind-the-subject, SFX, soundtrack.
 - **Horizontal / YouTube / tutorial / vlog → read `references/longform.md`.** Retention cut is there too (read it BEFORE Phase 1 on longform jobs), B-roll, lower-thirds, chapter cards, callouts, .srt + chapters, soundtrack.
 
-Both tracks: `helpers/phase2.py <edit>` faz tudo — aplica a escolha da aba Estilo, monta o projeto, compõe, roda o `check`, renderiza, normaliza a loudness e devolve os caminhos ao editor. A edição inteira é o `edit-data.json`; nada de código por sessão fora dos gráficos sob medida em `compositions/`. **Não carregue a skill `remotion-best-practices`.**
+Both tracks: `helpers/phase2.py <edit>` faz tudo — aplica a escolha da aba Estilo, monta o projeto, compõe, roda o `check`, renderiza, normaliza a loudness e devolve os caminhos ao editor. A edição inteira é o `edit-data.json`; nada de código por sessão fora dos gráficos sob medida em `compositions/`. **Não carregue a skill `remotion-best-practices`.** Não é o motor desta skill.
 
 ## Memory — `project.md`
 
@@ -624,7 +632,7 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Cutting exactly at a word's offset (clips the sibilant) — leave the 50–80ms trail.
 - Committing a grade without the one-frame candidates montage + user pick.
 - Shipping a `cut.mp4` that is not tagged bt709/tv — Phase 2 will re-interpret it and the approved grade drifts.
-- Re-muxing the delivery audio "to fix drift". That was the Remotion workaround and it DISCARDED every baked SFX. Measured on HyperFrames: drift is zero across 780s, so the effects live in the composition and the re-mux must not come back.
+- Re-muxing the delivery audio "to fix drift". That was the OLD engine's workaround and it DISCARDED every baked SFX. Measured on HyperFrames: drift is zero across 780s, so the effects live in the composition and the re-mux must not come back.
 - Judging A/V sync with short correlation windows — speech is quasi-periodic and a 2–3s window happily locks onto the wrong syllable, inventing a drift. Use 15s+ windows, and remember a PARTIAL render cannot show drift that accumulates over the full timeline.
 - Burning captions/overlays with ffmpeg/PIL — Phase 2 is HyperFrames-only.
 - Trusting an SFX file without measuring it: two files in the pack are inaudible under speech, and several have >140ms of silence before the attack.
