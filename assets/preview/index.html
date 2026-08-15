@@ -3,22 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>A.V.E. — Preview</title>
-<link rel="icon" href="/assets/edvid-logo.png">
+<title>Avelin — Editor</title>
+<link rel="icon" href="/assets/avelin-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Poppins italic 900 + Playfair italic 900 are NOT decoration here: the caption
-     previews render the real template styles, and the stacked style is built out
-     of exactly these faces (see STACK_MIXED in StackedCaptions.tsx). -->
-<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,600;0,700;0,800;0,900;1,900&family=Playfair+Display:ital,wght@1,900&family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=Libre+Baskerville:wght@700&family=Inter:wght@500&display=swap" rel="stylesheet">
+<!-- DUAS famílias de fontes com papéis distintos, e misturá-las quebra as duas:
+     · Open Sans + Libre Baskerville são a INTERFACE — os mesmos dois cortes do
+       site da Avelin, para o editor e a marca falarem a mesma língua.
+     · Poppins / Playfair / Lora são o CONTEÚDO — as prévias de legenda desenham
+       os estilos reais do template, montados exatamente nesses cortes. Trocar
+       qualquer um deles por uma fonte da interface faz a prévia mentir sobre o
+       que vai sair no render. -->
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Poppins:ital,wght@0,400;0,600;0,700;0,800;0,900;1,900&family=Playfair+Display:ital,wght@1,900&family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
 
 <header class="glass">
-  <!-- TODO: trocar por um logo da Avelin. Os PNGs ainda são os do edvid; o
-       texto já é A.V.E. para o título e o alt não mentirem sobre o produto. -->
-  <div class="logo-chip"><img src="/assets/edvid-logo-white.png" alt="A.V.E."></div>
+  <div class="logo-chip"><img src="/assets/avelin-logo-white.png" alt="Avelin"></div>
   <div class="head-info">
     <div id="projectName" class="project-name">—</div>
     <div id="stateMessage" class="state-message"></div>
@@ -32,11 +34,15 @@
 </header>
 
 <nav id="tabs" class="tabs">
-  <button class="tab active" data-tab="1"><span class="tab-num">FASE 1</span> Corte</button>
-  <!-- the gate lives BETWEEN the phases and stays reachable: changing the style
-       after Fase 2 exists is a normal thing to want, not a one-shot decision -->
+  <!-- Nomes de OFÍCIO, não de etapa de processo: "Decupagem" e "Finalização" são
+       o que um editor chama essas duas mesas de trabalho. A numeração "FASE 1/2"
+       saiu porque contava ao usuário em que ponto do fluxo do produto ele está —
+       informação de bastidor — em vez de dizer o que se faz ali. -->
+  <button class="tab active" data-tab="1">Decupagem</button>
+  <!-- o portão vive ENTRE as duas mesas e continua alcançável: trocar o estilo
+       depois da finalização pronta é uma vontade normal, não decisão de uma vez só -->
   <button class="tab" data-tab="style">Estilo</button>
-  <button class="tab" data-tab="2"><span class="tab-num">FASE 2</span> Visual</button>
+  <button class="tab" data-tab="2">Finalização</button>
 </nav>
 
 <main>
@@ -48,12 +54,12 @@
     </div>
   </section>
 
-  <!-- The style tab: what Fase 2 gets built as. Groups come from STYLE_CATALOG.
+  <!-- The style tab: what the finish gets built as. Groups come from STYLE_CATALOG.
        No descriptions anywhere — each preview renders the thing it names. -->
   <section id="styleSetup" class="setup hidden">
     <div class="setup-inner">
       <div class="setup-head">
-        <h2>Como vamos montar a Fase 2?</h2>
+        <h2>Como vamos montar a finalização?</h2>
       </div>
 
       <div class="setup-group">
@@ -87,8 +93,8 @@
       </div>
 
       <div class="setup-actions">
-        <textarea id="setupNote" rows="1" placeholder="Observações para a Fase 2 (opcional)"></textarea>
-        <button id="setupGo" class="btn primary">Confirmar e iniciar a Fase 2</button>
+        <textarea id="setupNote" rows="1" placeholder="Observações para a finalização (opcional)"></textarea>
+        <button id="setupGo" class="btn primary">Confirmar e iniciar a finalização</button>
       </div>
       <span id="setupSummary" class="setup-summary"></span>
     </div>
@@ -128,7 +134,7 @@
         <div class="lane notes-lane" id="laneNotes"></div>
       </div>
       <div id="trkCaptions" class="track hidden">
-        <div class="track-label"><span class="tl-chip teal" data-icon="captions" title="Legendas"></span></div>
+        <div class="track-label"><span class="tl-chip blue" data-icon="captions" title="Legendas"></span></div>
         <div class="lane" id="laneCaptions"></div>
       </div>
       <div class="track">
@@ -137,7 +143,7 @@
       </div>
       <div class="track">
         <div class="track-label">
-          <button class="tl-chip olive" id="jcutToggle" data-icon="audio"
+          <button class="tl-chip soft" id="jcutToggle" data-icon="audio"
                   title="Áudio (mix)" aria-expanded="false"></button>
         </div>
         <div class="lane" id="laneAudio"><canvas id="wave"></canvas></div>
@@ -149,11 +155,11 @@
            rides position:sticky on .track-label, and an overflow ancestor would
            make a new scroll container and strand it. -->
       <div class="track jcut-track hidden" id="trkAudioA1">
-        <div class="track-label"><span class="tl-chip olive ghost" data-icon="audio" title="A1"></span></div>
+        <div class="track-label"><span class="tl-chip soft ghost" data-icon="audio" title="A1"></span></div>
         <div class="lane jcut-lane" id="laneAudioA1"></div>
       </div>
       <div class="track jcut-track hidden" id="trkAudioA2">
-        <div class="track-label"><span class="tl-chip olive ghost" data-icon="audio" title="A2"></span></div>
+        <div class="track-label"><span class="tl-chip soft ghost" data-icon="audio" title="A2"></span></div>
         <div class="lane jcut-lane" id="laneAudioA2"></div>
       </div>
       <div id="insertTracks" class="hidden"></div>

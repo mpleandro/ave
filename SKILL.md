@@ -1,9 +1,9 @@
 ---
 name: ave
-description: A.V.E. (Avelin Video Edit) — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — HyperFrames visuals from a data-driven template: short-form gets karaoke captions, a static hook, a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
+description: Avelin — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — HyperFrames visuals from a data-driven template: short-form gets karaoke captions, a static hook, a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
 ---
 
-# A.V.E. — Avelin Video Edit
+# Avelin — editor de vídeo
 
 > **PHASE 2 RENDERS WITH HYPERFRAMES** (Apache 2.0), not Remotion. One command
 > takes it end to end — `helpers/phase2.py <edit>` — and the visual vocabulary
@@ -43,7 +43,7 @@ description: A.V.E. (Avelin Video Edit) — edit any video by conversation, in p
 6. **Cache transcripts per source.** Never re-transcribe unless the source changed.
 7. **Color grade per-segment during extraction**, never post-concat.
 8. **Strategy confirmation before execution.**
-9. **All session outputs in `<videos_dir>/edit/`** — never inside the A.V.E. repo.
+9. **All session outputs in `<videos_dir>/edit/`** — never inside the Avelin repo.
 10. **PHASE 2 IS HYPERFRAMES-ONLY** — never burn text or overlays with ffmpeg/PIL. A style that is not ported yet is REFUSED BY NAME (`helpers/phase2.py` does this), never substituted by something that looks close.
 11. **PHASE 2 is data-driven.** `edit-data.json` describes the video; the LOOK lives in `assets/styles/` and the NUMBERS in `assets/styles/variants.json` — the same files the editor's Estilo previews are meant to read, so the two can never disagree. Bespoke graphics are the one escape hatch: an HTML of your own under `<projeto>/compositions/<id>.html`, mounted as a sub-composition. Never hand-write a style inside the composer.
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
@@ -83,7 +83,7 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
     │   └── renders/             ← saídas do motor
     └── remotion/public/         ← ONDE OS DADOS AINDA MORAM (nome histórico do
                                    edvid, mantido para uma sessão do edvid e uma
-                                   do A.V.E. lerem a mesma pasta):
+                                   do Avelin lerem a mesma pasta):
                                    edit-data.json ← A EDIÇÃO
                                    captions.json, caption-cues.json
                                    pexels/ web/ brand/ film/ broll/, trilha.mp3
@@ -93,7 +93,7 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
 
 First-time install lives in `install.md`. On cold start just verify:
 
-- `GROQ_API_KEY` resolves (env or `.env` at the A.V.E. repo root — this fork has its own, it does not read edvid's). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
+- `GROQ_API_KEY` resolves (env or `.env` at the Avelin repo root — this fork has its own, it does not read edvid's). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
 - `ELEVENLABS_API_KEY` (optional) — used for LONG sources (>5 min, e.g. YouTube/course lessons) via ElevenLabs Scribe `scribe_v1`, since Groq's free tier chokes on long uploads. `backend=auto` (default) picks Scribe over 5 min when the key exists, else Groq; short clips stay on Groq. No key → long sources fall back to Groq. Ask for it lazily the first time a >5 min source shows up, write to `.env`.
 - `whispercpp` (optional) — fully local transcription, no key, no upload cap, no network. Opt-in only: `auto` never picks it. Needs whisper.cpp built with a ggml model (auto-detected in `~/whisper.cpp`, or `WHISPERCPP_BIN`/`WHISPERCPP_MODEL` in `.env`). Offer it when the user has no Groq key or hits quota. **Text matches Groq; word TIMES don't** (measured: 66% of words inside a real speech region vs Groq's 97%, median drift 240ms). Phase 1 is unaffected — cut edges come from `speech_regions.py`. For Phase-2 karaoke captions, prefer Groq and say why.
 - `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources (`ingest_url.py`) — install lazily the first time a link shows up (`brew install yt-dlp` / `winget install yt-dlp.yt-dlp`).

@@ -1,24 +1,63 @@
-/* Edvid preview — dark glassmorphism, brand: #ff7713 / #09b5b7 / #738b03 */
+/* Editor da Avelin — os tokens do site (SiteKit v3.1) aplicados à interface.
+ *
+ * Uma cor só existe aqui como TOKEN, nunca como literal espalhado pelas regras.
+ * É a primeira nota do design kit, e não é preciosismo: esta folha já trocou de
+ * marca uma vez, e o caro foi caçar o laranja antigo cru em vinte lugares.
+ * Por isso cada cor traz também o trio RGB — é o que deixa escrever
+ * `rgb(var(--orange-rgb) / .14)` e a transparência continuar seguindo o token.
+ * O trio é separado por ESPAÇO, não por vírgula: `rgb(74, 127, 165 / .14)`
+ * mistura a sintaxe antiga com a barra, é inválido, e o navegador descarta a
+ * declaração inteira em silêncio — foi assim que a página inteira ficou branca.
+ *
+ * A paleta tem DUAS famílias de propósito (azul-noite + laranja). Onde a
+ * interface precisa separar papéis, ela anda pela rampa da própria família —
+ * azul-claro/azul-médio, laranja/laranja-suave — em vez de inventar um terceiro
+ * matiz que não pertence à marca. */
 :root {
-  --orange: #ff7713;
-  --teal: #09b5b7;
-  --olive: #738b03;
+  --orange: #ff6b1a;            /* --laranja: a cor de AÇÃO */
+  --orange-rgb: 255 107 26;
+  --orange-hover: #ff8c47;      /* --laranja-medio: só o hover do botão de ação */
+  --orange-soft: #ffad7a;       /* --laranja-suave: o acento sobre fundo escuro */
+  --orange-soft-rgb: 255 173 122;
+  --blue: #7a95aa;              /* --azul-claro: o frio legível sobre a noite */
+  --blue-rgb: 122 149 170;
+  --blue-mid: #4a7fa5;          /* --azul-medio: apoio, um degrau mais fundo */
+  --blue-mid-rgb: 74 127 165;
+
   /* Accent painted by the text styles that carry one (realce/misto headlines,
      stacked captions). NOT --orange: that is app chrome, and the two drifting
      apart is the point — the user picks this one, the UI keeps its own. JS
      overrides it on #styleSetup from the pick. */
   --hl-accent: #ff5200;
-  --bg0: #08090c;
-  --bg1: #10141b;
+
+  /* MARCADOR DE AJUSTE — o único matiz fora do kit da Avelin, e de propósito.
+     Um pedido de correção não pode se parecer com um controle normal: se ele
+     usasse o laranja de ação, o usuário leria "botão" onde está escrito "isto
+     aqui está errado". A marca tem duas famílias e nenhuma delas serve de
+     alarme, então o rosa entra como token declarado — visível, nomeado e
+     trocável — em vez de aparecer cru em oito regras diferentes. */
+  --mark: var(--mark);
+  --mark-rgb: 255 84 112;
+  --mark-soft: var(--mark-soft);
+  --mark-mist: var(--mark-mist);
+
+  --bg0: #081726;               /* um degrau abaixo da noite, só para dar profundidade */
+  --bg1: #0d2137;               /* --azul-noite: a cor-mãe */
   --glass: rgba(255, 255, 255, 0.045);
   --glass-strong: rgba(255, 255, 255, 0.08);
   --stroke: rgba(255, 255, 255, 0.09);
-  --text: #eef1f5;
-  --dim: #8b94a3;
+  --text: #f5f2ee;              /* --offwhite */
+  --dim: #7a95aa;               /* --azul-claro */
   --radius: 16px;
+  /* --ease-out do site: a "easing-mãe" de toda transição da interface */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* as duas famílias do site. A serifada é SEMPRE peso 400 — o itálico é que é
+     o recurso expressivo, não o negrito. */
+  --serif: 'Libre Baskerville', Georgia, serif;
+  --sans: 'Open Sans', system-ui, -apple-system, sans-serif;
   /* the timeline panel is a SOLID surface so the gutter mask can use the exact
      same colour and become invisible — see .track-label::before */
-  --panel-bg: #0f1218;
+  --panel-bg: #142a42;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,11 +65,11 @@
 html, body { height: 100%; }
 
 body {
-  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+  font-family: var(--sans);
   color: var(--text);
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(9, 181, 183, 0.10), transparent 60%),
-    radial-gradient(1000px 500px at -10% 110%, rgba(255, 119, 19, 0.09), transparent 60%),
+    radial-gradient(1200px 600px at 80% -10%, rgb(var(--blue-mid-rgb) / 0.14), transparent 60%),
+    radial-gradient(1000px 500px at -10% 110%, rgb(var(--orange-rgb) / 0.09), transparent 60%),
     linear-gradient(160deg, var(--bg1), var(--bg0));
   min-height: 100vh;
   display: flex;
@@ -65,7 +104,7 @@ header {
 .logo-chip img { height: 26px; display: block; }
 
 .head-info { min-width: 0; }
-.project-name { font-weight: 900; font-size: 16px; letter-spacing: 0.2px; }
+.project-name { font-family: var(--serif); font-weight: 400; font-size: 17px; letter-spacing: 0; }
 .state-message { font-size: 12px; color: var(--dim); }
 
 .head-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
@@ -74,14 +113,14 @@ header {
   font-size: 12px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(255, 119, 19, 0.14);
-  border: 1px solid rgba(255, 119, 19, 0.45);
-  color: #ffb377;
+  background: rgb(var(--orange-rgb) / 0.14);
+  border: 1px solid rgb(var(--orange-rgb) / 0.45);
+  color: var(--orange-soft);
 }
 .pill.saved {
-  background: rgba(9, 181, 183, 0.14);
-  border-color: rgba(9, 181, 183, 0.45);
-  color: #6fe3e4;
+  background: rgb(var(--blue-rgb) / 0.14);
+  border-color: rgb(var(--blue-rgb) / 0.45);
+  color: var(--blue);
 }
 
 .btn {
@@ -99,7 +138,7 @@ header {
 .btn:hover { filter: brightness(1.25); }
 .btn:active { transform: scale(0.97); }
 .btn.primary {
-  background: linear-gradient(135deg, var(--orange), #ff9440);
+  background: linear-gradient(135deg, var(--orange), var(--orange-hover));
   border-color: transparent;
   color: #fff;
 }
@@ -111,28 +150,47 @@ header {
 /* ---------- tabs ---------- */
 .tabs { display: flex; gap: 8px; margin: 10px 14px 0; flex: 0 0 auto; }
 
+/* As abas são as duas MESAS de trabalho, e agora carregam só o nome do ofício.
+ * A numeração de fase saiu junto com o `.tab-num`: ela media o progresso do
+ * produto, não o do vídeo.
+ *
+ * A serifada faz o serviço que o corpo em negrito fazia — o peso vem do
+ * desenho da letra, não de encorpá-la. Por isso o ativo muda de tamanho e de
+ * fundo, mas nunca de peso: Libre Baskerville é sempre 400 na marca. */
 .tab {
-  font-family: inherit;
-  font-weight: 700;
-  font-size: 12.5px;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 13px;
   color: var(--dim);
   background: var(--glass);
   backdrop-filter: blur(18px);
   border: 1px solid var(--stroke);
   border-radius: 12px 12px 0 0;
   border-bottom: none;
-  padding: 9px 20px 11px;
+  padding: 10px 22px 12px;
   cursor: pointer;
   align-self: flex-end;
+  position: relative;
+  transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
 }
-.tab .tab-num { font-size: 10px; font-weight: 900; letter-spacing: 1.5px; color: var(--dim); margin-right: 8px; }
+.tab:hover:not(:disabled):not(.active) { color: var(--text); }
 .tab.active {
   color: var(--text);
   background: rgba(255, 255, 255, 0.11);
-  font-size: 14px;
-  padding: 11px 24px 13px;
+  font-size: 15px;
+  padding: 12px 26px 14px;
 }
-.tab.active .tab-num { color: var(--orange); }
+/* o traço laranja é o que diz "você está aqui" agora que o número não diz */
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 26px;
+  right: 26px;
+  bottom: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--orange);
+}
 .tab:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* ---------- main ---------- */
@@ -141,9 +199,9 @@ main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding
 .empty { flex: 1; display: flex; align-items: center; justify-content: center; }
 .empty-inner { text-align: center; padding: 40px; }
 .empty-icon { font-size: 42px; margin-bottom: 12px; }
-.empty h2 { font-weight: 900; font-size: 20px; margin-bottom: 6px; }
+.empty h2 { font-family: var(--serif); font-weight: 400; font-size: 22px; margin-bottom: 8px; }
 .empty p { color: var(--dim); font-size: 13px; }
-.empty code { color: var(--teal); }
+.empty code { color: var(--blue); }
 
 /* ---------- player ---------- */
 .player-wrap { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; }
@@ -233,7 +291,7 @@ input[type="range"]::-webkit-slider-thumb {
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.timeline-panel::-webkit-scrollbar-thumb:hover { background: rgba(255, 119, 19, 0.45); background-clip: padding-box; }
+.timeline-panel::-webkit-scrollbar-thumb:hover { background: rgb(var(--orange-rgb) / 0.45); background-clip: padding-box; }
 .timeline-panel::-webkit-scrollbar-corner { background: transparent; }
 
 .timeline { position: relative; min-width: 100%; min-height: 100%; }
@@ -311,10 +369,10 @@ input[type="range"]::-webkit-slider-thumb {
   border: 1px solid var(--stroke);
 }
 .tl-chip svg { width: 16px; height: 16px; fill: currentColor; display: block; }
-.tl-chip.teal { color: var(--teal); border-color: rgba(9, 181, 183, 0.3); background: rgba(9, 181, 183, 0.09); }
-.tl-chip.orange { color: var(--orange); border-color: rgba(255, 119, 19, 0.3); background: rgba(255, 119, 19, 0.09); }
-.tl-chip.olive { color: #a8c22b; border-color: rgba(168, 194, 43, 0.3); background: rgba(168, 194, 43, 0.09); }
-.tl-chip.notes { color: #ff5470; border-color: rgba(255, 84, 112, 0.32); background: rgba(255, 84, 112, 0.1); }
+.tl-chip.blue { color: var(--blue); border-color: rgb(var(--blue-rgb) / 0.3); background: rgb(var(--blue-rgb) / 0.09); }
+.tl-chip.orange { color: var(--orange); border-color: rgb(var(--orange-rgb) / 0.3); background: rgb(var(--orange-rgb) / 0.09); }
+.tl-chip.soft { color: var(--orange-soft); border-color: rgb(var(--orange-soft-rgb) / 0.3); background: rgb(var(--orange-soft-rgb) / 0.09); }
+.tl-chip.notes { color: var(--mark); border-color: rgb(var(--mark-rgb) / 0.32); background: rgb(var(--mark-rgb) / 0.1); }
 
 .lane {
   position: relative;
@@ -351,7 +409,7 @@ canvas { display: block; }
   content: 'REMOVIDO';
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 900; letter-spacing: 1px; color: #ff6b6b;
+  font-size: 9px; font-weight: 900; letter-spacing: 1px; color: var(--mark);
 }
 
 .clip .thumbs { position: absolute; inset: 0; display: flex; overflow: hidden; }
@@ -407,23 +465,23 @@ canvas { display: block; }
   text-overflow: ellipsis;
 }
 .chip.caption {
-  background: rgba(9, 181, 183, 0.16);
-  border: 1px solid rgba(9, 181, 183, 0.5);
-  color: #8ceeef;
+  background: rgb(var(--blue-rgb) / 0.16);
+  border: 1px solid rgb(var(--blue-rgb) / 0.5);
+  color: var(--blue);
   pointer-events: none;
 }
 .chip.insert {
-  background: rgba(255, 119, 19, 0.16);
-  border: 1px solid rgba(255, 119, 19, 0.55);
-  color: #ffc08a;
+  background: rgb(var(--orange-rgb) / 0.16);
+  border: 1px solid rgb(var(--orange-rgb) / 0.55);
+  color: var(--orange-soft);
   cursor: grab;
 }
-.chip.insert.hook { background: rgba(115, 139, 3, 0.2); border-color: rgba(168, 194, 43, 0.6); color: #d3e87a; }
+.chip.insert.hook { background: rgb(var(--orange-soft-rgb) / 0.2); border-color: rgb(var(--orange-soft-rgb) / 0.6); color: var(--orange-soft); }
 .chip.insert.dirty { border-style: dashed; }
 .chip.music {
-  background: repeating-linear-gradient(-45deg, rgba(168, 194, 43, 0.14) 0 10px, rgba(168, 194, 43, 0.22) 10px 20px);
-  border: 1px solid rgba(168, 194, 43, 0.5);
-  color: #d3e87a;
+  background: repeating-linear-gradient(-45deg, rgb(var(--orange-soft-rgb) / 0.14) 0 10px, rgb(var(--orange-soft-rgb) / 0.22) 10px 20px);
+  border: 1px solid rgb(var(--orange-soft-rgb) / 0.5);
+  color: var(--orange-soft);
   pointer-events: none;
   letter-spacing: 0.3px;
 }
@@ -463,7 +521,7 @@ kbd {
   position: fixed;
   z-index: 100;
   background: rgba(10, 12, 16, 0.92);
-  border: 1px solid rgba(255, 119, 19, 0.5);
+  border: 1px solid rgb(var(--orange-rgb) / 0.5);
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 11px;
@@ -480,7 +538,7 @@ kbd {
   transform: translateX(-50%);
   z-index: 100;
   background: rgba(10, 14, 18, 0.94);
-  border: 1px solid rgba(9, 181, 183, 0.55);
+  border: 1px solid rgb(var(--blue-rgb) / 0.55);
   border-radius: 12px;
   padding: 12px 20px;
   font-size: 13px;
@@ -499,19 +557,19 @@ kbd {
   font-weight: 700;
   letter-spacing: 1px;
   margin-left: 4px;
-  border-color: rgba(255, 84, 112, 0.35);
-  background: rgba(255, 84, 112, 0.1);
-  color: #ff8098;
+  border-color: rgb(var(--mark-rgb) / 0.35);
+  background: rgb(var(--mark-rgb) / 0.1);
+  color: var(--mark-soft);
 }
 .btn.mark svg { width: 13px; height: 13px; fill: currentColor; display: block; }
 /* an IN is open — the button now closes the range */
 .btn.mark.armed {
   border-color: transparent;
   color: #fff;
-  background: linear-gradient(135deg, #ff5470, #ff8098);
+  background: linear-gradient(135deg, var(--mark), var(--mark-soft));
 }
 
-.notes-lane { height: 32px; background: rgba(255, 84, 112, 0.045); border-color: rgba(255, 84, 112, 0.14); }
+.notes-lane { height: 32px; background: rgb(var(--mark-rgb) / 0.045); border-color: rgb(var(--mark-rgb) / 0.14); }
 
 .note-chip {
   position: absolute;
@@ -519,9 +577,9 @@ kbd {
   bottom: 3px;
   min-width: 8px;
   border-radius: 7px;
-  background: rgba(255, 84, 112, 0.26);
-  border: 1px solid rgba(255, 84, 112, 0.6);
-  color: #ffd7de;
+  background: rgb(var(--mark-rgb) / 0.26);
+  border: 1px solid rgb(var(--mark-rgb) / 0.6);
+  color: var(--mark-mist);
   font-size: 10.5px;
   font-weight: 500;
   line-height: 24px;
@@ -532,14 +590,14 @@ kbd {
   cursor: pointer;
   box-sizing: border-box;
 }
-.note-chip:hover { background: rgba(255, 84, 112, 0.4); }
+.note-chip:hover { background: rgb(var(--mark-rgb) / 0.4); }
 /* the open IN, still waiting for its OUT */
 .note-pending {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #ff5470;
+  background: var(--mark);
 }
 .note-pending::after {
   content: 'IN';
@@ -549,7 +607,7 @@ kbd {
   font-size: 9px;
   font-weight: 900;
   letter-spacing: 0.6px;
-  color: #ff8098;
+  color: var(--mark-soft);
 }
 
 .note-editor {
@@ -562,12 +620,12 @@ kbd {
   flex-direction: column;
   gap: 10px;
   background: rgba(12, 16, 22, 0.97);
-  border: 1px solid rgba(255, 84, 112, 0.4);
+  border: 1px solid rgb(var(--mark-rgb) / 0.4);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(14px);
 }
 .note-head { display: flex; align-items: center; justify-content: space-between; }
-.note-range { font-size: 12px; font-weight: 900; letter-spacing: 0.8px; color: #ff8098; }
+.note-range { font-size: 12px; font-weight: 900; letter-spacing: 0.8px; color: var(--mark-soft); }
 .note-editor textarea {
   font-family: inherit;
   font-size: 13px;
@@ -580,7 +638,7 @@ kbd {
   resize: vertical;
   outline: none;
 }
-.note-editor textarea:focus { border-color: rgba(255, 84, 112, 0.55); }
+.note-editor textarea:focus { border-color: rgb(var(--mark-rgb) / 0.55); }
 .note-actions { display: flex; align-items: center; gap: 8px; }
 .note-actions .spacer { flex: 1; }
 
@@ -610,7 +668,7 @@ kbd {
   gap: 10px;
 }
 
-.setup-head h2 { font-size: 16px; font-weight: 900; letter-spacing: 0.2px; }
+.setup-head h2 { font-family: var(--serif); font-weight: 400; font-size: 19px; letter-spacing: 0; }
 
 .setup-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .group-head { display: flex; align-items: baseline; gap: 10px; }
@@ -673,8 +731,8 @@ kbd {
   border: 1px solid var(--stroke);
   transition: border-color 0.14s;
 }
-.hex-field:focus-within { border-color: rgba(255, 119, 19, 0.5); }
-.hex-field.bad { border-color: rgba(255, 84, 112, 0.6); }
+.hex-field:focus-within { border-color: rgb(var(--orange-rgb) / 0.5); }
+.hex-field.bad { border-color: rgb(var(--mark-rgb) / 0.6); }
 .hex-hash { font-size: 12px; color: rgba(255, 255, 255, 0.35); }
 .hex-input {
   width: 6.2em;
@@ -703,7 +761,7 @@ kbd {
   transition: border-color 0.15s, background 0.15s;
 }
 .opt:hover { border-color: rgba(255, 255, 255, 0.22); }
-.opt.on { border-color: var(--orange); background: rgba(255, 119, 19, 0.07); }
+.opt.on { border-color: var(--orange); background: rgb(var(--orange-rgb) / 0.07); }
 /* only shown where the catalog has a SINGLE option — it explains the lone card */
 .opt.ghost {
   border-style: dashed;
@@ -759,7 +817,7 @@ kbd {
 .opt-preview {
   position: relative;
   border-radius: 9px;
-  background: #05070a;
+  background: #05070a; /* palco da prévia = vídeo, não interface — ver nota abaixo */
   border: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
   display: flex;
@@ -916,7 +974,7 @@ kbd {
   transition: border-color 0.15s, background 0.15s;
 }
 .chk:hover { border-color: rgba(255, 255, 255, 0.22); }
-.chk.on { border-color: rgba(9, 181, 183, 0.5); background: rgba(9, 181, 183, 0.06); }
+.chk.on { border-color: rgb(var(--blue-rgb) / 0.5); background: rgb(var(--blue-rgb) / 0.06); }
 .chk-box {
   position: relative;
   flex: 0 0 auto;
@@ -924,7 +982,7 @@ kbd {
   border-radius: 5px;
   border: 1.5px solid rgba(255, 255, 255, 0.25);
 }
-.chk.on .chk-box { border-color: var(--teal); background: var(--teal); }
+.chk.on .chk-box { border-color: var(--blue); background: var(--blue); }
 .chk.on .chk-box::after {
   content: '';
   position: absolute;
@@ -936,7 +994,7 @@ kbd {
 }
 .chk-ico { flex: 0 0 auto; width: 17px; height: 17px; color: var(--dim); }
 .chk-ico svg { width: 17px; height: 17px; fill: currentColor; display: block; }
-.chk.on .chk-ico { color: var(--teal); }
+.chk.on .chk-ico { color: var(--blue); }
 .chk-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; }
 
 #setupNote {
@@ -954,7 +1012,7 @@ kbd {
   resize: none;
   outline: none;
 }
-#setupNote:focus { border-color: rgba(255, 119, 19, 0.5); }
+#setupNote:focus { border-color: rgb(var(--orange-rgb) / 0.5); }
 
 .setup-actions { display: flex; align-items: center; gap: 12px; }
 .setup-actions .btn { flex: 0 0 auto; }
@@ -1071,9 +1129,9 @@ button.tl-chip:disabled { cursor: default; }
   transition: transform 0.16s ease, opacity 0.16s ease;
 }
 .tl-chip.disclose svg { margin-bottom: 3px; } /* clear the caret's row */
-.tl-chip.disclose:hover { background: rgba(168, 194, 43, 0.16); }
+.tl-chip.disclose:hover { background: rgb(var(--orange-soft-rgb) / 0.16); }
 .tl-chip.disclose:hover::after { opacity: 1; }
-.tl-chip.disclose[aria-expanded='true'] { background: rgba(168, 194, 43, 0.2); }
+.tl-chip.disclose[aria-expanded='true'] { background: rgb(var(--orange-soft-rgb) / 0.2); }
 .tl-chip.disclose[aria-expanded='true']::after {
   transform: translateX(-50%) rotate(180deg);
 }
@@ -1093,8 +1151,8 @@ button.tl-chip:disabled { cursor: default; }
   bottom: 2px;
   border-radius: 5px;
   overflow: hidden;
-  border: 1px solid rgba(168, 194, 43, 0.34);
-  background: linear-gradient(180deg, rgba(168, 194, 43, 0.20), rgba(168, 194, 43, 0.08));
+  border: 1px solid rgb(var(--orange-soft-rgb) / 0.34);
+  background: linear-gradient(180deg, rgb(var(--orange-soft-rgb) / 0.20), rgb(var(--orange-soft-rgb) / 0.08));
 }
 .ablock-label {
   position: absolute;
@@ -1116,10 +1174,10 @@ button.tl-chip:disabled { cursor: default; }
   bottom: 0;
   background: repeating-linear-gradient(
     -45deg,
-    rgba(255, 119, 19, 0.42) 0 3px,
-    rgba(255, 119, 19, 0.12) 3px 6px
+    rgb(var(--orange-rgb) / 0.42) 0 3px,
+    rgb(var(--orange-rgb) / 0.12) 3px 6px
   );
-  border-right: 1px solid rgba(255, 119, 19, 0.75);
+  border-right: 1px solid rgb(var(--orange-rgb) / 0.75);
 }
 .tl-chip.ghost { opacity: 0.55; }
 

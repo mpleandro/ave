@@ -1,4 +1,4 @@
-/* Edvid preview — interactive editing timeline.
+/* Editor da Avelin — interactive editing timeline.
  * IMMUTABLE app: everything per-session comes from /api/state (state.json,
  * edl.json) + /gen/* (waveform, thumbs) + /media/* (video, captions, edit-data).
  * User adjustments are POSTed to /api/save → <edit>/preview_edits.json and
@@ -21,7 +21,7 @@
  *  - Layout follows the SOURCE aspect: portrait clips get body.portrait (player
  *    right at full column height, transport+timeline left), landscape keeps the
  *    stacked layout. #stage keeps the split from swallowing anything below it.
- *  - Timecode uses a MONOSPACE stack: Poppins ships no tabular figures, so
+ *  - Timecode uses a MONOSPACE stack: the UI face (Open Sans) ships no tabular figures, so
  *    `font-variant-numeric: tabular-nums` silently does nothing and every digit
  *    change resized the readout, shoving the whole transport row sideways.
  *  - No glows anywhere — depth shadows are fine, coloured halos are not.
@@ -35,6 +35,23 @@
 
 // ---------- dom ----------
 const $ = (id) => document.getElementById(id);
+
+/* As telas (régua, waveform) pintam em canvas, e canvas não enxerga `var(--x)`.
+ * Antes disso as cores viviam duas vezes: uma no CSS e outra em hexa cru aqui —
+ * o que garantia que uma troca de marca deixasse metade da interface para trás.
+ * `tok()` lê o token computado do :root, então o canvas segue a folha de estilo
+ * sozinho. Os trios `*-rgb` existem para poder aplicar transparência sobre o
+ * token em vez de sobre um valor decorado à mão. */
+const TOKENS = new Map();
+const tok = (name) => {
+  if (!TOKENS.has(name)) {
+    TOKENS.set(name, getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+  }
+  return TOKENS.get(name);
+};
+// mesma regra do CSS: o trio vem separado por espaço, então a transparência
+// entra depois da barra. `rgba(x, y, z, a)` com trio de espaços não parseia.
+const tokA = (name, a) => `rgb(${tok(name)} / ${a})`;
 const video = $('video');
 const panel = $('timelinePanel');
 const timelineEl = $('timeline');
@@ -89,14 +106,14 @@ const STYLE_CATALOG = {
       id: 'limpa',
       name: 'Limpa',
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
-        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
         <circle cx="33" cy="48" r="13" fill="rgba(255,255,255,.16)"/>
         <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
         <rect x="14" y="14" width="38" height="4.4" rx="2.2" fill="rgba(255,255,255,.5)"/>
         <rect x="20" y="21.5" width="26" height="4.4" rx="2.2" fill="rgba(255,255,255,.3)"/>
-        <rect x="12" y="74" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
-        <rect x="16" y="78.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="12" y="74" width="42" height="11" rx="5.5" fill="var(--bg1)" stroke="rgb(var(--blue-rgb) / .65)"/>
+        <rect x="16" y="78.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
         <rect x="30" y="78.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
         <rect x="40" y="78.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
       </svg>`,
@@ -105,16 +122,16 @@ const STYLE_CATALOG = {
       id: 'split',
       name: 'Tela dividida',
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
-        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
-        <rect x="3" y="3" width="60" height="36" rx="5" fill="rgba(255,119,19,.16)"/>
-        <circle cx="17" cy="15" r="3.6" fill="rgba(255,119,19,.6)"/>
-        <path d="M6 36l11-11a2 2 0 013 0l7 7 5-4a2 2 0 013 0l11 8" fill="none" stroke="rgba(255,119,19,.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="36" rx="5" fill="rgb(var(--orange-rgb) / .16)"/>
+        <circle cx="17" cy="15" r="3.6" fill="rgb(var(--orange-rgb) / .6)"/>
+        <path d="M6 36l11-11a2 2 0 013 0l7 7 5-4a2 2 0 013 0l11 8" fill="none" stroke="rgb(var(--orange-rgb) / .6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M3 40.5h60" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
         <rect x="3" y="42" width="60" height="73" rx="5" fill="rgba(255,255,255,.05)"/>
         <circle cx="33" cy="70" r="12" fill="rgba(255,255,255,.16)"/>
         <path d="M15 115a18 18 0 0136 0z" fill="rgba(255,255,255,.16)"/>
-        <rect x="12" y="35" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
-        <rect x="16" y="39.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="12" y="35" width="42" height="11" rx="5.5" fill="var(--bg1)" stroke="rgb(var(--blue-rgb) / .65)"/>
+        <rect x="16" y="39.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
         <rect x="30" y="39.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
         <rect x="40" y="39.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
       </svg>`,
@@ -123,16 +140,16 @@ const STYLE_CATALOG = {
       id: 'split2',
       name: 'Tela dividida 2',
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
-        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0e13" stroke="rgba(255,255,255,.12)"/>
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="65" rx="5" fill="rgba(255,255,255,.05)"/>
         <circle cx="33" cy="24" r="11" fill="rgba(255,255,255,.16)"/>
         <path d="M16 68a17 17 0 0134 0z" fill="rgba(255,255,255,.16)"/>
         <path d="M3 69.5h60" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
-        <rect x="3" y="71" width="60" height="44" rx="5" fill="rgba(255,119,19,.16)"/>
-        <circle cx="17" cy="83" r="3.6" fill="rgba(255,119,19,.6)"/>
-        <path d="M6 111l11-11a2 2 0 013 0l7 7 5-4a2 2 0 013 0l11 8" fill="none" stroke="rgba(255,119,19,.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <rect x="12" y="58" width="42" height="11" rx="5.5" fill="#0b0e13" stroke="rgba(9,181,183,.65)"/>
-        <rect x="16" y="62.5" width="12" height="2.4" rx="1.2" fill="rgba(9,181,183,.9)"/>
+        <rect x="3" y="71" width="60" height="44" rx="5" fill="rgb(var(--orange-rgb) / .16)"/>
+        <circle cx="17" cy="83" r="3.6" fill="rgb(var(--orange-rgb) / .6)"/>
+        <path d="M6 111l11-11a2 2 0 013 0l7 7 5-4a2 2 0 013 0l11 8" fill="none" stroke="rgb(var(--orange-rgb) / .6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="12" y="58" width="42" height="11" rx="5.5" fill="var(--bg1)" stroke="rgb(var(--blue-rgb) / .65)"/>
+        <rect x="16" y="62.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
         <rect x="30" y="62.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
         <rect x="40" y="62.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
       </svg>`,
@@ -1084,7 +1101,7 @@ const normHex = (v) => {
  * the colour, and saying so beats letting the user wonder why the previews did
  * not move. Mirrors the template — update both together. */
 const ACCENT_USERS = {headlines: ['realce', 'misto'], captions: ['stacked']};
-/* AVELIN-OVERLAY */ if (window.EDVID_LOCAL) window.EDVID_LOCAL.install({STYLE_CATALOG, CAP_BUILDERS, ACCENT_USERS});
+/* AVELIN-OVERLAY */ if (window.AVELIN_LOCAL) window.AVELIN_LOCAL.install({STYLE_CATALOG, CAP_BUILDERS, ACCENT_USERS});
 const ACCENT_DEFAULT = '#ff5200';
 
 function applyAccent() {
@@ -1196,8 +1213,8 @@ function renderSetup() {
   wasShowing = true;
 
   $('setupGo').textContent = S.state.awaitingStyle
-    ? 'Confirmar e iniciar a Fase 2'
-    : 'Salvar e refazer a Fase 2';
+    ? 'Confirmar e iniciar a finalização'
+    : 'Salvar e refazer a finalização';
 
   capAnims = [];
   const radios = (host, group, chosen) => {
@@ -1306,8 +1323,8 @@ $('setupGo').addEventListener('click', async () => {
   if ((await res.json()).ok) {
     renderSetup();
     toast(rerender
-      ? '✓ Novo estilo enviado — o Claude vai refazer a Fase 2 com ele'
-      : '✓ Estilo enviado — o Claude vai montar a Fase 2 com essas escolhas', 5000);
+      ? '✓ Novo estilo enviado — o Claude vai refazer a finalização com ele'
+      : '✓ Estilo enviado — o Claude vai montar a finalização com essas escolhas', 5000);
   } else {
     toast('Erro ao enviar — o servidor está de pé?', 4000);
   }
@@ -1485,7 +1502,7 @@ function renderChips() {
   // kinds of edit, and mixing them on one lane hid the images entirely.
   const isText = (c) => c.kind === 'hook' || c.kind === 'word';
   const groups = [
-    { icon: 'text', cls: 'teal', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => isText(c)) },
+    { icon: 'text', cls: 'blue', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => isText(c)) },
     { icon: 'inserts', cls: 'orange', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => !isText(c)) },
   ];
 
@@ -1526,7 +1543,7 @@ function renderChips() {
   const st = S.editData && S.editData.soundtrack;
   if (st && st.enabled) {
     const trk = el('div', 'track', insertTracksEl);
-    el('span', 'tl-chip olive', el('div', 'track-label', trk)).innerHTML = ICON.music;
+    el('span', 'tl-chip soft', el('div', 'track-label', trk)).innerHTML = ICON.music;
     const lane = el('div', 'lane', trk);
     const chip = el('div', 'chip music', lane);
     const dur = S.editData.durationSec || S.videoDuration || draftTotal();
@@ -1567,8 +1584,8 @@ function drawRuler() {
   // tick step: nice value ≥ 60px apart
   const steps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120];
   const step = steps.find((s) => s * S.pps >= 56) || 300;
-  ctx.font = '600 9.5px Poppins, sans-serif';
-  ctx.fillStyle = 'rgba(139,148,163,0.9)';
+  ctx.font = "600 9.5px 'Open Sans', system-ui, sans-serif";
+  ctx.fillStyle = tokA('--blue-rgb', 0.9);
   ctx.strokeStyle = 'rgba(255,255,255,0.14)';
   for (let t = Math.floor(t0 / step) * step; t <= t1; t += step) {
     if (t < 0) continue;
@@ -1594,9 +1611,9 @@ function drawWave() {
   if (!S.wave) return;
   const { ctx, w, h, x0 } = canvasSetup(waveCv, laneAudio);
   const mid = h / 2;
-  ctx.strokeStyle = 'rgba(168,194,43,0.06)';
+  ctx.strokeStyle = tokA('--orange-soft-rgb', 0.06);
   ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
-  ctx.fillStyle = 'rgba(168,194,43,0.75)';
+  ctx.fillStyle = tokA('--orange-soft-rgb', 0.75);
   const pps = S.wave.peaksPerSec;
   for (let px = 0; px < w; px++) {
     const tDraft = (x0 + px) / S.pps;

@@ -1,5 +1,5 @@
 /**
- * Avelin overlay — extra entries for the edvid preview's Estilo tab.
+ * Camada local — entradas extras para a aba Estilo do editor.
  *
  * Loaded BEFORE app.js (which is why it only defines a global and waits). app.js
  * then calls install() with its three registries, and everything below mutates
@@ -209,7 +209,7 @@
     };
   }
 
-  window.EDVID_LOCAL = {
+  window.AVELIN_LOCAL = {
     install({STYLE_CATALOG, CAP_BUILDERS, ACCENT_USERS}) {
       if (STYLE_CATALOG.captions.some((o) => o.id === 'editorial')) return;
       // after the three animated ones, before the static block

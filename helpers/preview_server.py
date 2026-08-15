@@ -358,7 +358,7 @@ def main() -> None:
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     srv.auto_apply = args.auto
     modo = " · salvar já refaz" if args.auto else ""
-    print(f"A.V.E. preview → http://127.0.0.1:{args.port}  (root: {root}){modo}", flush=True)
+    print(f"Avelin — editor → http://127.0.0.1:{args.port}  (root: {root}){modo}", flush=True)
     srv.serve_forever()
 
 
