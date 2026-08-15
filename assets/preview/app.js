@@ -693,6 +693,12 @@ function jcutGeom(i) {
  * fim". Congelando durante o arrasto, nada se desloca: a parte removida aparece
  * escurecida e a alça acompanha o cursor. O rearranjo acontece ao soltar, uma
  * vez só, que é quando a pessoa espera por ele. */
+/* Qual take está sendo aparado agora — usado para CONGELAR o bloco durante o
+   arraste, para que aparar o começo não encolha o bloco pela direita. Precisa
+   ser global: a onda e os clipes desenham a mesma decisão, e uma cópia local
+   em cada um foi o que deixou as duas pistas discordando. */
+const trimIdx = () => (drag && drag.type === 'trim' ? drag.i : null);
+
 function draftLayout(freeze) {
   let t = 0;
   let at = 0;
@@ -2024,23 +2030,73 @@ function drawRuler() {
   }
 }
 
+/* A onda é desenhada POR TAKE, não como uma fita contínua.
+ *
+ * Antes era um traçado só cobrindo a linha inteira. O conteúdo já estava certo
+ * — o mapeamento rascunho→render respeita as aparas —, mas visualmente o áudio
+ * não tinha junção nenhuma: aparar um take encurtava a fita pela ponta direita
+ * do TODO, em vez de encurtar aquele bloco. A imagem contradizia a pista de
+ * vídeo logo acima, onde os mesmos cortes aparecem como blocos separados.
+ *
+ * As posições vêm do mesmo `draftLayout()` que desenha os blocos de vídeo, pelo
+ * par de áudio (`aout`/`adur`) — que não é igual ao de imagem: sob J-cut o som
+ * de um take começa antes da imagem dele. Usar o par de imagem aqui alinharia a
+ * onda com o quadro errado. */
 function drawWave() {
   if (!S.wave) return;
   const { ctx, w, h, x0 } = canvasSetup(waveCv, laneAudio);
   const mid = h / 2;
-  ctx.strokeStyle = tokA('--orange-soft-rgb', 0.06);
-  ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
-  ctx.fillStyle = tokA('--orange-soft-rgb', 0.75);
   const pps = S.wave.peaksPerSec;
-  for (let px = 0; px < w; px++) {
-    const tDraft = (x0 + px) / S.pps;
-    if (tDraft > draftTotal()) break;
-    const tRend = draftToRendered(tDraft);
-    const idx = Math.floor(tRend * pps);
-    if (idx < 0 || idx >= S.wave.max.length) continue;
-    const hi = (S.wave.max[idx] / 100) * (mid - 2);
-    const lo = (S.wave.min[idx] / 100) * (mid - 2);
-    ctx.fillRect(px, mid - hi, 1, Math.max(1, hi - lo));
+
+  const tri = trimIdx();
+  const itens = draftLayout(tri).filter((it) => !it.removed && it.adur > 0);
+  const blocos = itens.map((it) => [it.aout * S.pps, (it.aout + it.adur) * S.pps]);
+
+  ctx.fillStyle = tokA('--orange-soft-rgb', 0.07);
+  for (const [a, b] of blocos) ctx.fillRect(a - x0, 0, Math.max(1, b - a), h);
+
+  /* A BORDA precisa ser desenhada, não deduzida do vão. Sob J-cut o som de um
+     take COMEÇA antes de o anterior acabar — os blocos se sobrepõem e não sobra
+     espaço vazio entre eles. Sem um traço explícito, a pista volta a parecer uma
+     fita só, que é a queixa que este bloco existe para resolver. */
+  ctx.fillStyle = tokA('--orange-soft-rgb', 0.5);
+  for (let i = 1; i < blocos.length; i++) ctx.fillRect(blocos[i][0] - x0, 0, 1, h);
+
+  ctx.strokeStyle = tokA('--orange-soft-rgb', 0.12);
+  ctx.beginPath();
+  for (const [a, b] of blocos) { ctx.moveTo(a - x0, mid); ctx.lineTo(b - x0, mid); }
+  ctx.stroke();
+
+  ctx.fillStyle = tokA('--orange-soft-rgb', 0.75);
+  for (const [a, b] of blocos) {
+    const px0 = Math.max(0, Math.floor(a - x0));
+    const px1 = Math.min(w, Math.ceil(b - x0));
+    for (let px = px0; px < px1; px++) {
+      const tRend = draftToRendered((x0 + px) / S.pps);
+      const idx = Math.floor(tRend * pps);
+      if (idx < 0 || idx >= S.wave.max.length) continue;
+      const hi = (S.wave.max[idx] / 100) * (mid - 2);
+      const lo = (S.wave.min[idx] / 100) * (mid - 2);
+      ctx.fillRect(px, mid - hi, 1, Math.max(1, hi - lo));
+    }
+  }
+
+  /* Durante o arraste, o take aparado mantém o tamanho ORIGINAL e o pedaço que
+     sai fica apagado — igual à pista de vídeo. É isso que faz aparar o começo
+     ler como encurtar pela ESQUERDA; sem o congelamento, o bloco reflui e a
+     borda que você não está arrastando parece se mexer sozinha. */
+  if (tri != null) {
+    const it = itens.find((x) => x.i === tri) || itens[tri];
+    const r = S.draft[tri];
+    if (it && r && r.orig) {
+      const head = Math.max(0, r.start - r.orig.start);
+      const tail = Math.max(0, r.orig.end - r.end);
+      const a0 = it.aout * S.pps;
+      const b0 = (it.aout + it.adur) * S.pps;
+      ctx.fillStyle = 'rgba(8, 23, 38, 0.66)';
+      if (head > 0) ctx.fillRect(a0 - x0, 0, head * S.pps, h);
+      if (tail > 0) ctx.fillRect(b0 - tail * S.pps - x0, 0, tail * S.pps, h);
+    }
   }
 }
 
