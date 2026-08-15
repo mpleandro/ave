@@ -67,12 +67,21 @@
          As linhas são montadas por JS a partir de LAYERS — o HTML só reserva a
          casca, como todo o resto desta interface. -->
     <section id="layersPanel" class="layers glass hidden">
+      <!-- A tira é o acordeão MESTRE. Recolhido, o painel some inteiro e devolve
+           a altura para a linha do tempo — que é o que falta em tela baixa. O
+           resumo mora aqui, e não no rodapé, exatamente para continuar visível
+           quando tudo o mais estiver fechado: recolher não pode significar
+           esquecer o que está escolhido. -->
+      <button id="layersToggle" class="layers-bar" type="button">
+        <span class="layers-caret">⌄</span>
+        <span class="layers-eyebrow">Camadas do render</span>
+        <span id="setupSummary" class="setup-summary"></span>
+      </button>
       <div id="layerList" class="layer-list"></div>
       <div class="layers-actions">
-        <textarea id="setupNote" rows="1" placeholder="Observações para a finalização (opcional)"></textarea>
+        <textarea id="setupNote" rows="2" placeholder="Observações para a finalização (opcional)"></textarea>
         <button id="setupGo" class="btn primary">Confirmar e iniciar a finalização</button>
       </div>
-      <span id="setupSummary" class="setup-summary"></span>
     </section>
 
     <!-- Dois grupos por FUNÇÃO — reprodução em um, marcação e escala no outro.

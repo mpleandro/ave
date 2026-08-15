@@ -1400,6 +1400,15 @@ $('layersPanel').addEventListener('click', (e) => {
   // handler off them, or a click in the hex field would count as a style pick
   if (e.target.closest('#optAccent')) return;
 
+  // acordeão mestre: recolhe o painel inteiro e devolve a altura para a timeline
+  if (e.target.closest('#layersToggle')) {
+    const wrap = $('layersPanel');
+    wrap.classList.toggle('collapsed');
+    // a timeline acabou de ganhar (ou perder) altura — reajusta a escala nela
+    requestAnimationFrame(() => { fitZoom(); renderAll(); });
+    return;
+  }
+
   // abre/fecha a camada. Vem ANTES dos controles: o cabeçalho é um <button> e
   // engoliria o clique de qualquer forma, mas a ordem explícita evita que um
   // controle futuro colocado no cabeçalho passe a alternar a linha sem querer.

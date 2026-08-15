@@ -688,21 +688,60 @@ kbd {
    `overflow-y` aqui é seguro — este painel é IRMÃO do #timelinePanel, não
    ancestral. A regra de nunca criar contêiner de rolagem acima de .track-label
    vale para a cadeia da timeline, e continua valendo. */
+/* `container-type: inline-size` faz as regras abaixo medirem A LARGURA DESTE
+   PAINEL, não a da janela — e é a medida certa: no layout vertical o editor
+   ocupa metade da tela, então a mesma janela dá um painel largo em paisagem e
+   estreito em retrato. Uma media query acertaria um caso e erraria o outro.
+   O escopo é o painel de propósito: a linha do tempo fica FORA dele, e a regra
+   de nunca criar contenção acima de .track-label continua intacta. */
 .layers {
+  container-type: inline-size;
+  container-name: layers;
   flex: 0 1 auto;
   min-height: 0;
   max-height: 46vh;
   overflow: hidden;
-  padding: 12px 16px;
+  padding: 10px 14px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+/* recolhido, o painel encolhe até a tira e devolve a altura para a timeline */
+.layers.collapsed { max-height: none; flex: 0 0 auto; }
+.layers.collapsed .layer-list,
+.layers.collapsed .layers-actions { display: none; }
+
+.layers-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 2px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--stroke);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.layers.collapsed .layers-bar { border-bottom: 0; padding-bottom: 2px; }
+.layers-caret { font-size: 12px; color: var(--dim); transition: transform 0.2s var(--ease-out); }
+.layers.collapsed .layers-caret { transform: rotate(-90deg); }
+.layers-eyebrow {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--dim);
 }
 /* Quem rola é a LISTA, não o painel. Rolando o painel inteiro, o botão de
    confirmar descia junto e ficava fora da tela — o usuário abria uma camada e
    perdia a ação. Cabeçalho e rodapé ficam parados; só as linhas correm. */
 .layer-list { overflow-y: auto; min-height: 0; scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent; }
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent; align-content: start; }
 .layer-list::-webkit-scrollbar { width: 9px; }
 .layer-list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
@@ -716,7 +755,24 @@ kbd {
    O formato foi para a barra do topo, que é onde o desenho o coloca. */
 .layers-fmt { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--orange-soft); white-space: nowrap; }
 
-.layer-list { display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+.layer-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding-right: 2px; }
+
+/* DUAS COLUNAS quando o painel é largo. Em fila única, uma tela grande gastava
+   a largura toda para pôr o resumo lá na direita e ainda deixava metade das
+   linhas abaixo da dobra — espaçoso e incompleto ao mesmo tempo. */
+@container layers (min-width: 780px) {
+  .layer-list { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  /* a linha ABERTA atravessa as duas: as prévias de legenda são sete cartões
+     lado a lado e não cabem em meia coluna */
+  .layer.open { grid-column: 1 / -1; }
+}
+
+/* Painel estreito: o nome da camada é o que não pode faltar. O subtítulo é
+   explicação e o resumo truncado ("Realce · Empi…") não informa nada — some
+   com os dois antes de deixar o nome quebrar em três linhas. */
+@container layers (max-width: 430px) {
+  .layer-txt i, .layer-sum { display: none; }
+}
 
 .layer { border: 1px solid var(--stroke); border-radius: 12px; background: rgba(255, 255, 255, 0.02); }
 .layer.open { border-color: rgb(var(--orange-rgb) / 0.34); background: rgb(var(--orange-rgb) / 0.045); }
@@ -738,12 +794,14 @@ kbd {
 .layer-ico svg { width: 18px; height: 18px; fill: currentColor; display: block; }
 .layer.open .layer-ico { color: var(--orange); }
 .layer-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.layer-txt b, .layer-txt i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .layer-txt b { font-size: 13px; font-weight: 600; }
 .layer-txt i { font-size: 11px; font-style: normal; color: var(--dim); }
 /* O resumo é o que a linha FECHADA diz. Sem ele o painel vira seis portas
    iguais e o usuário precisa abrir todas para lembrar o que escolheu. */
 .layer-sum {
   flex: 0 1 auto;
+  min-width: 0;
   font-size: 11px;
   color: var(--orange-soft);
   text-align: right;
@@ -759,8 +817,13 @@ kbd {
 .layer.open .layer-body { display: flex; }
 .layer-soon { font-size: 11.5px; color: var(--dim); font-style: italic; }
 
-.layers-actions { display: flex; align-items: center; gap: 12px; }
+.layers-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.layers-actions textarea { flex: 1 1 240px; min-height: 52px; resize: vertical; }
 .layers-actions .btn { flex: 0 0 auto; }
+/* o resumo virou o conteúdo da tira, então perde a margem de rodapé */
+.setup-summary { flex: 1 1 auto; min-width: 0; font-size: 11px; font-weight: 400;
+  color: var(--dim); text-align: right; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
 
 .setup-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .group-head { display: flex; align-items: baseline; gap: 10px; }
@@ -1108,7 +1171,6 @@ kbd {
 
 .setup-actions { display: flex; align-items: center; gap: 12px; }
 .setup-actions .btn { flex: 0 0 auto; }
-.setup-summary { font-size: 11px; font-weight: 400; color: var(--dim); }
 
 /* ---------- help (was the footer hint strip) ---------- */
 .help-fab {
