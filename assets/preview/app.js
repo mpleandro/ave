@@ -25,7 +25,7 @@
  *    `font-variant-numeric: tabular-nums` silently does nothing and every digit
  *    change resized the readout, shoving the whole transport row sideways.
  *  - No glows anywhere — depth shadows are fine, coloured halos are not.
- *  - The style gate (STYLE_CATALOG → #styleSetup) stands BETWEEN the phases: when
+ *  - The style picks (STYLE_CATALOG → #layersPanel) live INSIDE Finalização: when
  *    state.awaitingStyle is true it replaces the stage entirely, so the choice of
  *    editing style / caption style / edit elements cannot be skipped. It saves to
  *    <edit>/preview_style.json (never preview_edits.json — different screens,
@@ -578,7 +578,11 @@ function buildStaticDemo(host, id) {
 
 const CAP_BUILDERS = { karaoke: buildKaraokeDemo, stacked: buildStackedDemo, scatter: buildScatterDemo };
 
-const LABEL_W = 48; // .track-label width (content x offset of lanes)
+// Largura da calha = deslocamento x das pistas dentro do conteúdo rolável.
+// Lida do token `--label-w` em vez de repetida aqui: era um número duplicado em
+// três arquivos, e errar a sincronia desloca a agulha e o scrub em silêncio —
+// nada quebra, só passa a apontar para o instante errado.
+const LABEL_W = parseFloat(tok('--label-w')) || 132;
 const MIN_SEG = 0.2; // s
 const THUMB_EVERY = 2.0;
 
@@ -636,6 +640,21 @@ const el = (tag, cls, parent) => {
   if (parent) parent.appendChild(e);
   return e;
 };
+
+const plural = (n) => `${n} camada${n === 1 ? '' : 's'}`;
+
+/* Contagem das trilhas fixas. Fica junto do render das pistas porque é a mesma
+   pergunta — quanta coisa tem aqui — só que para as pistas que existem no HTML
+   em vez de serem criadas por JS. */
+function refreshCounts() {
+  const put = (id, txt) => { const n = $(id); if (n) n.textContent = txt; };
+  const notes = (S.notes || []).length;
+  put('cntNotes', notes ? `${notes} marcação${notes === 1 ? '' : 'ões'}` : 'nenhuma');
+  put('cntCaptions', S.captions.length ? `${S.captions.length} deixas` : '—');
+  const takes = (S.draft || []).length;
+  put('cntVideo', takes ? `${takes} trecho${takes === 1 ? '' : 's'}` : '1 camada');
+  put('cntAudio', S.jcut && S.jcut.length ? '2 camadas (J-cut)' : '1 camada');
+}
 
 // ---------- draft layout (output-timeline positions) ----------
 /* Per-take J-cut geometry, in seconds. `lead` is how far the take's sound runs
@@ -799,8 +818,9 @@ async function applyState(data) {
   S.style = { ...defaultStyle(), ...(S.state.style || {}) };
   S.style.elements = { ...defaultStyle().elements, ...((S.state.style || {}).elements || {}) };
   $('setupNote').value = S.style.note || '';
-  // the skill opened the gate → land the user on the Estilo tab
-  if (S.state.awaitingStyle) S.tab = 'style';
+  // a skill pediu uma escolha de estilo → leva o usuário para a Finalização,
+  // onde o painel de camadas agora mora
+  if (S.state.awaitingStyle) S.tab = 2;
 
   const hasVideo = S.videoDuration > 0;
   $('playerWrap').classList.toggle('hidden', !hasVideo);
@@ -812,14 +832,13 @@ async function applyState(data) {
     loadThumbsMeta();
   }
 
-  // phase 2 data
+  // A Finalização abre quando há o que fazer nela: a Fase 2 existe no disco, OU
+  // há estilo a escolher. Esse segundo caso é o antigo portão — ele deixou de
+  // ser uma aba própria e virou o painel de camadas aqui dentro, porque escolher
+  // como o vídeo vai ficar é coisa que se faz olhando o vídeo.
   const tab2 = document.querySelector('[data-tab="2"]');
-  tab2.disabled = (S.state.phase || 1) < 2;
-  // Estilo opens when the catalog applies to this job: the skill asked for a
-  // pick, or one is already recorded. Before that there is nothing to choose.
-  const tabS = document.querySelector('[data-tab="style"]');
-  tabS.disabled = !S.state.awaitingStyle && !S.state.style;
-  if (tabS.disabled && S.tab === 'style') S.tab = 1;
+  tab2.disabled = (S.state.phase || 1) < 2 && !setupApplies();
+  if (tab2.disabled && S.tab === 2) S.tab = 1;
   document.querySelectorAll('.tab').forEach((x) => {
     x.classList.toggle('active', String(x.dataset.tab) === String(S.tab));
   });
@@ -1005,6 +1024,7 @@ function renderAll() {
   renderNotes();
   drawRuler();
   drawWave();
+  refreshCounts();
   updateScrollRange();
   positionNeedle();
 }
@@ -1027,7 +1047,7 @@ function renderNotes() {
   }
   const btn = $('btnMark');
   btn.classList.toggle('armed', S.pendingIn != null);
-  $('markText').textContent = S.pendingIn != null ? 'OUT' : 'IN';
+  $('markText').textContent = S.pendingIn != null ? 'Fim' : 'Início';
 }
 
 function toggleMark() {
@@ -1105,7 +1125,7 @@ const ACCENT_USERS = {headlines: ['realce', 'misto'], captions: ['stacked']};
 const ACCENT_DEFAULT = '#ff5200';
 
 function applyAccent() {
-  $('styleSetup').style.setProperty('--hl-accent', S.style.accent || ACCENT_DEFAULT);
+  $('layersPanel').style.setProperty('--hl-accent', S.style.accent || ACCENT_DEFAULT);
 }
 
 /* One spectral swatch (the OS picker) plus a hex field — no preset row. A grid of
@@ -1171,7 +1191,9 @@ function updateAccentNote() {
     ACCENT_USERS.headlines.includes(S.style.headline) && 'na headline',
     ACCENT_USERS.captions.includes(S.style.captions) && 'na legenda',
   ].filter(Boolean);
-  $('accentNote').textContent = where.length
+  const n = $('accentNote');
+  if (!n) return; // as linhas ainda não foram montadas — nada a atualizar
+  n.textContent = where.length
     ? `aplicada ${where.join(' e ')}`
     : 'os estilos escolhidos não usam destaque';
 }
@@ -1188,34 +1210,65 @@ function updateSummary() {
     (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
 }
 
-// The Estilo tab. It sits BETWEEN the phases and is always reachable once the
-// catalog applies to this job: changing the caption style after Fase 2 exists,
-// or ticking one more element and re-rendering, is normal editing — not a
-// decision the user gets exactly one shot at.
-let wasShowing = false; // gate was up on the previous render (for the re-fit)
+/* CAMADAS DO RENDER — as escolhas de estilo, agrupadas pelo que elas MEXEM no
+ * vídeo em vez de por qual widget as controla.
+ *
+ * O agrupamento antigo era o do catálogo: "tipo de edição", "estilo de
+ * headline", "estilo de legenda", "elementos". Isso descreve o formato do dado,
+ * não o ofício — e obrigava a varrer quatro blocos para responder "o que tem de
+ * texto neste vídeo?". Aqui cada linha é uma camada do render, e os controles
+ * que a afetam moram dentro dela, venham de onde vierem no catálogo.
+ *
+ * Uma linha sem controle NENHUM ainda aparece, com o motivo escrito. Some-la
+ * faria o painel prometer que a lista está completa. */
+const LAYERS = [
+  { id: 'texto', name: 'Texto & legendas', sub: 'Títulos, legendas, quebras de linha e destaques',
+    ico: 'text', accent: true, groups: ['headlines', 'captions'] },
+  { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
+    ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
+  { id: 'elementos', name: 'Elementos visuais', sub: 'Figurinhas, imagens, formas e gráficos',
+    ico: 'inserts', groups: ['edits'] },
+  { id: 'transicoes', name: 'Transições', sub: 'Cortes, fades, slides e transições entre clipes',
+    ico: 'captions', elements: ['flashCut'] },
+  { id: 'trilha', name: 'Trilha & mixagem', sub: 'Áudio, níveis, ducking e mixagem final',
+    ico: 'music', elements: ['musicAI'] },
+  { id: 'tratamento', name: 'Tratamento visual', sub: 'Cor, contraste, nitidez e efeitos',
+    ico: 'notes', soon: 'a cor é decidida na Decupagem, a partir do perfil detectado na fonte' },
+];
+
+const GROUP_TITLE = { edits: 'Tipo de edição', headlines: 'Estilo de headline', captions: 'Estilo de legenda' };
+/* TODAS nascem fechadas. Com uma aberta, ela sozinha enche o painel e as outras
+ * cinco ficam abaixo da dobra — o usuário não descobre que existem. Fechadas, a
+ * lista inteira cabe e cada linha já diz no resumo o que está escolhido. */
+const openLayers = new Set();
+
+let wasShowing = false; // painel estava aberto no render anterior (para o re-fit)
+
+/* Quais camadas o painel oferece. Antes o portão era uma tela cheia com
+ * `S.tab === 'style'`; agora ele vive DENTRO da Finalização, então a condição
+ * deixou de ser "que aba" e passou a ser "este trabalho tem estilo a escolher". */
+const setupApplies = () => !!(S.state.awaitingStyle || S.state.style);
 
 function renderSetup() {
-  const show = S.tab === 'style';
-  $('styleSetup').classList.toggle('hidden', !show);
+  const show = S.tab === 2 && setupApplies();
+  $('layersPanel').classList.toggle('hidden', !show);
   const hasVideo = S.videoDuration > 0;
-  $('stage').classList.toggle('hidden', show || !hasVideo);
-  $('emptyState').classList.toggle('hidden', hasVideo || show);
+  $('stage').classList.toggle('hidden', !hasVideo);
+  $('emptyState').classList.toggle('hidden', hasVideo);
 
   if (!show) {
-    capAnims = []; // stop stepping demos that are not on screen
-    // the timeline was display:none while the tab was up, so its panel had no
-    // width to fit against — re-fit once it is back on screen
+    capAnims = []; // para de animar demos que não estão na tela
     if (wasShowing && hasVideo) requestAnimationFrame(() => { fitZoom(); renderAll(); });
     wasShowing = false;
     return;
   }
-  if (!wasShowing) $('styleSetup').scrollTop = 0; // open at the top, always
   wasShowing = true;
 
   $('setupGo').textContent = S.state.awaitingStyle
     ? 'Confirmar e iniciar a finalização'
     : 'Salvar e refazer a finalização';
 
+  buildLayerRows();
   capAnims = [];
   const radios = (host, group, chosen) => {
     const opts = STYLE_CATALOG[group];
@@ -1253,29 +1306,112 @@ function renderSetup() {
   // var(), so the variable has to be in place when the previews first paint
   applyAccent();
 
-  radios($('optEdit'), 'edits', S.style.edit);
-  radios($('optHeadline'), 'headlines', S.style.headline);
-  radios($('optCaptions'), 'captions', S.style.captions);
-  renderAccents();
-
-  const host = $('optElements');
-  host.innerHTML = '';
-  for (const e of STYLE_CATALOG.elements) {
-    const on = !!S.style.elements[e.id];
-    const row = el('div', `chk${on ? ' on' : ''}`, host);
-    row.dataset.id = e.id;
-    el('div', 'chk-box', row);
-    el('div', 'chk-ico', row).innerHTML = e.icon || '';
-    el('div', 'chk-name', row).textContent = e.name;
+  const chosen = { edits: S.style.edit, headlines: S.style.headline, captions: S.style.captions };
+  for (const L of LAYERS) {
+    for (const g of L.groups || []) {
+      const host = $(`opt-${g}`);
+      if (host) radios(host, g, chosen[g]);
+    }
+    const eh = $(`optEl-${L.id}`);
+    if (!eh) continue;
+    eh.innerHTML = '';
+    for (const id of L.elements) {
+      const e = STYLE_CATALOG.elements.find((x) => x.id === id);
+      if (!e) continue;
+      const on = !!S.style.elements[e.id];
+      const row = el('div', `chk${on ? ' on' : ''}`, eh);
+      row.dataset.id = e.id;
+      el('div', 'chk-box', row);
+      el('div', 'chk-ico', row).innerHTML = e.icon || '';
+      el('div', 'chk-name', row).textContent = e.name;
+    }
   }
-
+  renderAccents();
+  refreshLayerSummaries();
   updateSummary();
 }
 
-$('styleSetup').addEventListener('click', (e) => {
+/* Monta as linhas do painel. Reconstrói do zero a cada render porque o estado
+ * que elas mostram (o que está escolhido) vive em S.style, não no DOM — e um
+ * diff incremental aqui só criaria uma segunda fonte de verdade. O que
+ * sobrevive à reconstrução é `openLayers`: qual linha está aberta é decisão do
+ * usuário, não do dado. */
+function buildLayerRows() {
+  const list = $('layerList');
+  list.innerHTML = '';
+  for (const L of LAYERS) {
+    const open = openLayers.has(L.id);
+    const row = el('div', `layer${open ? ' open' : ''}`, list);
+    row.dataset.layer = L.id;
+
+    const head = el('button', 'layer-head', row);
+    head.type = 'button';
+    head.dataset.layer = L.id;
+    el('span', 'layer-ico', head).innerHTML = ICON[L.ico] || '';
+    const txt = el('span', 'layer-txt', head);
+    el('b', '', txt).textContent = L.name;
+    el('i', '', txt).textContent = L.sub;
+    el('span', 'layer-sum', head).id = `sum-${L.id}`;
+    el('span', 'layer-caret', head).textContent = '›';
+
+    const body = el('div', 'layer-body', row);
+    if (L.soon) { el('div', 'layer-soon', body).textContent = L.soon; continue; }
+
+    if (L.accent) {
+      // O destaque vem ANTES dos estilos de texto: é a tinta com que eles
+      // pintam, e as duas prévias abaixo reagem a ele ao vivo.
+      const g = el('div', 'setup-group', body);
+      const h = el('div', 'group-head', g);
+      el('span', 'group-title', h).textContent = 'Cor de destaque';
+      el('span', 'group-note', h).id = 'accentNote';
+      el('div', 'swatches', g).id = 'optAccent';
+    }
+    for (const gid of L.groups || []) {
+      const g = el('div', 'setup-group', body);
+      el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
+      el('div', 'opt-grid', g).id = `opt-${gid}`;
+    }
+    if (L.elements) el('div', 'check-row', body).id = `optEl-${L.id}`;
+  }
+}
+
+/* O resumo na linha fechada. Sem ele, fechar uma camada esconde a escolha e o
+ * painel vira seis portas iguais — o usuário tem que abrir todas para lembrar
+ * o que decidiu. */
+function refreshLayerSummaries() {
+  for (const L of LAYERS) {
+    const n = $(`sum-${L.id}`);
+    if (!n) continue;
+    if (L.soon) { n.textContent = 'em breve'; continue; }
+    const bits = [];
+    for (const g of L.groups || []) bits.push(styleName(g, { edits: S.style.edit, headlines: S.style.headline, captions: S.style.captions }[g]));
+    if (L.elements) {
+      const on = L.elements.filter((id) => S.style.elements[id]);
+      bits.push(on.length
+        ? on.map((id) => (STYLE_CATALOG.elements.find((x) => x.id === id) || {}).name).join(', ')
+        : 'desligado');
+    }
+    n.textContent = bits.filter(Boolean).join(' · ');
+  }
+}
+
+$('layersPanel').addEventListener('click', (e) => {
   // the accent controls manage themselves (live, no rebuild) — keep the card
   // handler off them, or a click in the hex field would count as a style pick
   if (e.target.closest('#optAccent')) return;
+
+  // abre/fecha a camada. Vem ANTES dos controles: o cabeçalho é um <button> e
+  // engoliria o clique de qualquer forma, mas a ordem explícita evita que um
+  // controle futuro colocado no cabeçalho passe a alternar a linha sem querer.
+  const head = e.target.closest('.layer-head');
+  if (head) {
+    const id = head.dataset.layer;
+    if (openLayers.has(id)) openLayers.delete(id); else openLayers.add(id);
+    const row = head.closest('.layer');
+    row.classList.toggle('open', openLayers.has(id));
+    return; // sem renderSetup(): remontar mataria as animações das prévias à toa
+  }
+
   const opt = e.target.closest('.opt:not(.ghost):not(.unavailable)');
   if (opt) {
     const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
@@ -1421,7 +1557,7 @@ function renderJcutAudio() {
   const btn = $('jcutToggle');
   l1.innerHTML = ''; l2.innerHTML = '';
 
-  const has = !!(S.jcut && S.jcut.length && S.tab !== 'style');
+  const has = !!(S.jcut && S.jcut.length);
   // the caret only appears when there is a J-cut to expand; otherwise the chip
   // stays an ordinary track icon
   btn.classList.toggle('disclose', has);
@@ -1502,8 +1638,8 @@ function renderChips() {
   // kinds of edit, and mixing them on one lane hid the images entirely.
   const isText = (c) => c.kind === 'hook' || c.kind === 'word';
   const groups = [
-    { icon: 'text', cls: 'blue', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => isText(c)) },
-    { icon: 'inserts', cls: 'orange', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => !isText(c)) },
+    { icon: 'text', cls: 'blue', name: 'Texto', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => isText(c)) },
+    { icon: 'inserts', cls: 'orange', name: 'Elementos', items: S.insertsDraft.map((c, i) => ({ c, i })).filter(({ c }) => !isText(c)) },
   ];
 
   for (const g of groups) {
@@ -1519,11 +1655,20 @@ function renderChips() {
       assign.set(i, t);
     }
     const lanes = [];
-    for (let t = 0; t < Math.max(trackEnd.length, 1); t++) {
+    const nLanes = Math.max(trackEnd.length, 1);
+    for (let t = 0; t < nLanes; t++) {
       const trk = el('div', 'track', insertTracksEl);
-      const lab = el('div', 'track-label', trk);
-      // only the first lane of a group carries the icon; the rest are continuations
-      if (t === 0) el('span', `tl-chip ${g.cls}`, lab).innerHTML = ICON[g.icon];
+      // só a PRIMEIRA pista do grupo carrega ícone e nome; as outras recuam.
+      // Repetir o rótulo em cada pista faria quatro elementos empilhados
+      // parecerem quatro trilhas diferentes, que é o oposto do que são.
+      const lab = el('div', `track-label${t === 0 ? '' : ' cont'}`, trk);
+      if (t === 0) {
+        el('span', `tl-chip ${g.cls}`, lab).innerHTML = ICON[g.icon];
+        const txt = el('span', 'tl-text', lab);
+        el('span', 'tl-name', txt).textContent = g.name;
+        el('br', '', txt);
+        el('span', 'tl-count', txt).textContent = plural(nLanes);
+      }
       lanes.push(el('div', 'lane', trk));
     }
     for (const { c, i } of g.items) {
@@ -1543,7 +1688,12 @@ function renderChips() {
   const st = S.editData && S.editData.soundtrack;
   if (st && st.enabled) {
     const trk = el('div', 'track', insertTracksEl);
-    el('span', 'tl-chip soft', el('div', 'track-label', trk)).innerHTML = ICON.music;
+    const lab = el('div', 'track-label', trk);
+    el('span', 'tl-chip soft', lab).innerHTML = ICON.music;
+    const txt = el('span', 'tl-text', lab);
+    el('span', 'tl-name', txt).textContent = 'Trilha';
+    el('br', '', txt);
+    el('span', 'tl-count', txt).textContent = '1 camada';
     const lane = el('div', 'lane', trk);
     const chip = el('div', 'chip music', lane);
     const dur = S.editData.durationSec || S.videoDuration || draftTotal();
@@ -1635,6 +1785,14 @@ function applyOrientation() {
   const h = video.videoHeight;
   if (!w || !h) return;
   const portrait = h > w;
+  // o formato sai do quadro DECODIFICADO, não de um campo no state: é o mesmo
+  // número que decide o layout, então os dois nunca podem discordar
+  const fmt = $('layersFmt');
+  if (fmt) {
+    const g = (a, b) => (b ? g(b, a % b) : a);
+    const d = g(w, h) || 1;
+    fmt.textContent = `formato detectado · ${w / d}:${h / d}`;
+  }
   if (portrait === document.body.classList.contains('portrait')) return;
   document.body.classList.toggle('portrait', portrait);
   // the timeline's width just changed — re-fit after layout settles
@@ -1887,7 +2045,7 @@ document.querySelectorAll('.tab').forEach((tab) =>
     if (tab.disabled) return;
     document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
     tab.classList.add('active');
-    S.tab = tab.dataset.tab === 'style' ? 'style' : +tab.dataset.tab;
+    S.tab = +tab.dataset.tab;
     S.selected = -1;
     updateVideoSrc(); // Fase 2 plays the Phase-2 render when available
     renderAll();

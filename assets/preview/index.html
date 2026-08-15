@@ -26,6 +26,7 @@
     <div id="stateMessage" class="state-message"></div>
   </div>
   <div class="head-actions">
+    <span class="layers-fmt" id="layersFmt"></span>
     <span id="dirtyPill" class="pill hidden"><b id="dirtyCount">0</b> ajuste(s) não salvo(s)</span>
     <span id="savedPill" class="pill saved hidden">✓ salvo — peça ao Claude para aplicar</span>
     <button id="btnDiscard" class="btn ghost hidden">Descartar</button>
@@ -39,9 +40,6 @@
        saiu porque contava ao usuário em que ponto do fluxo do produto ele está —
        informação de bastidor — em vez de dizer o que se faz ali. -->
   <button class="tab active" data-tab="1">Decupagem</button>
-  <!-- o portão vive ENTRE as duas mesas e continua alcançável: trocar o estilo
-       depois da finalização pronta é uma vontade normal, não decisão de uma vez só -->
-  <button class="tab" data-tab="style">Estilo</button>
   <button class="tab" data-tab="2">Finalização</button>
 </nav>
 
@@ -54,52 +52,6 @@
     </div>
   </section>
 
-  <!-- The style tab: what the finish gets built as. Groups come from STYLE_CATALOG.
-       No descriptions anywhere — each preview renders the thing it names. -->
-  <section id="styleSetup" class="setup hidden">
-    <div class="setup-inner">
-      <div class="setup-head">
-        <h2>Como vamos montar a finalização?</h2>
-      </div>
-
-      <div class="setup-group">
-        <div class="group-head"><span class="group-title">Tipo de edição</span></div>
-        <div id="optEdit" class="opt-grid"></div>
-      </div>
-
-      <!-- Ahead of the text styles: the accent is what they paint with, so it is
-           set first and both preview groups below react to it. -->
-      <div class="setup-group">
-        <div class="group-head">
-          <span class="group-title">Cor de destaque</span>
-          <span class="group-note" id="accentNote"></span>
-        </div>
-        <div id="optAccent" class="swatches"></div>
-      </div>
-
-      <div class="setup-group">
-        <div class="group-head"><span class="group-title">Estilo de headline</span></div>
-        <div id="optHeadline" class="opt-grid"></div>
-      </div>
-
-      <div class="setup-group">
-        <div class="group-head"><span class="group-title">Estilo de legenda</span></div>
-        <div id="optCaptions" class="opt-grid"></div>
-      </div>
-
-      <div class="setup-group">
-        <div class="group-head"><span class="group-title">Elementos da edição</span></div>
-        <div id="optElements" class="check-row"></div>
-      </div>
-
-      <div class="setup-actions">
-        <textarea id="setupNote" rows="1" placeholder="Observações para a finalização (opcional)"></textarea>
-        <button id="setupGo" class="btn primary">Confirmar e iniciar a finalização</button>
-      </div>
-      <span id="setupSummary" class="setup-summary"></span>
-    </div>
-  </section>
-
   <div id="stage" class="stage">
   <section id="playerWrap" class="player-wrap">
     <div class="player-frame glass">
@@ -108,19 +60,42 @@
   </section>
 
   <div id="editorCol" class="editor-col">
+    <!-- CAMADAS DO RENDER — o antigo portão de Estilo, que era uma TELA INTEIRA
+         entre as fases e escondia o vídeo enquanto você escolhia como ele ia
+         ficar. Agora mora ao lado da imagem, dentro da Finalização: escolher um
+         estilo é uma coisa que se faz OLHANDO o material, não de memória.
+         As linhas são montadas por JS a partir de LAYERS — o HTML só reserva a
+         casca, como todo o resto desta interface. -->
+    <section id="layersPanel" class="layers glass hidden">
+      <div id="layerList" class="layer-list"></div>
+      <div class="layers-actions">
+        <textarea id="setupNote" rows="1" placeholder="Observações para a finalização (opcional)"></textarea>
+        <button id="setupGo" class="btn primary">Confirmar e iniciar a finalização</button>
+      </div>
+      <span id="setupSummary" class="setup-summary"></span>
+    </section>
+
+    <!-- Dois grupos por FUNÇÃO — reprodução em um, marcação e escala no outro.
+         Eles ficam lado a lado enquanto couber e quebram em duas linhas
+         centradas quando não couber; quem decide é o `flex-wrap` no CSS, medindo
+         a largura real da coluna. Numa fila rígida a barra empurrava o preview
+         em tela estreita, e o preview é o que não pode encolher. -->
     <div class="transport glass">
-      <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
-      <button id="btnMute" class="btn icon" title="Mudo"></button>
-      <span id="timeNow" class="time">0:00.00</span>
-      <span class="time dim">/</span>
-      <span id="timeTotal" class="time dim">0:00.00</span>
-      <button id="btnMark" class="btn mark" title="Marcar IN / OUT (tecla M)">
-        <span id="markIcon"></span><span id="markText">IN</span>
-      </button>
-      <div class="spacer"></div>
-      <span class="dim small">zoom</span>
-      <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline (centrado na agulha)">
-      <button id="btnFit" class="btn ghost small" title="Ajustar à janela">fit</button>
+      <div class="transport-row">
+        <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
+        <button id="btnMute" class="btn icon" title="Mudo"></button>
+        <span id="timeNow" class="time">0:00.00</span>
+        <span class="time dim">/</span>
+        <span id="timeTotal" class="time dim">0:00.00</span>
+      </div>
+      <div class="transport-row">
+        <button id="btnMark" class="btn mark" title="Marcar Início / Fim (tecla M)">
+          <span id="markIcon"></span><span id="markText">Início</span>
+        </button>
+        <span class="dim small">zoom</span>
+        <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline (centrado na agulha)">
+        <button id="btnFit" class="btn ghost small" title="Ajustar à janela">fit</button>
+      </div>
     </div>
 
     <section id="timelinePanel" class="timeline-panel glass">
@@ -130,21 +105,22 @@
         <div class="lane ruler-lane"><canvas id="ruler"></canvas></div>
       </div>
       <div class="track" id="trkNotes">
-        <div class="track-label"><span class="tl-chip notes" data-icon="notes" title="Marcações de ajuste"></span></div>
+        <div class="track-label"><span class="tl-chip notes" data-icon="notes" title="Marcações de ajuste"></span><span class="tl-text"><span class="tl-name">Marcações</span><br><span class="tl-count" id="cntNotes">nenhuma</span></span></div>
         <div class="lane notes-lane" id="laneNotes"></div>
       </div>
       <div id="trkCaptions" class="track hidden">
-        <div class="track-label"><span class="tl-chip blue" data-icon="captions" title="Legendas"></span></div>
+        <div class="track-label"><span class="tl-chip blue" data-icon="captions" title="Legendas"></span><span class="tl-text"><span class="tl-name">Legendas</span><br><span class="tl-count" id="cntCaptions">—</span></span></div>
         <div class="lane" id="laneCaptions"></div>
       </div>
       <div class="track">
-        <div class="track-label"><span class="tl-chip" data-icon="video" title="Vídeo"></span></div>
+        <div class="track-label"><span class="tl-chip" data-icon="video" title="Vídeo"></span><span class="tl-text"><span class="tl-name">Vídeo</span><br><span class="tl-count" id="cntVideo">1 camada</span></span></div>
         <div class="lane tall" id="laneVideo"></div>
       </div>
       <div class="track">
         <div class="track-label">
           <button class="tl-chip soft" id="jcutToggle" data-icon="audio"
                   title="Áudio (mix)" aria-expanded="false"></button>
+          <span class="tl-text"><span class="tl-name">Áudio</span><br><span class="tl-count" id="cntAudio">1 camada</span></span>
         </div>
         <div class="lane" id="laneAudio"><canvas id="wave"></canvas></div>
       </div>
@@ -155,11 +131,11 @@
            rides position:sticky on .track-label, and an overflow ancestor would
            make a new scroll container and strand it. -->
       <div class="track jcut-track hidden" id="trkAudioA1">
-        <div class="track-label"><span class="tl-chip soft ghost" data-icon="audio" title="A1"></span></div>
+        <div class="track-label cont"><span class="tl-chip soft ghost" data-icon="audio" title="A1"></span><span class="tl-text"><span class="tl-name">A1</span></span></div>
         <div class="lane jcut-lane" id="laneAudioA1"></div>
       </div>
       <div class="track jcut-track hidden" id="trkAudioA2">
-        <div class="track-label"><span class="tl-chip soft ghost" data-icon="audio" title="A2"></span></div>
+        <div class="track-label cont"><span class="tl-chip soft ghost" data-icon="audio" title="A2"></span><span class="tl-text"><span class="tl-name">A2</span></span></div>
         <div class="lane jcut-lane" id="laneAudioA2"></div>
       </div>
       <div id="insertTracks" class="hidden"></div>
@@ -183,7 +159,7 @@
   <ul class="help-list">
     <li><span><kbd>espaço</kbd></span><span>play / pause</span></li>
     <li><span><kbd>←</kbd><kbd>→</kbd></span><span>frame a frame · com <kbd>shift</kbd>, 1 segundo</span></li>
-    <li><span><kbd>M</kbd></span><span>marca <b>IN</b>, depois <b>OUT</b> — aí escreva o ajuste</span></li>
+    <li><span><kbd>M</kbd></span><span>marca o <b>Início</b>, depois o <b>Fim</b> — aí escreva o ajuste</span></li>
     <li><span><kbd>delete</kbd></span><span>remove o take selecionado</span></li>
     <li><span>arrastar</span><span>as <b>bordas</b> de um take ajustam o corte</span></li>
     <li><span>duplo-clique</span><span>num take desfaz o ajuste dele</span></li>

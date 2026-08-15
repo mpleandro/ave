@@ -58,6 +58,10 @@
   /* the timeline panel is a SOLID surface so the gutter mask can use the exact
      same colour and become invisible — see .track-label::before */
   --panel-bg: #142a42;
+  /* A largura da calha das trilhas. Existia TRÊS vezes — const no JS, flex do
+     rótulo e width do divisor — e o comentário no topo do app.js pedia para
+     mantê-las em sincronia à mão. Agora é um token só, e o JS lê ele. */
+  --label-w: 132px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -238,15 +242,25 @@ body.portrait .editor-col .transport { align-self: stretch; width: auto; }
   background: #000;
 }
 
+/* UMA linha quando cabe, DUAS centradas quando não cabe — decidido por
+   `flex-wrap`, não por media query. O ponto de quebra que importa é a largura
+   da COLUNA do editor, não a da janela: no layout vertical o editor ocupa
+   metade da tela, então a mesma janela pode caber numa linha em paisagem e não
+   caber em retrato. O wrap mede o espaço real e acerta os dois casos sozinho.
+
+   Não há `.spacer` aqui de propósito. Ele empurrava o zoom para a direita, o
+   que só faz sentido numa fila; com duas linhas ele desalinharia a de baixo. */
 .transport {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
+  justify-content: center;
+  gap: 8px 16px;
+  padding: 8px 14px;
   border-radius: 12px;
   width: min(860px, 96%);
 }
-.transport .spacer { flex: 1; }
+.transport-row { display: flex; align-items: center; gap: 10px; flex: 0 1 auto; }
 .time {
   font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
@@ -299,14 +313,35 @@ input[type="range"]::-webkit-slider-thumb {
 .track { display: flex; align-items: stretch; margin-bottom: 6px; }
 
 .track-label {
-  flex: 0 0 48px;
+  flex: 0 0 var(--label-w);
   display: flex;
   align-items: center;
-  justify-content: center; /* icon centred in the gutter */
+  gap: 9px;
+  padding-left: 10px;
   position: sticky;
   left: 0;
   z-index: 15;
 }
+
+/* Nome e contagem da trilha. O ícone sozinho dizia QUE TIPO de coisa está na
+   pista; o que faltava era QUANTA — com quatro camadas de elemento empilhadas,
+   a pista parece uma só e o usuário não sabe que há três embaixo. */
+/* `position: relative` NÃO é enfeite: a máscara da calha é um pseudo-elemento
+   absoluto (.track-label::before) e cobre qualquer filho ESTÁTICO. O .tl-chip
+   já carregava essa mesma linha pelo mesmo motivo. Sem ela o nome existe no
+   DOM, ocupa espaço e não aparece — some sem erro nenhum. */
+.tl-text { position: relative; min-width: 0; line-height: 1.15; }
+.tl-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-count { font-size: 9.5px; color: var(--dim); white-space: nowrap; }
+/* pistas de continuação de um grupo não repetem o nome — só recuam */
+.track-label.cont { padding-left: 51px; }
 
 /* The gutter mask. Painted in the panel's own colour, so it reads as "no
    background" while still hiding the lanes that scroll under it. It rides on the
@@ -331,7 +366,7 @@ input[type="range"]::-webkit-slider-thumb {
   top: -10px; /* eat the panel's vertical padding — the line runs edge to edge */
   bottom: -10px;
   left: 0;
-  width: 48px;
+  width: var(--label-w);
   border-right: 1px solid rgba(255, 255, 255, 0.1);
   pointer-events: none;
   /* above .track-label (15) — the gutter mask would otherwise paint over the
@@ -645,30 +680,87 @@ kbd {
 /* ---------- style setup (the gate between Fase 1 and Fase 2) ----------
    Shown INSTEAD of the stage, so the choice is a step and not a floating dialog
    the user can ignore. Everything here is built from STYLE_CATALOG in app.js. */
-.setup {
-  flex: 1 1 auto;
+/* ---------- painel de camadas do render ----------
+   Ele DIVIDE a coluna com a linha do tempo em vez de substituir a tela, que era
+   o que o portão de Estilo fazia. Por isso `flex: 0 1 auto` e um teto de altura:
+   aberto ele cede espaço, mas nunca engole a timeline.
+
+   `overflow-y` aqui é seguro — este painel é IRMÃO do #timelinePanel, não
+   ancestral. A regra de nunca criar contêiner de rolagem acima de .track-label
+   vale para a cadeia da timeline, e continua valendo. */
+.layers {
+  flex: 0 1 auto;
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+  max-height: 46vh;
+  overflow: hidden;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.setup::-webkit-scrollbar { width: 9px; }
-.setup::-webkit-scrollbar-thumb {
+/* Quem rola é a LISTA, não o painel. Rolando o painel inteiro, o botão de
+   confirmar descia junto e ficava fora da tela — o usuário abria uma camada e
+   perdia a ação. Cabeçalho e rodapé ficam parados; só as linhas correm. */
+.layer-list { overflow-y: auto; min-height: 0; scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent; }
+.layer-list::-webkit-scrollbar { width: 9px; }
+.layer-list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.setup-inner {
-  width: min(1200px, 100%);
-  margin: 0 auto;
-  padding: 2px 4px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 
-.setup-head h2 { font-family: var(--serif); font-weight: 400; font-size: 19px; letter-spacing: 0; }
+/* O título do painel saiu: a aba já se chama Finalização e as seis linhas se
+   explicam sozinhas — o cabeçalho só comia altura que a lista queria.
+   O formato foi para a barra do topo, que é onde o desenho o coloca. */
+.layers-fmt { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--orange-soft); white-space: nowrap; }
+
+.layer-list { display: flex; flex-direction: column; gap: 6px; padding-right: 2px; }
+
+.layer { border: 1px solid var(--stroke); border-radius: 12px; background: rgba(255, 255, 255, 0.02); }
+.layer.open { border-color: rgb(var(--orange-rgb) / 0.34); background: rgb(var(--orange-rgb) / 0.045); }
+
+.layer-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.layer-ico { flex: 0 0 auto; width: 18px; height: 18px; color: var(--dim); }
+.layer-ico svg { width: 18px; height: 18px; fill: currentColor; display: block; }
+.layer.open .layer-ico { color: var(--orange); }
+.layer-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.layer-txt b { font-size: 13px; font-weight: 600; }
+.layer-txt i { font-size: 11px; font-style: normal; color: var(--dim); }
+/* O resumo é o que a linha FECHADA diz. Sem ele o painel vira seis portas
+   iguais e o usuário precisa abrir todas para lembrar o que escolheu. */
+.layer-sum {
+  flex: 0 1 auto;
+  font-size: 11px;
+  color: var(--orange-soft);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layer.open .layer-sum { display: none; }
+.layer-caret { flex: 0 0 auto; font-size: 15px; color: var(--dim); transition: transform 0.2s var(--ease-out); }
+.layer.open .layer-caret { transform: rotate(90deg); }
+
+.layer-body { display: none; padding: 2px 13px 14px; flex-direction: column; gap: 14px; }
+.layer.open .layer-body { display: flex; }
+.layer-soon { font-size: 11.5px; color: var(--dim); font-style: italic; }
+
+.layers-actions { display: flex; align-items: center; gap: 12px; }
+.layers-actions .btn { flex: 0 0 auto; }
 
 .setup-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .group-head { display: flex; align-items: baseline; gap: 10px; }
