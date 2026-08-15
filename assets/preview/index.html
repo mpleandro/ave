@@ -62,6 +62,16 @@
            tela. O render continua sendo a palavra final — isto é o que deixa
            escolher um estilo sem esperar dois minutos para vê-lo. -->
       <div id="liveOverlay" class="live-overlay"></div>
+      <!-- REPRODUÇÃO sobre a imagem. Play, som e relógio pertencem ao player —
+           numa barra separada eles gastavam uma faixa inteira da coluna para
+           dizer coisas que só fazem sentido olhando o vídeo. -->
+      <div class="player-hud">
+        <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
+        <button id="btnMute" class="btn icon" title="Mudo"></button>
+        <span id="timeNow" class="time">0:00.00</span>
+        <span class="time dim">/</span>
+        <span id="timeTotal" class="time dim">0:00.00</span>
+      </div>
     </div>
   </section>
 
@@ -83,35 +93,28 @@
         <span class="layers-eyebrow">Camadas do render</span>
         <span id="setupSummary" class="setup-summary"></span>
       </button>
-      <div id="layerTabs" class="layer-tabs"></div>
-      <div id="layerBody" class="layer-body"></div>
+      <div class="layers-body-wrap">
+        <div id="layerTabs" class="layer-tabs"></div>
+        <div id="layerBody" class="layer-body"></div>
+      </div>
       <div class="layers-actions">
         <textarea id="setupNote" rows="2" placeholder="Observações para a finalização (opcional)"></textarea>
-        <button id="setupGo" class="btn primary">Confirmar e iniciar a finalização</button>
+        <button id="setupGo" class="btn primary">Visualizar</button>
       </div>
     </section>
 
-    <!-- Dois grupos por FUNÇÃO — reprodução em um, marcação e escala no outro.
-         Eles ficam lado a lado enquanto couber e quebram em duas linhas
-         centradas quando não couber; quem decide é o `flex-wrap` no CSS, medindo
-         a largura real da coluna. Numa fila rígida a barra empurrava o preview
-         em tela estreita, e o preview é o que não pode encolher. -->
-    <div class="transport glass">
-      <div class="transport-row">
-        <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
-        <button id="btnMute" class="btn icon" title="Mudo"></button>
-        <span id="timeNow" class="time">0:00.00</span>
-        <span class="time dim">/</span>
-        <span id="timeTotal" class="time dim">0:00.00</span>
-      </div>
-      <div class="transport-row">
-        <button id="btnMark" class="btn mark" title="Marcar Início / Fim (tecla M)">
-          <span id="markIcon"></span><span id="markText">Início</span>
-        </button>
-        <span class="dim small">zoom</span>
-        <input id="zoom" type="range" min="0" max="100" value="0" title="Zoom da timeline (centrado na agulha)">
-        <button id="btnFit" class="btn ghost small" title="Ajustar à janela">fit</button>
-      </div>
+    <!-- Só o que pertence à LINHA DO TEMPO: marcar e escala. A reprodução
+         subiu para cima da imagem, e esta barra ficou rasa o bastante para
+         viver colada nas trilhas, em vez de tomar uma faixa da coluna. -->
+    <div class="tlbar">
+      <button id="btnMark" class="btn mark" title="Marcar Início / Fim (tecla M)">
+        <span id="markIcon"></span><span id="markText">Marcar</span>
+      </button>
+      <div class="spacer"></div>
+      <button id="btnZoomOut" class="btn icon" title="Afastar"></button>
+      <button id="btnZoomIn" class="btn icon" title="Aproximar"></button>
+      <button id="btnFit" class="btn icon" title="Ajustar à janela"></button>
+      <input id="zoom" type="range" min="0" max="100" value="0" class="hidden" aria-hidden="true">
     </div>
 
     <section id="timelinePanel" class="timeline-panel glass">

@@ -78,6 +78,9 @@ const ICON = {
   music: '<svg viewBox="0 0 16 16"><path d="M13.1 1.9 6.6 3.5a.8.8 0 0 0-.6.78v6.06a2.25 2.25 0 1 0 1.5 2.12V6.6l5-1.22v3.5a2.25 2.25 0 1 0 1.5 2.12V2.68a.8.8 0 0 0-.9-.78z"/></svg>',
   text: '<svg viewBox="0 0 16 16"><path d="M2 2.6h12v2.5h-1.5V4.1H8.75v8.1h1.6v1.3H5.65v-1.3h1.6V4.1H3.5v1H2V2.6z"/></svg>',
   notes: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
+  zoomIn: '<svg viewBox="0 0 16 16"><path d="M7 1.6a5.4 5.4 0 1 0 3.3 9.7l3.2 3.2a.9.9 0 0 0 1.3-1.3l-3.2-3.2A5.4 5.4 0 0 0 7 1.6zm0 1.8a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2zm-.9 1.5v1.2H4.9v1.8h1.2v1.2h1.8V7.9h1.2V6.1H7.9V4.9H6.1z"/></svg>',
+  zoomOut: '<svg viewBox="0 0 16 16"><path d="M7 1.6a5.4 5.4 0 1 0 3.3 9.7l3.2 3.2a.9.9 0 0 0 1.3-1.3l-3.2-3.2A5.4 5.4 0 0 0 7 1.6zm0 1.8a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2zM4.9 6.1v1.8h4.2V6.1H4.9z"/></svg>',
+  fit: '<svg viewBox="0 0 16 16"><path d="M2 2h4.2v1.8H3.8v2.4H2V2zm7.8 0H14v4.2h-1.8V3.8H9.8V2zM2 9.8h1.8v2.4h2.4V14H2V9.8zm10.2 0H14V14H9.8v-1.8h2.4V9.8z"/></svg>',
   flag: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
 };
 
@@ -1047,7 +1050,7 @@ function renderNotes() {
   }
   const btn = $('btnMark');
   btn.classList.toggle('armed', S.pendingIn != null);
-  $('markText').textContent = S.pendingIn != null ? 'Fim' : 'Início';
+  $('markText').textContent = S.pendingIn != null ? 'Fim' : 'Marcar';
 }
 
 function toggleMark() {
@@ -1268,9 +1271,12 @@ function renderSetup() {
   }
   wasShowing = true;
 
-  $('setupGo').textContent = S.state.awaitingStyle
-    ? 'Confirmar e iniciar a finalização'
-    : 'Salvar e refazer a finalização';
+  // O texto no HTML é só o estado inicial — quem manda é esta linha, e foi por
+  // isso que trocar o rótulo no HTML sozinho não teve efeito nenhum.
+  $('setupGo').textContent = S.state.awaitingStyle ? 'Visualizar' : 'Refazer';
+  $('setupGo').title = S.state.awaitingStyle
+    ? 'Monta a finalização com estas escolhas'
+    : 'Refaz a finalização com as escolhas atuais';
 
   buildLayerRows();
   capAnims = [];
@@ -1358,7 +1364,9 @@ function buildLayerRows() {
   }
 
   const L = LAYERS.find((x) => x.id === activeLayer) || LAYERS[0];
-  el('div', 'layer-hint', body).textContent = L.sub;
+  const hint = el('div', 'layer-hint', body);
+  el('b', '', hint).textContent = L.name;
+  hint.append(` — ${L.sub}`);
   if (L.soon) { el('div', 'layer-soon', body).textContent = L.soon; return; }
 
   if (L.accent) {
@@ -2155,6 +2163,20 @@ $('zoom').addEventListener('input', (e) => setZoom(+e.target.value));
 
 // ---------- correction markers: button, chips, editor ----------
 $('markIcon').innerHTML = ICON.flag;
+$('btnZoomIn').innerHTML = ICON.zoomIn;
+$('btnZoomOut').innerHTML = ICON.zoomOut;
+$('btnFit').innerHTML = ICON.fit;
+
+/* Os botões movem o MESMO estado que a barra deslizante movia — a barra virou
+   um input escondido para não duplicar a lógica de ancoragem na agulha, que é
+   o que faz o zoom não jogar o usuário para outro trecho do vídeo. */
+const zoomStep = (dir) => {
+  const z = $('zoom');
+  z.value = Math.max(0, Math.min(100, (+z.value || 0) + dir * 12));
+  z.dispatchEvent(new Event('input'));
+};
+$('btnZoomIn').addEventListener('click', () => zoomStep(1));
+$('btnZoomOut').addEventListener('click', () => zoomStep(-1));
 $('btnMark').addEventListener('click', toggleMark);
 $('laneNotes').addEventListener('click', (e) => {
   const chip = e.target.closest('.note-chip');

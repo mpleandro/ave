@@ -243,25 +243,13 @@ body.portrait .editor-col .transport { align-self: stretch; width: auto; }
   background: #000;
 }
 
-/* UMA linha quando cabe, DUAS centradas quando não cabe — decidido por
-   `flex-wrap`, não por media query. O ponto de quebra que importa é a largura
-   da COLUNA do editor, não a da janela: no layout vertical o editor ocupa
-   metade da tela, então a mesma janela pode caber numa linha em paisagem e não
-   caber em retrato. O wrap mede o espaço real e acerta os dois casos sozinho.
+/* A barra da LINHA DO TEMPO. Rasa e colada nas trilhas: o que sobrou aqui é
+   marcar e mudar a escala, e nada disso pede uma faixa própria da coluna.
+   A barra deslizante de zoom virou três botões — ela ocupava 140px para fazer
+   o que dois ícones fazem, e a precisão dela nunca foi usada. */
+.tlbar { display: flex; align-items: center; gap: 6px; padding: 0 2px; }
+.tlbar .spacer { flex: 1; }
 
-   Não há `.spacer` aqui de propósito. Ele empurrava o zoom para a direita, o
-   que só faz sentido numa fila; com duas linhas ele desalinharia a de baixo. */
-.transport {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 8px 16px;
-  padding: 8px 14px;
-  border-radius: 12px;
-  width: min(860px, 96%);
-}
-.transport-row { display: flex; align-items: center; gap: 10px; flex: 0 1 auto; }
 .time {
   font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
@@ -709,8 +697,7 @@ kbd {
 }
 /* recolhido, o painel encolhe até a tira e devolve a altura para a timeline */
 .layers.collapsed { max-height: none; flex: 0 0 auto; }
-.layers.collapsed .layer-tabs,
-.layers.collapsed .layer-body,
+.layers.collapsed .layers-body-wrap,
 .layers.collapsed .layers-actions { display: none; }
 
 .layers-bar {
@@ -740,6 +727,7 @@ kbd {
   color: var(--dim);
 }
 /* A FAIXA de camadas: seis botões, um selecionado por vez. */
+.layers-body-wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 .layer-tabs { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; }
 .layer-chip {
   display: flex;
@@ -774,8 +762,13 @@ kbd {
    dentro do layout e empurrava a linha do tempo e o preview a cada clique.
    Aqui a área não muda de tamanho nunca; muda só o que está dentro. */
 .layer-body {
-  flex: 0 0 auto;
-  height: clamp(148px, 21vh, 230px);
+  /* CEDE altura em vez de fixá-la. Com altura rígida, numa tela baixa a soma
+     faixa+inspetor+ação estourava o teto do painel e o botão era cortado pelo
+     overflow — sumia sem aviso. Agora quem encolhe é o inspetor, que tem
+     rolagem própria; a ação é a última coisa a perder espaço. */
+  flex: 1 1 auto;
+  min-height: 96px;
+  max-height: 230px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -792,7 +785,9 @@ kbd {
   border: 2px solid transparent;
   background-clip: padding-box;
 }
+/* Em modo ícone esta linha é o ÚNICO lugar que nomeia a camada aberta. */
 .layer-hint { font-size: 11px; color: var(--dim); }
+.layer-hint b { color: var(--text); font-weight: 600; }
 .layer-soon { font-size: 11.5px; color: var(--dim); font-style: italic; }
 
 .layers-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
@@ -1363,11 +1358,56 @@ button.tl-chip:disabled { cursor: default; }
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 6px;
+  bottom: 58px; /* acima do HUD de reprodução, que agora mora no rodapé */
   text-align: center;
   font-size: 10px;
   letter-spacing: 1px;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.5);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+
+/* ---------- reprodução sobre a imagem ---------- */
+.player-hud {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(8, 23, 38, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.player-hud .time { font-size: 11.5px; }
+.player-hud .btn.icon { padding: 6px 9px; }
+
+/* ---------- painel largo: lista à esquerda, inspetor à direita ----------
+   Em coluna, as seis camadas cabem sem competir com o inspetor pela mesma
+   altura, e o grupo aberto ganha a coluna inteira para rolar dentro. */
+@container layers (min-width: 720px) {
+  .layers-body-wrap { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 14px; }
+  .layer-tabs { flex-direction: column; align-items: stretch; }
+  .layer-chip { justify-content: flex-start; }
+  .layer-body { border-top: 0; border-left: 1px solid var(--stroke); padding: 0 2px 2px 14px; }
+}
+
+/* ---------- painel estreito: SÓ os ícones ----------
+   Seis nomes numa faixa estreita quebram em três linhas e comem a altura que o
+   inspetor precisa. O ícone identifica a camada; o nome de quem está aberto
+   aparece no inspetor logo abaixo. */
+/* Abaixo do ponto da coluna lateral existe UM modo só: fila de ícones.
+   Deixar os nomes nesta faixa produzia três linhas de botões — mais altura
+   gasta em rótulo do que o inspetor inteiro tem para trabalhar. Quem diz o nome
+   da camada aberta é a linha de dica logo abaixo. */
+@container layers (max-width: 719px) {
+  .layer-chip-name, .layer-chip-sum { display: none; }
+  .layer-chip { padding: 8px 11px; }
+  .layer-tabs { flex-wrap: nowrap; }
 }
