@@ -709,7 +709,8 @@ kbd {
 }
 /* recolhido, o painel encolhe até a tira e devolve a altura para a timeline */
 .layers.collapsed { max-height: none; flex: 0 0 auto; }
-.layers.collapsed .layer-list,
+.layers.collapsed .layer-tabs,
+.layers.collapsed .layer-body,
 .layers.collapsed .layers-actions { display: none; }
 
 .layers-bar {
@@ -738,84 +739,60 @@ kbd {
   text-transform: uppercase;
   color: var(--dim);
 }
-/* Quem rola é a LISTA, não o painel. Rolando o painel inteiro, o botão de
-   confirmar descia junto e ficava fora da tela — o usuário abria uma camada e
-   perdia a ação. Cabeçalho e rodapé ficam parados; só as linhas correm. */
-.layer-list { overflow-y: auto; min-height: 0; scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent; align-content: start; }
-.layer-list::-webkit-scrollbar { width: 9px; }
-.layer-list::-webkit-scrollbar-thumb {
+/* A FAIXA de camadas: seis botões, um selecionado por vez. */
+.layer-tabs { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 6px; }
+.layer-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+}
+.layer-chip:hover { color: var(--text); }
+.layer-chip.on {
+  color: var(--text);
+  border-color: rgb(var(--orange-rgb) / 0.5);
+  background: rgb(var(--orange-rgb) / 0.08);
+}
+.layer-chip .layer-ico { flex: 0 0 auto; width: 15px; height: 15px; color: inherit; }
+.layer-chip .layer-ico svg { width: 15px; height: 15px; fill: currentColor; display: block; }
+.layer-chip-name { font-weight: 600; white-space: nowrap; }
+.layer-chip-sum { font-size: 10.5px; color: var(--orange-soft); white-space: nowrap; }
+.layer-chip.on .layer-chip-sum { color: var(--orange); }
+/* faixa estreita: o nome é o que fica — o resumo completo já está na tira */
+@container layers (max-width: 620px) { .layer-chip-sum { display: none; } }
+
+/* O INSPETOR. Altura FIXA, e é o ponto inteiro da mudança: trocar de camada não
+   pode redimensionar a mesa de trabalho. O acordeão anterior crescia para
+   dentro do layout e empurrava a linha do tempo e o preview a cada clique.
+   Aqui a área não muda de tamanho nunca; muda só o que está dentro. */
+.layer-body {
+  flex: 0 0 auto;
+  height: clamp(148px, 21vh, 230px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 2px 2px;
+  border-top: 1px solid var(--stroke);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.layer-body::-webkit-scrollbar { width: 9px; }
+.layer-body::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-
-/* O título do painel saiu: a aba já se chama Finalização e as seis linhas se
-   explicam sozinhas — o cabeçalho só comia altura que a lista queria.
-   O formato foi para a barra do topo, que é onde o desenho o coloca. */
-.layers-fmt { font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--orange-soft); white-space: nowrap; }
-
-.layer-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding-right: 2px; }
-
-/* DUAS COLUNAS quando o painel é largo. Em fila única, uma tela grande gastava
-   a largura toda para pôr o resumo lá na direita e ainda deixava metade das
-   linhas abaixo da dobra — espaçoso e incompleto ao mesmo tempo. */
-@container layers (min-width: 780px) {
-  .layer-list { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  /* a linha ABERTA atravessa as duas: as prévias de legenda são sete cartões
-     lado a lado e não cabem em meia coluna */
-  .layer.open { grid-column: 1 / -1; }
-}
-
-/* Painel estreito: o nome da camada é o que não pode faltar. O subtítulo é
-   explicação e o resumo truncado ("Realce · Empi…") não informa nada — some
-   com os dois antes de deixar o nome quebrar em três linhas. */
-@container layers (max-width: 430px) {
-  .layer-txt i, .layer-sum { display: none; }
-}
-
-.layer { border: 1px solid var(--stroke); border-radius: 12px; background: rgba(255, 255, 255, 0.02); }
-.layer.open { border-color: rgb(var(--orange-rgb) / 0.34); background: rgb(var(--orange-rgb) / 0.045); }
-
-.layer-head {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 13px;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.layer-ico { flex: 0 0 auto; width: 18px; height: 18px; color: var(--dim); }
-.layer-ico svg { width: 18px; height: 18px; fill: currentColor; display: block; }
-.layer.open .layer-ico { color: var(--orange); }
-.layer-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.layer-txt b, .layer-txt i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.layer-txt b { font-size: 13px; font-weight: 600; }
-.layer-txt i { font-size: 11px; font-style: normal; color: var(--dim); }
-/* O resumo é o que a linha FECHADA diz. Sem ele o painel vira seis portas
-   iguais e o usuário precisa abrir todas para lembrar o que escolheu. */
-.layer-sum {
-  flex: 0 1 auto;
-  min-width: 0;
-  font-size: 11px;
-  color: var(--orange-soft);
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.layer.open .layer-sum { display: none; }
-.layer-caret { flex: 0 0 auto; font-size: 15px; color: var(--dim); transition: transform 0.2s var(--ease-out); }
-.layer.open .layer-caret { transform: rotate(90deg); }
-
-.layer-body { display: none; padding: 2px 13px 14px; flex-direction: column; gap: 14px; }
-.layer.open .layer-body { display: flex; }
+.layer-hint { font-size: 11px; color: var(--dim); }
 .layer-soon { font-size: 11.5px; color: var(--dim); font-style: italic; }
 
 .layers-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }

@@ -1223,7 +1223,9 @@ function updateSummary() {
  * faria o painel prometer que a lista está completa. */
 const LAYERS = [
   { id: 'texto', name: 'Texto & legendas', sub: 'Títulos, legendas, quebras de linha e destaques',
-    ico: 'text', accent: true, groups: ['headlines', 'captions'] },
+    // legenda ANTES de headline: é o controle que mais se mexe, e a área do
+    // inspetor tem altura fixa — o que vem depois exige rolagem
+    ico: 'text', accent: true, groups: ['captions', 'headlines'] },
   { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
     ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
   { id: 'elementos', name: 'Elementos visuais', sub: 'Figurinhas, imagens, formas e gráficos',
@@ -1237,10 +1239,12 @@ const LAYERS = [
 ];
 
 const GROUP_TITLE = { edits: 'Tipo de edição', headlines: 'Estilo de headline', captions: 'Estilo de legenda' };
-/* TODAS nascem fechadas. Com uma aberta, ela sozinha enche o painel e as outras
- * cinco ficam abaixo da dobra — o usuário não descobre que existem. Fechadas, a
- * lista inteira cabe e cada linha já diz no resumo o que está escolhido. */
-const openLayers = new Set();
+/* Uma camada por vez, num INSPETOR de altura fixa — o modelo de NLE.
+ * O acordeão anterior crescia para dentro do layout: cada clique mudava a
+ * altura do painel e empurrava a linha do tempo e o preview. Trocar de camada
+ * não é redimensionar a mesa de trabalho. Aqui a área não muda de tamanho
+ * nunca; só muda o que está dentro dela. */
+let activeLayer = 'texto';
 
 let wasShowing = false; // painel estava aberto no render anterior (para o re-fit)
 
@@ -1333,53 +1337,49 @@ function renderSetup() {
   renderLive();
 }
 
-/* Monta as linhas do painel. Reconstrói do zero a cada render porque o estado
- * que elas mostram (o que está escolhido) vive em S.style, não no DOM — e um
- * diff incremental aqui só criaria uma segunda fonte de verdade. O que
- * sobrevive à reconstrução é `openLayers`: qual linha está aberta é decisão do
- * usuário, não do dado. */
+/* Monta a faixa de camadas e o corpo do inspetor. Reconstrói do zero a cada
+ * render porque o estado que ele mostra (o que está escolhido) vive em S.style,
+ * não no DOM — um diff incremental aqui só criaria uma segunda fonte de verdade.
+ * O que sobrevive é `activeLayer`: qual camada está aberta é decisão do usuário. */
 function buildLayerRows() {
-  const list = $('layerList');
-  list.innerHTML = '';
+  const tabs = $('layerTabs');
+  const body = $('layerBody');
+  tabs.innerHTML = '';
+  body.innerHTML = '';
+
   for (const L of LAYERS) {
-    const open = openLayers.has(L.id);
-    const row = el('div', `layer${open ? ' open' : ''}`, list);
-    row.dataset.layer = L.id;
-
-    const head = el('button', 'layer-head', row);
-    head.type = 'button';
-    head.dataset.layer = L.id;
-    el('span', 'layer-ico', head).innerHTML = ICON[L.ico] || '';
-    const txt = el('span', 'layer-txt', head);
-    el('b', '', txt).textContent = L.name;
-    el('i', '', txt).textContent = L.sub;
-    el('span', 'layer-sum', head).id = `sum-${L.id}`;
-    el('span', 'layer-caret', head).textContent = '›';
-
-    const body = el('div', 'layer-body', row);
-    if (L.soon) { el('div', 'layer-soon', body).textContent = L.soon; continue; }
-
-    if (L.accent) {
-      // O destaque vem ANTES dos estilos de texto: é a tinta com que eles
-      // pintam, e as duas prévias abaixo reagem a ele ao vivo.
-      const g = el('div', 'setup-group', body);
-      const h = el('div', 'group-head', g);
-      el('span', 'group-title', h).textContent = 'Cor de destaque';
-      el('span', 'group-note', h).id = 'accentNote';
-      el('div', 'swatches', g).id = 'optAccent';
-    }
-    for (const gid of L.groups || []) {
-      const g = el('div', 'setup-group', body);
-      el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
-      el('div', 'opt-grid', g).id = `opt-${gid}`;
-    }
-    if (L.elements) el('div', 'check-row', body).id = `optEl-${L.id}`;
+    const chip = el('button', `layer-chip${L.id === activeLayer ? ' on' : ''}`, tabs);
+    chip.type = 'button';
+    chip.dataset.layer = L.id;
+    chip.title = L.sub;
+    el('span', 'layer-ico', chip).innerHTML = ICON[L.ico] || '';
+    el('span', 'layer-chip-name', chip).textContent = L.name;
+    el('span', 'layer-chip-sum', chip).id = `sum-${L.id}`;
   }
+
+  const L = LAYERS.find((x) => x.id === activeLayer) || LAYERS[0];
+  el('div', 'layer-hint', body).textContent = L.sub;
+  if (L.soon) { el('div', 'layer-soon', body).textContent = L.soon; return; }
+
+  if (L.accent) {
+    // O destaque vem ANTES dos estilos de texto: é a tinta com que eles pintam,
+    // e as prévias abaixo — inclusive a que está sobre o vídeo — reagem a ele.
+    const g = el('div', 'setup-group', body);
+    const h = el('div', 'group-head', g);
+    el('span', 'group-title', h).textContent = 'Cor de destaque';
+    el('span', 'group-note', h).id = 'accentNote';
+    el('div', 'swatches', g).id = 'optAccent';
+  }
+  for (const gid of L.groups || []) {
+    const g = el('div', 'setup-group', body);
+    el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
+    el('div', 'opt-grid', g).id = `opt-${gid}`;
+  }
+  if (L.elements) el('div', 'check-row', body).id = `optEl-${L.id}`;
 }
 
-/* O resumo na linha fechada. Sem ele, fechar uma camada esconde a escolha e o
- * painel vira seis portas iguais — o usuário tem que abrir todas para lembrar
- * o que decidiu. */
+/* O resumo no chip. Sem ele a faixa vira seis botões iguais e o usuário precisa
+ * visitar todos para lembrar o que decidiu. */
 function refreshLayerSummaries() {
   for (const L of LAYERS) {
     const n = $(`sum-${L.id}`);
@@ -1389,9 +1389,7 @@ function refreshLayerSummaries() {
     for (const g of L.groups || []) bits.push(styleName(g, { edits: S.style.edit, headlines: S.style.headline, captions: S.style.captions }[g]));
     if (L.elements) {
       const on = L.elements.filter((id) => S.style.elements[id]);
-      bits.push(on.length
-        ? on.map((id) => (STYLE_CATALOG.elements.find((x) => x.id === id) || {}).name).join(', ')
-        : 'desligado');
+      bits.push(on.length ? `${on.length} ativo${on.length === 1 ? '' : 's'}` : 'desligado');
     }
     n.textContent = bits.filter(Boolean).join(' · ');
   }
@@ -1414,13 +1412,11 @@ $('layersPanel').addEventListener('click', (e) => {
   // abre/fecha a camada. Vem ANTES dos controles: o cabeçalho é um <button> e
   // engoliria o clique de qualquer forma, mas a ordem explícita evita que um
   // controle futuro colocado no cabeçalho passe a alternar a linha sem querer.
-  const head = e.target.closest('.layer-head');
-  if (head) {
-    const id = head.dataset.layer;
-    if (openLayers.has(id)) openLayers.delete(id); else openLayers.add(id);
-    const row = head.closest('.layer');
-    row.classList.toggle('open', openLayers.has(id));
-    return; // sem renderSetup(): remontar mataria as animações das prévias à toa
+  const chip = e.target.closest('.layer-chip');
+  if (chip) {
+    activeLayer = chip.dataset.layer;
+    renderSetup();
+    return;
   }
 
   const opt = e.target.closest('.opt:not(.ghost):not(.unavailable)');
@@ -1430,7 +1426,7 @@ $('layersPanel').addEventListener('click', (e) => {
     renderSetup();
     return;
   }
-  const chk = e.target.closest('.chk');
+  const chk = e.target.closest('.chk:not(.layer-chip)');
   if (chk) {
     S.style.elements[chk.dataset.id] = !S.style.elements[chk.dataset.id];
     renderSetup();
