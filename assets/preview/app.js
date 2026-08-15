@@ -21,9 +21,9 @@
  *  - Layout follows the SOURCE aspect: portrait clips get body.portrait (player
  *    right at full column height, transport+timeline left), landscape keeps the
  *    stacked layout. #stage keeps the split from swallowing anything below it.
- *  - Timecode uses a MONOSPACE stack: the UI face (Open Sans) ships no tabular figures, so
- *    `font-variant-numeric: tabular-nums` silently does nothing and every digit
- *    change resized the readout, shoving the whole transport row sideways.
+ *  - Timecode relies on the UI face having TABULAR figures (Inter does). With a
+ *    face that lacks them, `font-variant-numeric: tabular-nums` silently does
+ *    nothing and every digit change resizes the readout, shoving the row sideways.
  *  - No glows anywhere — depth shadows are fine, coloured halos are not.
  *  - The style picks (STYLE_CATALOG → #layersPanel) live INSIDE Finalização: when
  *    state.awaitingStyle is true it replaces the stage entirely, so the choice of
@@ -1966,7 +1966,7 @@ function drawRuler() {
   // tick step: nice value ≥ 60px apart
   const steps = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120];
   const step = steps.find((s) => s * S.pps >= 56) || 300;
-  ctx.font = "600 9.5px 'Open Sans', system-ui, sans-serif";
+  ctx.font = "600 9.5px 'Inter', system-ui, sans-serif";
   ctx.fillStyle = tokA('--blue-rgb', 0.9);
   ctx.strokeStyle = 'rgba(255,255,255,0.14)';
   for (let t = Math.floor(t0 / step) * step; t <= t1; t += step) {

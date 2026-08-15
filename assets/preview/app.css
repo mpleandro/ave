@@ -51,10 +51,14 @@
   --radius: 16px;
   /* --ease-out do site: a "easing-mãe" de toda transição da interface */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
-  /* as duas famílias do site. A serifada é SEMPRE peso 400 — o itálico é que é
-     o recurso expressivo, não o negrito. */
-  --serif: 'Libre Baskerville', Georgia, serif;
-  --sans: 'Open Sans', system-ui, -apple-system, sans-serif;
+  /* UMA família para a interface inteira. A serifada saiu: ela dava à
+     ferramenta a voz que pertence ao vídeo. Inter é deliberadamente quieta e
+     traz algarismos TABULARES — é o que permite o relógio do transporte largar
+     a pilha monoespaçada e ainda assim não mudar de largura a cada dígito.
+     As faces da marca (Open Sans, Libre Baskerville) seguem carregadas: elas
+     desenham as prévias de legenda, que têm de espelhar o render. */
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --serif: var(--sans);   /* alias, para nenhuma regra antiga apontar para o vazio */
   /* the timeline panel is a SOLID surface so the gutter mask can use the exact
      same colour and become invisible — see .track-label::before */
   --panel-bg: #142a42;
@@ -108,7 +112,7 @@ header {
 .logo-chip img { height: 26px; display: block; }
 
 .head-info { min-width: 0; }
-.project-name { font-family: var(--serif); font-weight: 400; font-size: 17px; letter-spacing: 0; }
+.project-name { font-weight: 600; font-size: 15.5px; letter-spacing: -0.1px; }
 .state-message { font-size: 12px; color: var(--dim); }
 
 .head-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
@@ -162,9 +166,9 @@ header {
  * desenho da letra, não de encorpá-la. Por isso o ativo muda de tamanho e de
  * fundo, mas nunca de peso: Libre Baskerville é sempre 400 na marca. */
 .tab {
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: 13px;
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: -0.1px;
   color: var(--dim);
   background: var(--glass);
   backdrop-filter: blur(18px);
@@ -181,7 +185,7 @@ header {
 .tab.active {
   color: var(--text);
   background: rgba(255, 255, 255, 0.11);
-  font-size: 15px;
+  font-size: 13.5px;
   padding: 12px 26px 14px;
 }
 /* o traço laranja é o que diz "você está aqui" agora que o número não diz */
@@ -203,7 +207,7 @@ main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding
 .empty { flex: 1; display: flex; align-items: center; justify-content: center; }
 .empty-inner { text-align: center; padding: 40px; }
 .empty-icon { font-size: 42px; margin-bottom: 12px; }
-.empty h2 { font-family: var(--serif); font-weight: 400; font-size: 22px; margin-bottom: 8px; }
+.empty h2 { font-weight: 600; font-size: 19px; letter-spacing: -0.2px; margin-bottom: 8px; }
 .empty p { color: var(--dim); font-size: 13px; }
 .empty code { color: var(--blue); }
 
@@ -251,7 +255,11 @@ body.portrait .editor-col .transport { align-self: stretch; width: auto; }
 .tlbar .spacer { flex: 1; }
 
 .time {
-  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  /* Inter TEM algarismos tabulares, então `tabular-nums` finalmente faz efeito
+     e o número para de mudar de largura a cada dígito — que era a razão de
+     existir a pilha monoespaçada aqui. Trocar a fonte da interface por uma sem
+     essa tabela traz o problema de volta, e ele reaparece como a linha inteira
+     tremendo durante a reprodução. */
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   font-size: 12.5px;
