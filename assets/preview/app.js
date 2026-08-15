@@ -669,14 +669,29 @@ function refreshCounts() {
 /* Per-take J-cut geometry, in seconds. `lead` is how far the take's sound runs
  * ahead of its picture; `tail` is what was trimmed off its end. Both are fixed
  * frame counts, so they survive the user trimming a take in the UI. */
+/* Lead e cauda vêm do render (jcut_timeline), MENOS quando o usuário discordou
+ * deles arrastando as bordas em A1/A2. O override mora no rascunho em QUADROS,
+ * que é a unidade do `edl.json` (`jcut_lead_frames` / `jcut_tail_frames`) e a do
+ * render — converter para segundos aqui e de volta na hora de salvar traria
+ * erro de arredondamento numa grandeza onde 1 quadro importa. */
 function jcutGeom(i) {
+  const fps = S.fps || 30;
+  const r = S.draft && S.draft[i];
   const j = S.jcut && S.jcut[i];
-  if (!j) return { lead: 0, tail: 0 };
+  const base = j
+    ? { lead: Math.max(0, (j.video_start_in_output || 0) - (j.audio_start_in_output || 0)),
+        tail: (j.tail_trim_frames || 0) / fps }
+    : { lead: 0, tail: 0 };
+  if (!r) return base;
   return {
-    lead: Math.max(0, (j.video_start_in_output || 0) - (j.audio_start_in_output || 0)),
-    tail: (j.tail_trim_frames || 0) / (S.fps || 30),
+    lead: r.leadF != null ? r.leadF / fps : base.lead,
+    tail: r.tailF != null ? r.tailF / fps : base.tail,
   };
 }
+
+// limites de ofício: mais de 1s de lead põe a imagem no meio da fala seguinte,
+// e mais de 1s de cauda aparada come palavra em qualquer take que feche justo
+const JCUT_MAX_F = 30;
 
 /* The draft timeline has to model the J-cut, not just sum the ranges: a take's
  * picture is shorter than its range by the lead it gives up plus the tail it had
@@ -768,8 +783,10 @@ function renderedToDraft(t) {
 }
 
 // ---------- dirty tracking ----------
+const jcutDirty = () => S.draft.some((r) => r.leadF != null || r.tailF != null);
+
 function edlDirty() {
-  return S.draft.some((r) => r.removed || r.start !== r.orig.start || r.end !== r.orig.end);
+  return S.draft.some((r) => r.removed || r.start !== r.orig.start || r.end !== r.orig.end) || jcutDirty();
 }
 function insertsDirty() {
   return S.insertsDraft.some((c) => c.start !== c.orig.start || c.end !== c.orig.end);
@@ -1679,6 +1696,16 @@ function renderJcutAudio() {
     b.style.left = `${r.aout * S.pps}px`;
     b.style.width = `${Math.max(r.adur * S.pps, 6)}px`;
     el('div', 'ablock-label', b).textContent = r.beat || r.source || '';
+    // As bordas do bloco de ÁUDIO editam o J-cut daquele trecho: a esquerda é
+    // quanto da voz entra antes da imagem, a direita é quanto da cauda é
+    // aparada. Não mexem no range — mexem em `jcut_lead_frames`/`tail_frames`,
+    // que o render.py já lê por trecho.
+    el('div', 'handle l', b).dataset.i = i;
+    el('div', 'handle r', b).dataset.i = i;
+    const g = jcutGeom(i);
+    b.title = `${r.beat || r.source}\nvoz entra ${Math.round(g.lead * (S.fps || 30))}f antes da imagem`
+      + `\ncauda aparada ${Math.round(g.tail * (S.fps || 30))}f`
+      + '\n\narraste as bordas para ajustar';
 
     // o que sai do áudio, escurecido na ponta em que está saindo
     if (i === trimming) {
@@ -2176,6 +2203,17 @@ panel.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     return;
   }
+  const ablock = e.target.closest('.ablock');
+  if (handle && ablock) {
+    const i = +handle.dataset.i;
+    const g = jcutGeom(i);
+    const fps = S.fps || 30;
+    drag = { type: 'jcut', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX,
+             lead0: Math.round(g.lead * fps), tail0: Math.round(g.tail * fps) };
+    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
+    e.preventDefault();
+    return;
+  }
   if (handle && chip) {
     const i = +handle.dataset.i;
     drag = { type: 'chip-trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, c: { ...S.insertsDraft[i] } };
@@ -2211,6 +2249,28 @@ panel.addEventListener('pointermove', (e) => {
     return;
   }
   const dt = (e.clientX - drag.x0) / S.pps;
+
+  if (drag.type === 'jcut') {
+    const r = S.draft[drag.i];
+    const fps = S.fps || 30;
+    const df = Math.round(dt * fps);
+    if (drag.side === 'l') {
+      // puxar a borda ESQUERDA para a esquerda aumenta o lead
+      r.leadF = Math.max(0, Math.min(JCUT_MAX_F, drag.lead0 - df));
+    } else {
+      // puxar a borda DIREITA para a esquerda apara mais cauda
+      r.tailF = Math.max(0, Math.min(JCUT_MAX_F, drag.tail0 - df));
+    }
+    renderClips();
+    renderJcutAudio();
+    drawWave();
+    refreshHeader();
+    const g = jcutGeom(drag.i);
+    showTooltip(e, drag.side === 'l'
+      ? `voz entra <b>${Math.round(g.lead * fps)}f</b> antes da imagem`
+      : `cauda aparada <b>${Math.round(g.tail * fps)}f</b>`);
+    return;
+  }
 
   if (drag.type === 'trim') {
     const r = S.draft[drag.i];
@@ -2401,6 +2461,10 @@ async function sendTimeline() {
     payload.edl = {
       ranges: S.draft.filter((r) => !r.removed).map((r) => ({
         source: r.source, start: +r.start.toFixed(3), end: +r.end.toFixed(3), beat: r.beat,
+        // só viajam quando o usuário DISCORDOU do valor calculado; ausentes, o
+        // render.py volta a decidir sozinho (lead 5f, cauda medida no silêncio)
+        ...(r.leadF != null ? { jcut_lead_frames: r.leadF } : {}),
+        ...(r.tailF != null ? { jcut_tail_frames: r.tailF } : {}),
       })),
       removed: S.draft.filter((r) => r.removed).map((r) => ({ source: r.source, beat: r.beat, start: r.orig.start, end: r.orig.end })),
       changes: S.draft.filter((r) => !r.removed && (r.start !== r.orig.start || r.end !== r.orig.end)).map((r) => ({

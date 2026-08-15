@@ -1434,3 +1434,11 @@ button.tl-chip:disabled { cursor: default; }
   .actionbar .disc-x { display: inline; font-size: 13px; line-height: 1; }
   .actionbar #btnDiscard { padding: 8px 11px; }
 }
+
+/* As bordas dos blocos de A1/A2 são arrastáveis: editam o J-cut daquele trecho.
+   Herdam o desenho das alças dos clipes de vídeo, porque é o mesmo gesto. */
+.ablock { position: relative; }
+.ablock .handle { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 4; }
+.ablock .handle.l { left: -3px; }
+.ablock .handle.r { right: -3px; }
+.ablock .handle:hover { background: rgb(var(--orange-rgb) / 0.45); border-radius: 3px; }
