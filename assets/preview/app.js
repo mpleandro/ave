@@ -1330,12 +1330,10 @@ function renderSetup() {
   }
   wasShowing = true;
 
-  // O texto no HTML é só o estado inicial — quem manda é esta linha, e foi por
-  // isso que trocar o rótulo no HTML sozinho não teve efeito nenhum.
-  $('setupGo').textContent = S.state.awaitingStyle ? 'Visualizar' : 'Refazer';
-  $('setupGo').title = S.state.awaitingStyle
-    ? 'Monta a finalização com estas escolhas'
-    : 'Refaz a finalização com as escolhas atuais';
+  // O rótulo do botão de envio pertence à BARRA DE AÇÃO (refreshActionBar), que
+  // é quem sabe tudo o que mudou — estilo, cortes e marcações. Escrever aqui
+  // também fazia a última das duas ganhar, e era a errada: esta só enxerga o
+  // estilo, então o botão dizia "Visualizar" mesmo havendo cortes a refazer.
 
   buildLayerRows();
   capAnims = [];

@@ -1424,3 +1424,13 @@ button.tl-chip:disabled { cursor: default; }
   animation: proc-turn 0.8s linear infinite;
 }
 @keyframes proc-turn { to { transform: rotate(360deg); } }
+
+/* Descartar encolhe para um X quando a barra aperta. Ele é a ação SECUNDÁRIA
+   aqui — quem tem de sobreviver ao aperto é o enviar, e o campo de texto. O
+   `title` mantém o nome acessível a quem passa o mouse ou usa leitor de tela. */
+.disc-x { display: none; }
+@media (max-width: 1080px) {
+  .actionbar .disc-full { display: none; }
+  .actionbar .disc-x { display: inline; font-size: 13px; line-height: 1; }
+  .actionbar #btnDiscard { padding: 8px 11px; }
+}
