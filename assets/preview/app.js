@@ -1916,7 +1916,11 @@ function liveCue(t, v) {
 function renderLive() {
   const ov = $('liveOverlay');
   if (!ov) return;
-  const on = setupApplies() && video.videoWidth > 0;
+  /* Com o render final na tela a legenda JÁ ESTÁ QUEIMADA nele — desenhar por
+     cima produz duas legendas sobrepostas, uma do render e outra da prévia. A
+     prévia existe para mostrar o que AINDA não foi renderizado; quando o render
+     existe e está sendo exibido, ela não tem função. */
+  const on = setupApplies() && video.videoWidth > 0 && !S.showFinal;
   ov.classList.toggle('hidden', !on);
   if (!on) { LIVE.key = null; return; }
 
@@ -2468,6 +2472,8 @@ $('srcToggle').addEventListener('click', () => {
   S.showFinal = !S.showFinal;
   refreshSrcToggle();
   updateVideoSrc();
+  LIVE.key = null;
+  renderLive();   // a prévia some quando o render final entra
 });
 
 function refreshSrcToggle() {
@@ -2554,6 +2560,30 @@ async function sendTimeline() {
    diferentes, e um arquivo só faria uma sobrescrever a outra. O que se unifica
    é o GESTO, não o formato. */
 $('setupGo').addEventListener('click', async () => {
+  /* DUAS PERGUNTAS ANTES DE GASTAR. O clique dispara trabalho de IA que custa
+     tokens e minutos, e até aqui ele era indistinguível de qualquer outro botão
+     da tela. */
+  const caroAgora = styleDirty() || edlDirty() || insertsDirty();
+
+  // headline com estilo e sem texto sai como nada — e o usuário só descobre
+  // assistindo o render pronto
+  const precisaHl = styleDirty() && S.style.headline && !(S.style.headlineText || '').trim();
+  if (precisaHl) {
+    if (confirm('Falta o texto da headline. Preencher agora?')) {
+      activeLayer = 'headline';
+      $('layersPanel').classList.remove('collapsed');
+      if (S.view !== 'tl') setView('tl');
+      renderSetup();
+      const ta = $('headlineText');
+      if (ta) { ta.focus(); ta.scrollIntoView({ block: 'center' }); }
+      return;
+    }
+  }
+
+  if (caroAgora && !confirm(
+      'O pedido vai para a IA e consome tokens, além de alguns minutos de render.\n\n'
+      + 'Tem certeza das alterações?')) return;
+
   const quer = { style: styleDirty(), tl: edlDirty() || insertsDirty() || S.notes.length > 0 || wordsDirty() };
   const caro = quer.style || edlDirty() || insertsDirty();
   let ok = true;

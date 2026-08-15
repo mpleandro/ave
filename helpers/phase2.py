@@ -26,6 +26,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+HELPERS = Path(__file__).resolve().parent
+
 SKILL = Path(__file__).resolve().parent.parent
 HF = ["npx", "--yes", "hyperframes@0.7.109"]
 ENV = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
@@ -58,6 +60,22 @@ def load(p: Path, default=None):
     return json.loads(p.read_text()) if p.exists() else default
 
 
+def balance_two_lines(text: str) -> list[str]:
+    """A headline é SEMPRE duas linhas — a quebra é onde as duas ficam mais
+    parecidas em comprimento. Uma linha só deixa a segunda vazia e o bloco
+    desequilibrado; três linhas não cabem no espaço que o estilo reserva."""
+    w = text.split()
+    if len(w) < 2:
+        return [text, ""]
+    best, score = 1, None
+    for i in range(1, len(w)):
+        a, b = len(" ".join(w[:i])), len(" ".join(w[i:]))
+        d = abs(a - b)
+        if score is None or d < score:
+            best, score = i, d
+    return [" ".join(w[:best]), " ".join(w[best:])]
+
+
 def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     """Traz o que o usuário escolheu na aba Estilo para dentro do edit-data."""
     pick = load(edit / "preview_style.json")
@@ -70,6 +88,19 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         data["accent"] = pick["accent"]
     if pick.get("headline"):
         data.setdefault("hook", {})["style"] = pick["headline"]
+    # O TEXTO da headline vem da caixa do editor. Sem este ramo o `hook` ficava
+    # só com o estilo e nenhuma linha — e o compositor pula um hook sem
+    # `enabled`, então o vídeo saía SEM headline nenhuma, em silêncio, com o
+    # usuário tendo acabado de escrever a frase.
+    txt = (pick.get("headlineText") or "").strip()
+    if txt:
+        hook = data.setdefault("hook", {})
+        hook["lines"] = balance_two_lines(txt)
+        hook["enabled"] = True
+        hook.setdefault("endSec", 4.0)
+    elif pick.get("headline") and not (data.get("hook") or {}).get("lines"):
+        # estilo escolhido e nenhum texto: desliga em vez de renderizar vazio
+        data.setdefault("hook", {})["enabled"] = False
     if pick.get("edit"):
         data["editStyle"] = pick["edit"]
     for k, v in (pick.get("elements") or {}).items():
@@ -142,7 +173,24 @@ def main() -> None:
     data_path = pub / "edit-data.json"
     caps_path = pub / "captions.json"
     if not caps_path.exists():
-        sys.exit(f"não achei as legendas em {caps_path}")
+        # Gerar aqui em vez de desistir. Elas são DERIVADAS do corte, não uma
+        # escolha do usuário — exigi-las prontas fazia o comando "faz tudo"
+        # parar no primeiro passo. E o transcrito tem de ser o do cut.mp4: o
+        # modo de fallback pelo EDL devolve zero palavras, porque o J-cut
+        # encurta a saída e os tempos das fontes não valem aqui.
+        print("  legendas ausentes — gerando do corte…")
+        cut = edit / (load(edit / "state.json", {}).get("video") or "cut.mp4")
+        if not cut.exists():
+            sys.exit(f"não achei o corte em {cut}")
+        tr = edit / "transcripts" / "cut.json"
+        if not tr.exists():
+            run([sys.executable, str(HELPERS / "transcribe.py"), str(cut),
+                 "--edit-dir", str(edit), "--language", "pt"], quiet=True)
+        pub.mkdir(parents=True, exist_ok=True)
+        run([sys.executable, str(HELPERS / "captions_for_remotion.py"),
+             "--transcript", str(tr), "-o", str(caps_path)], quiet=True)
+        if not caps_path.exists():
+            sys.exit("falhou ao gerar as legendas do corte")
 
     data = load(data_path, {})
     data, picked = apply_style_pick(edit, data)
@@ -223,6 +271,21 @@ def main() -> None:
         "finalVideo": "final.mp4",
         "message": f"Fase 2 pronta — legenda {data.get('captions', {}).get('style', 'karaoke')}",
     })
+    # A ESCOLHA VAI PARA O state.json ANTES DE SER APAGADA.
+    # Apagar sem guardar deixava o render seguinte CEGO: o `apply_style_pick`
+    # não achava nada, e tudo que só existia no pick — o texto da headline, por
+    # exemplo — sumia sem aviso. O state.json é o registro do que está no disco
+    # e é de onde o editor relê, então é o lugar certo.
+    pick = load(edit / "preview_style.json")
+    if pick:
+        state["style"] = {
+            "edit": pick.get("edit"), "headline": pick.get("headline"),
+            "headlineText": pick.get("headlineText", ""),
+            "captions": pick.get("captions"), "accent": pick.get("accent"),
+            "capColor": pick.get("capColor"), "capDy": pick.get("capDy", 0),
+            "elements": pick.get("elements") or {},
+        }
+    state["awaitingStyle"] = False
     (edit / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2))
     (edit / "preview_style.json").unlink(missing_ok=True)
 
