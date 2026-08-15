@@ -1,0 +1,109 @@
+/* Camadas do LONGFORM: B-roll, lower-third, card de capítulo, callout.
+ *
+ * Regra que rege as quatro, e que vale mais que qualquer valor aqui: gráfico em
+ * longform PONTUA, não satura. Densidade de Reel num vídeo de treze minutos
+ * cansa antes do meio.
+ *
+ * Autorado em referência de 1920×1080 e escalado por --lf-scale, como os demais.
+ * Cada elemento é bloco próprio, com id estável e tempo próprio — é o que vai
+ * permitir arrastá-lo no editor sem reescrever o estilo.
+ */
+
+.ave-lf {
+  --lf-scale: 1;
+  --lf-accent: #ff6b1a;
+  --lf-margin: 72;
+}
+
+/* ---- B-roll: cobre o A-roll inteiro -------------------------------------- */
+.ave-lf-broll {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+}
+
+/* ---- lower-third: entra pela esquerda, canto inferior --------------------- */
+.ave-lf-lower {
+  position: absolute;
+  left: calc(var(--lf-margin) * var(--lf-scale) * 1px);
+  bottom: calc(var(--lf-margin) * var(--lf-scale) * 1px);
+  display: flex;
+  align-items: stretch;
+  gap: calc(16px * var(--lf-scale));
+  font-family: 'Poppins', sans-serif;
+  opacity: 0;
+}
+
+.ave-lf-lower .lf-bar {
+  width: calc(8px * var(--lf-scale));
+  border-radius: calc(4px * var(--lf-scale));
+  background: var(--lf-accent);
+}
+
+.ave-lf-lower .lf-box {
+  background: rgba(20, 22, 26, 0.86);
+  border-radius: calc(12px * var(--lf-scale));
+  padding: calc(14px * var(--lf-scale)) calc(22px * var(--lf-scale));
+  box-shadow: 0 calc(12px * var(--lf-scale)) calc(34px * var(--lf-scale)) rgba(0, 0, 0, 0.4);
+}
+
+.ave-lf-lower .lf-name {
+  color: #fff;
+  font-weight: 900;
+  font-size: calc(40px * var(--lf-scale));
+  line-height: 1.05;
+}
+
+.ave-lf-lower .lf-title {
+  color: var(--lf-accent);
+  font-weight: 600;
+  font-size: calc(24px * var(--lf-scale));
+  margin-top: calc(4px * var(--lf-scale));
+}
+
+/* ---- card de capítulo: título grande, com um traço que cresce ------------- */
+.ave-lf-chapter {
+  position: absolute;
+  left: calc(var(--lf-margin) * var(--lf-scale) * 1px);
+  bottom: calc((var(--lf-margin) + 40) * var(--lf-scale) * 1px);
+  font-family: 'Poppins', sans-serif;
+  opacity: 0;
+}
+
+.ave-lf-chapter .lf-rule {
+  height: calc(6px * var(--lf-scale));
+  width: 0;
+  background: var(--lf-accent);
+  border-radius: calc(3px * var(--lf-scale));
+  margin-bottom: calc(16px * var(--lf-scale));
+}
+
+.ave-lf-chapter .lf-title {
+  color: #fff;
+  font-weight: 900;
+  font-size: calc(76px * var(--lf-scale));
+  letter-spacing: calc(-1px * var(--lf-scale));
+  line-height: 1;
+  text-shadow: 0 calc(4px * var(--lf-scale)) calc(24px * var(--lf-scale)) rgba(0, 0, 0, 0.6);
+}
+
+/* ---- callout: chip no accent, texto escuro ------------------------------- */
+.ave-lf-callout {
+  position: absolute;
+  transform: translate(-50%, -50%) scale(0.01);
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  font-size: calc(44px * var(--lf-scale));
+  /* texto ESCURO sobre o accent, não claro: o chip é uma etiqueta sólida, e
+     texto claro sobre laranja é justamente o par que não passa em contraste */
+  color: #0c0d10;
+  background: var(--lf-accent);
+  padding: calc(10px * var(--lf-scale)) calc(22px * var(--lf-scale));
+  border-radius: calc(12px * var(--lf-scale));
+  box-shadow: 0 calc(10px * var(--lf-scale)) calc(30px * var(--lf-scale)) rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  opacity: 0;
+}
