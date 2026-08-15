@@ -1329,6 +1329,8 @@ function renderSetup() {
   renderAccents();
   refreshLayerSummaries();
   updateSummary();
+  LIVE.key = null; // o estilo pode ter mudado — força o redesenho da prévia
+  renderLive();
 }
 
 /* Monta as linhas do painel. Reconstrói do zero a cada render porque o estado
@@ -1715,6 +1717,157 @@ function renderChips() {
   }
 }
 
+/* ---------- PRÉVIA AO VIVO ----------
+ *
+ * A legenda desenhada sobre o vídeo com as folhas de `assets/styles/` — as
+ * MESMAS que o render usa, servidas em /styles/. Não é economia de código: uma
+ * cópia no editor começaria idêntica e divergiria na primeira correção feita de
+ * um lado só, e o SKILL.md já registra "uma prévia que mente sobre o estilo é
+ * pior que nenhuma prévia" como anti-padrão recorrente.
+ *
+ * As folhas foram autoradas para isto: tudo em coordenadas de referência de
+ * 1080px de largura, multiplicado por `--cap-scale`. Aqui o fator é
+ * `largura em tela / 1080`; na composição é 1. Nenhum dos dois lados redefine
+ * medida — só o fator.
+ *
+ * O que ela NÃO promete: o render continua sendo a palavra final. Tela dividida,
+ * elemento atrás do sujeito e trilha não aparecem aqui, e a legenda cai numa
+ * deixa de exemplo enquanto a Fase 2 não tiver gerado as de verdade. A tarja
+ * embaixo avisa quando é exemplo — uma prévia que não conta que está inventando
+ * é exatamente a mentira que ela existe para evitar. */
+const LIVE = { variants: null, css: new Set(), key: null };
+
+const CAP_CSS = {
+  karaoke: 'karaoke.css', simples: 'static.css', serifada: 'static.css',
+  classica: 'static.css', stacked: 'stacked.css', scatter: 'scatter.css',
+};
+
+function liveCss(file) {
+  if (!file || LIVE.css.has(file)) return;
+  LIVE.css.add(file);
+  const l = document.createElement('link');
+  l.rel = 'stylesheet';
+  l.href = `/styles/${file}`;
+  document.head.appendChild(l);
+}
+
+/* A caixa segue o retângulo do VÍDEO, não o da moldura. O vídeo é contido
+   dentro dela e sobra barra dos lados; medir a moldura poria a legenda fora da
+   imagem — e o erro cresce com o quanto a janela é mais larga que o clipe. */
+function syncOverlay() {
+  const ov = $('liveOverlay');
+  const frame = video.parentElement;
+  if (!ov || !frame || !video.videoWidth) return 0;
+  const fr = frame.getBoundingClientRect();
+  const vr = video.getBoundingClientRect();
+  ov.style.left = `${vr.left - fr.left}px`;
+  ov.style.top = `${vr.top - fr.top}px`;
+  ov.style.width = `${vr.width}px`;
+  ov.style.height = `${vr.height}px`;
+  return vr.width;
+}
+
+/* A deixa visível AGORA. Com a Fase 2 pronta usa as legendas de verdade; antes
+   disso devolve um exemplo fixo, porque um quadro vazio não deixa comparar
+   estilo nenhum. */
+const SAMPLE_WORDS = 'a sua legenda aparece exatamente assim no vídeo'.split(' ');
+
+function liveCue(t, v) {
+  if (S.captions && S.captions.length) {
+    const c = S.captions.find((x) => t >= renderedToDraft(x.start) && t < renderedToDraft(x.end));
+    return c ? { text: c.text, sample: false } : null;
+  }
+  // O exemplo respeita o `maxWords` DO ESTILO. Uma frase de tamanho fixo faz o
+  // karaokê (3 palavras) transbordar o quadro e a clássica parecer curta — e aí
+  // a prévia estaria mentindo sobre a única coisa que ela existe para mostrar.
+  const n = Math.max(2, Math.min(v.maxWords || 3, SAMPLE_WORDS.length));
+  return { text: SAMPLE_WORDS.slice(0, n).join(' '), sample: true };
+}
+
+function renderLive() {
+  const ov = $('liveOverlay');
+  if (!ov) return;
+  const on = S.tab === 2 && setupApplies() && video.videoWidth > 0;
+  ov.classList.toggle('hidden', !on);
+  if (!on) { LIVE.key = null; return; }
+
+  const w = syncOverlay();
+  if (!w) return;
+  const id = (S.style && S.style.captions) || 'karaoke';
+  const v = (LIVE.variants && LIVE.variants.styles && LIVE.variants.styles[id]) || {};
+  liveCss(CAP_CSS[id]);
+
+  const cue = liveCue(renderedToDraft(video.currentTime || 0), v);
+  if (!cue) { ov.innerHTML = ''; LIVE.key = null; return; }
+
+  // remonta só quando a deixa, o estilo ou a largura mudam — a cada quadro
+  // seria refazer o DOM 60 vezes por segundo para escrever o mesmo texto
+  const key = `${id}|${cue.text}|${Math.round(w)}`;
+  if (key === LIVE.key) return;
+  LIVE.key = key;
+
+  ov.innerHTML = '';
+  const sc = w / 1080;
+  const words = cue.text.split(/\s+/);
+
+  /* CADA ESTILO TEM MARCAÇÃO PRÓPRIA, e é por isso que existe um ramo por
+     estilo em vez de uma caixa genérica com a fonte trocada. O empilhado é uma
+     PILHA de linhas com quatro papéis tipográficos alternados; o disperso são
+     palavras soltas com uma destacada. Desenhar os dois como uma faixa
+     centralizada carregaria a fonte certa e mostraria um estilo que não existe
+     — que é a mentira que esta prévia existe para não contar. */
+  if (id === 'stacked') {
+    const box = el('div', 'ave-stacked', ov);
+    box.style.setProperty('--stk-scale', sc);
+    box.style.setProperty('--stk-orange', S.style.accent || ACCENT_DEFAULT);
+    const cueEl = el('div', 'stk-cue', box);
+    // s0 s1 s2 s3 é a rotação de papéis do estilo: itálico pesado, contorno,
+    // serifada no accent, seminegrito
+    words.forEach((word, i) => {
+      const line = el('div', 'stk-line', cueEl);
+      // O corpo é por PALAVRA neste estilo (vem do caption-cues.json que o
+      // diretor prepara). Sem esse dado a prévia usa o corpo base do estilo —
+      // a hierarquia entre palavras é o que ela não tem como adivinhar.
+      line.style.fontSize = `${(v.size || 86) * sc}px`;
+      const sp = el('span', `s${i % 4}`, line);
+      sp.textContent = word;
+      sp.style.opacity = 1; // a folha nasce em 0 porque quem anima é o render
+    });
+  } else if (id === 'scatter') {
+    const box = el('div', 'ave-scatter', ov);
+    box.style.setProperty('--scat-scale', sc);
+    if (v.size) box.style.setProperty('--scat-size', v.size);
+    const cueEl = el('div', 'scat-cue', box);
+    box.style.setProperty('--scat-scale', sc);
+    // a destacada é a palavra mais longa — a mesma regra do compositor
+    let hi = 0;
+    words.forEach((word, i) => { if (word.length > words[hi].length) hi = i; });
+    words.forEach((word, i) => {
+      const line = el('div', 'scat-line', cueEl);
+      const sp = el('span', i === hi ? 'hi' : '', line);
+      sp.textContent = word;
+      sp.style.opacity = 1; // a folha nasce em 0 porque quem anima é o render
+    });
+  } else if (id === 'karaoke') {
+    const box = el('div', 'ave-cap', ov);
+    box.style.setProperty('--cap-scale', sc);
+    if (v.size) box.style.setProperty('--cap-size', v.size);
+    const line = el('div', 'ave-cap-line', box);
+    for (const word of words) el('span', '', line).textContent = word;
+  } else {
+    const box = el('div', 'ave-cap-static', ov);
+    box.style.setProperty('--cap-scale', sc);
+    if (v.size) box.style.setProperty('--cap-size', v.size);
+    if (v.tracking != null) box.style.setProperty('--cap-track', v.tracking);
+    if (v.sx != null) box.style.setProperty('--cap-sx', v.sx);
+    if (v.sy != null) box.style.setProperty('--cap-sy', v.sy);
+    if (v.cssFamily) box.style.setProperty('--cap-family', v.cssFamily);
+    if (v.weight) box.style.setProperty('--cap-weight', v.weight);
+    el('div', 'ave-cue', box).textContent = cue.text;
+  }
+  if (cue.sample) el('div', 'live-sample', ov).textContent = 'exemplo — a legenda real entra na finalização';
+}
+
 // ---------- canvases (viewport-sized, redrawn on scroll) ----------
 function canvasSetup(cv, lane) {
   const dpr = window.devicePixelRatio || 1;
@@ -1824,6 +1977,7 @@ function rafLoop() {
     for (const step of capAnims) step(now);
   }
   positionNeedle();
+  renderLive();
   if (!video.paused && !video.ended) {
     // keep needle visible
     const x = LABEL_W + renderedToDraft(video.currentTime) * S.pps;
@@ -2167,4 +2321,8 @@ rafLoop();
 // loaded — rebuild once the fonts land
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => { if (S.style) renderSetup(); });
+fetch('/styles/variants.json')
+  .then((r) => r.json())
+  .then((v) => { LIVE.variants = v; LIVE.key = null; renderLive(); })
+  .catch(() => { /* sem os números a prévia cai no CSS puro, que já é honesto */ });
 }

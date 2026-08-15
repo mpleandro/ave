@@ -56,6 +56,12 @@
   <section id="playerWrap" class="player-wrap">
     <div class="player-frame glass">
       <video id="video" playsinline preload="auto"></video>
+      <!-- A legenda desenhada AO VIVO, com as folhas de estilo do próprio
+           render (/styles/). Não é uma imitação da legenda: é a mesma fonte, o
+           mesmo corpo e a mesma posição, escalados de 1080 para o tamanho em
+           tela. O render continua sendo a palavra final — isto é o que deixa
+           escolher um estilo sem esperar dois minutos para vê-lo. -->
+      <div id="liveOverlay" class="live-overlay"></div>
     </div>
   </section>
 

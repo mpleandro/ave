@@ -228,6 +228,7 @@ body.portrait .editor-col { order: 1; }
 body.portrait .editor-col .transport { align-self: stretch; width: auto; }
 
 .player-frame {
+  position: relative;
   padding: 8px;
   border-radius: 18px;
   max-height: 42vh;
@@ -1366,4 +1367,30 @@ button.tl-chip:disabled { cursor: default; }
   backdrop-filter: saturate(0.2);
   pointer-events: none;
   z-index: 3;
+}
+
+
+/* ---------- prévia ao vivo ----------
+   A caixa acompanha o RETÂNGULO DO VÍDEO, não o do quadro: o vídeo é contido
+   dentro da moldura e sobra barra dos dois lados, então desenhar sobre a
+   moldura poria a legenda fora da imagem. O JS mede e posiciona.
+   `overflow: hidden` aqui é o que impede uma legenda grande de vazar para fora
+   do vídeo — no render ela seria cortada pela borda do quadro do mesmo jeito. */
+.live-overlay {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 10px;
+}
+.live-sample {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }

@@ -14,6 +14,7 @@ per-session it is fed by data only:
 Routes:
   /                     the app (from <skill>/assets/preview/)
   /assets/<file>        app files (css/js/logo)
+  /styles/<file>        camada de estilo COMPARTILHADA com o render (assets/styles/)
   /media/<path>         files under --root (the edit dir) — Range supported
   /gen/waveform.json    min/max audio peaks of cut.mp4 (auto-(re)generated)
   /gen/thumbs/<n>.jpg   timeline filmstrip thumbs (auto-generated, 1 per 2s)
@@ -39,6 +40,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent.parent / "assets" / "preview"
+# A CAMADA DE ESTILO COMPARTILHADA — as mesmas folhas que o render usa.
+# Servi-las aqui é o que permite a prévia desenhar a legenda de verdade em vez
+# de uma imitação: se houvesse uma cópia no editor, ela começaria igual e
+# divergiria na primeira correção feita só de um lado.
+STYLE_DIR = Path(__file__).resolve().parent.parent / "assets" / "styles"
 PEAKS_PER_SEC = 40
 THUMB_EVERY_S = 2.0
 THUMB_HEIGHT = 90
@@ -202,6 +208,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_file(APP_DIR / "index.html")
         elif path.startswith("/assets/"):
             p = self._safe(APP_DIR, path[len("/assets/"):])
+            self._send_file(p) if p else self._json({"error": "bad path"}, 400)
+        elif path.startswith("/styles/"):
+            p = self._safe(STYLE_DIR, path[len("/styles/"):])
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path.startswith("/media/"):
             p = self._safe(self.root, path[len("/media/"):])
