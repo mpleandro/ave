@@ -637,6 +637,7 @@ function defaultStyle() {
     captions: STYLE_CATALOG.captions[0].id,
     accent: ACCENT_DEFAULT,
     capColor: '#FFFFFF',
+    capDy: 0,   // deslocamento GLOBAL da legenda, em px de referência 1080
     headlineText: '',
     elements,
     note: '',
@@ -819,6 +820,7 @@ function styleDirty() {
   return !(eq(S.style.edit, cur.edit) && eq(S.style.headline, cur.headline)
     && eq(S.style.captions, cur.captions) && eq(S.style.accent, cur.accent)
     && eq(S.style.capColor, cur.capColor) && eq(S.style.headlineText, cur.headlineText)
+    && eq(S.style.capDy || 0, cur.capDy || 0)
     && eq(S.style.elements, cur.elements));
 }
 
@@ -1570,6 +1572,7 @@ async function sendStyle() {
     accent: S.style.accent,
     accentName: accentName(S.style.accent),
     capColor: S.style.capColor || '#FFFFFF',
+    capDy: S.style.capDy || 0,   // deslocamento GLOBAL da legenda, px de ref 1080
     headlineText: (S.style.headlineText || '').trim(),
     // whether the picked styles actually paint it — so the skill does not go
     // hunting for an accent in a look that has none
@@ -1946,6 +1949,7 @@ function renderLive() {
   if (id === 'stacked') {
     const box = el('div', 'ave-stacked', ov);
     box.style.setProperty('--stk-scale', sc);
+    applyCapDy(box, id, v);
     box.style.setProperty('--stk-orange', S.style.accent || ACCENT_DEFAULT);
     const cueEl = el('div', 'stk-cue', box);
     // s0 s1 s2 s3 é a rotação de papéis do estilo: itálico pesado, contorno,
@@ -1963,6 +1967,7 @@ function renderLive() {
   } else if (id === 'scatter') {
     const box = el('div', 'ave-scatter', ov);
     box.style.setProperty('--scat-scale', sc);
+    applyCapDy(box, id, v);
     if (v.size) box.style.setProperty('--scat-size', v.size);
     const cueEl = el('div', 'scat-cue', box);
     box.style.setProperty('--scat-scale', sc);
@@ -1997,6 +2002,7 @@ function renderLive() {
   } else if (id === 'karaoke') {
     const box = el('div', 'ave-cap', ov);
     box.style.setProperty('--cap-scale', sc);
+    applyCapDy(box, id, v);
     box.style.setProperty('--cap-color', S.style.capColor || '#fff');
     if (v.size) box.style.setProperty('--cap-size', v.size);
     const line = el('div', 'ave-cap-line', box);
@@ -2004,6 +2010,7 @@ function renderLive() {
   } else {
     const box = el('div', 'ave-cap-static', ov);
     box.style.setProperty('--cap-scale', sc);
+    applyCapDy(box, id, v);
     if (v.size) box.style.setProperty('--cap-size', v.size);
     if (v.tracking != null) box.style.setProperty('--cap-track', v.tracking);
     if (v.sx != null) box.style.setProperty('--cap-sx', v.sx);
@@ -2811,4 +2818,65 @@ $('txBody').addEventListener('pointerup', (e) => {
   if (!txDrag.moved) seekDraft(S.words[txDrag.from].outStart);
   txDrag = null;
   renderTx();
+});
+
+
+/* ---------- POSIÇÃO DA LEGENDA ----------
+ *
+ * Arrastar a legenda sobre o vídeo move TODAS: é um ajuste de estilo, não uma
+ * correção de deixa. Uma legenda que muda de altura no meio do vídeo lê como
+ * defeito, não como intenção — e o compositor também trata a posição como um
+ * número só (`captions.paddingBottom`).
+ *
+ * O deslocamento é guardado em px de referência 1080, a mesma unidade das
+ * folhas. Guardar em pixels de tela quebraria ao redimensionar a janela; guardar
+ * em fração da altura quebraria ao trocar de proporção.
+ *
+ * As ancoragens são DIFERENTES e é por isso que existe esta função em vez de uma
+ * variável só: karaokê e estáticas medem da BASE do quadro (mais px = mais alto),
+ * empilhado e disperso medem do CENTRO por fração (mais fração = mais baixo).
+ * Aplicar o mesmo sinal aos dois mandaria metade dos estilos para o lado errado. */
+const CAP_ANCHOR = {
+  karaoke: { var: '--cap-bottom', base: 430, dir: +1, scale: 1 },
+  simples: { var: '--cap-bottom', base: 430, dir: +1, scale: 1 },
+  serifada: { var: '--cap-bottom', base: 430, dir: +1, scale: 1 },
+  classica: { var: '--cap-bottom', base: 430, dir: +1, scale: 1 },
+  stacked: { var: '--stk-offset-y', base: 0.156, dir: -1, scale: 1 / 1920 },
+  scatter: { var: '--scat-offset-y', base: 0.72, dir: -1, scale: 1 / 1920 },
+};
+
+function applyCapDy(box, id, v) {
+  const a = CAP_ANCHOR[id];
+  if (!a) return;
+  const base = (a.var === '--cap-bottom' && v.bottom) || (v.offsetY != null && a.var !== '--cap-bottom' ? v.offsetY : a.base);
+  const dy = S.style.capDy || 0;
+  box.style.setProperty(a.var, base + a.dir * dy * a.scale);
+}
+
+/* O overlay é `pointer-events: none` para não roubar clique do player. A caixa
+   da legenda reabre os eventos só nela — arrastar a legenda não pode custar a
+   possibilidade de clicar no vídeo. */
+let capDrag = null;
+$('liveOverlay').addEventListener('pointerdown', (e) => {
+  const box = e.target.closest('.ave-cap, .ave-cap-static, .ave-stacked, .ave-scatter');
+  if (!box) return;
+  const w = $('liveOverlay').clientWidth || 1;
+  capDrag = { y0: e.clientY, dy0: S.style.capDy || 0, sc: w / 1080 };
+  try { $('liveOverlay').setPointerCapture(e.pointerId); } catch (err) { /* toque */ }
+  e.preventDefault();
+});
+window.addEventListener('pointermove', (e) => {
+  if (!capDrag) return;
+  // para CIMA é positivo, e a conversão volta para a referência 1080
+  const dy = capDrag.dy0 + (capDrag.y0 - e.clientY) / capDrag.sc;
+  S.style.capDy = Math.round(Math.max(-380, Math.min(760, dy)));
+  LIVE.key = null;
+  renderLive();
+  showTooltip(e, `legenda <b>${S.style.capDy >= 0 ? '+' : ''}${S.style.capDy}</b> px`);
+});
+window.addEventListener('pointerup', () => {
+  if (!capDrag) return;
+  capDrag = null;
+  hideTooltip();
+  refreshHeader();   // virou uma alteração a enviar
 });

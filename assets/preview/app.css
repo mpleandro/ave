@@ -1342,6 +1342,7 @@ button.tl-chip:disabled { cursor: default; }
 .live-overlay {
   position: absolute;
   overflow: hidden;
+  /* nenhum evento por padrão — o player tem de continuar clicável */
   pointer-events: none;
   border-radius: 10px;
 }
@@ -1504,3 +1505,13 @@ button.tl-chip:disabled { cursor: default; }
 .tx-hint { font-size: 11px; color: var(--dim); }
 .tx-hint kbd { font-size: 10px; }
 .tx-count { font-size: 11.5px; color: var(--mark-soft); white-space: nowrap; }
+
+/* só a caixa da legenda aceita ponteiro, e só para ser ARRASTADA */
+.live-overlay .ave-cap,
+.live-overlay .ave-cap-static,
+.live-overlay .ave-stacked,
+.live-overlay .ave-scatter { pointer-events: auto; cursor: grab; }
+.live-overlay .ave-cap:active,
+.live-overlay .ave-cap-static:active,
+.live-overlay .ave-stacked:active,
+.live-overlay .ave-scatter:active { cursor: grabbing; }
