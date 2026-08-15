@@ -1820,7 +1820,11 @@ function liveCue(t, v) {
   // O exemplo respeita o `maxWords` DO ESTILO. Uma frase de tamanho fixo faz o
   // karaokê (3 palavras) transbordar o quadro e a clássica parecer curta — e aí
   // a prévia estaria mentindo sobre a única coisa que ela existe para mostrar.
-  const n = Math.max(2, Math.min(v.maxWords || 3, SAMPLE_WORDS.length));
+  // `maxWords` é teto de PALAVRAS; `lines` é teto de LINHAS. O empilhado tem
+  // uma palavra por linha, então quem manda nele é `lines` — sem isso o exemplo
+  // vira uma coluna de oito palavras que desce para fora do quadro.
+  const cap = LIVE.stackedLike ? (v.lines || 3) : (v.maxWords || 3);
+  const n = Math.max(2, Math.min(cap, SAMPLE_WORDS.length));
   return { text: SAMPLE_WORDS.slice(0, n).join(' '), sample: true };
 }
 
@@ -1837,6 +1841,7 @@ function renderLive() {
   const v = (LIVE.variants && LIVE.variants.styles && LIVE.variants.styles[id]) || {};
   liveCss(CAP_CSS[id]);
 
+  LIVE.stackedLike = (id === 'stacked');
   const cue = liveCue(renderedToDraft(video.currentTime || 0), v);
   if (!cue) { ov.innerHTML = ''; LIVE.key = null; return; }
 
@@ -1879,15 +1884,34 @@ function renderLive() {
     if (v.size) box.style.setProperty('--scat-size', v.size);
     const cueEl = el('div', 'scat-cue', box);
     box.style.setProperty('--scat-scale', sc);
-    // a destacada é a palavra mais longa — a mesma regra do compositor
+    /* AGRUPAMENTO IGUAL AO DO COMPOSITOR: 3 ou 4 palavras por linha, e a
+       destacada — a mais longa — sozinha na linha dela. Uma palavra por linha
+       (como estava) transforma o disperso numa COLUNA que desce pelo quadro
+       inteiro e transborda; o estilo é feito de linhas curtas e irregulares,
+       não de uma pilha. */
     let hi = 0;
     words.forEach((word, i) => { if (word.length > words[hi].length) hi = i; });
+    const lines = [];
+    let cur = [];
     words.forEach((word, i) => {
-      const line = el('div', 'scat-line', cueEl);
-      const sp = el('span', i === hi ? 'hi' : '', line);
-      sp.textContent = word;
-      sp.style.opacity = 1; // a folha nasce em 0 porque quem anima é o render
+      if (i === hi) {
+        if (cur.length) lines.push(cur);
+        lines.push([[word, true]]);
+        cur = [];
+        return;
+      }
+      cur.push([word, false]);
+      if (cur.length >= (i % 2 ? 4 : 3)) { lines.push(cur); cur = []; }
     });
+    if (cur.length) lines.push(cur);
+    for (const ln of lines) {
+      const lineEl = el('div', 'scat-line', cueEl);
+      for (const [word, isHi] of ln) {
+        const sp = el('span', isHi ? 'hi' : '', lineEl);
+        sp.textContent = word;
+        sp.style.opacity = 1; // a folha nasce em 0 porque quem anima é o render
+      }
+    }
   } else if (id === 'karaoke') {
     const box = el('div', 'ave-cap', ov);
     box.style.setProperty('--cap-scale', sc);
