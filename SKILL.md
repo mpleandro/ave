@@ -5,14 +5,12 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
 
 # Avelin — editor de vídeo
 
-> **PHASE 2 RENDERS WITH HYPERFRAMES** (Apache 2.0), not Remotion. One command
-> takes it end to end — `helpers/phase2.py <edit>` — and the visual vocabulary
-> is ported: six caption styles, four headlines, three edit types, the dynamic
-> camera, and the four longform layers.
->
-> **Never scaffold a Remotion project from this repo.** The old templates live
-> in `reference/remotion-legacy/` as the VISUAL SPEC the port was written
-> against — reference, never code to run.
+> **PHASE 2 RENDERS WITH HYPERFRAMES** (Apache 2.0). One command takes it end to
+> end — `helpers/phase2.py <edit>` — and the visual vocabulary is complete: six
+> caption styles, four headlines, three edit types, the dynamic camera, and the
+> four longform layers. The LOOK lives in `assets/styles/` and the NUMBERS in
+> `assets/styles/variants.json`; the composition is GENERATED, never scaffolded
+> from a template.
 >
 > Still missing, and say so rather than faking: the behind-the-subject layer
 > (the cutout tool is validated — `hyperframes remove-background` — but the
@@ -49,7 +47,9 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
 11. **PHASE 2 is data-driven.** `edit-data.json` describes the video; the LOOK lives in `assets/styles/` and the NUMBERS in `assets/styles/variants.json` — the same files the editor's Estilo previews are meant to read, so the two can never disagree. Bespoke graphics are the one escape hatch: an HTML of your own under `<projeto>/compositions/<id>.html`, mounted as a sub-composition. Never hand-write a style inside the composer.
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
 13. **Never Read machine data into context**: `transcripts/*.json` (raw), `captions.json`, `track.json`, `segments.json`, matte/track binaries. Read `takes_packed.md` and helper stdout instead.
-14. **Pediu vídeo "transparente"? AVALIE O OVERLAY ANTES DE ESCOLHER.** Toda vez que o usuário quiser um vídeo transparente, ou tirar o fundo de uma gravação de tela, decida entre `mix-blend-mode: screen` (o escuro some de graça — só serve para arte CLARA) e alfa de verdade em VP9 `yuva420p` (a arte tem escuro que importa: texto escuro, sombra, contorno). **Olhe a arte e prove antes de renderizar** — compor `1-(1-a)*(1-b)` sobre um quadro real do corte custa segundos e responde o que uma render responderia em minutos. Screen apaga TODO pixel escuro, não só o fundo. A tabela de decisão, as armadilhas e a receita da matte estão em `references/shortform.md`, seção "Quero o vídeo transparente".
+14. **UMA transcrição, não duas.** A legenda sai das FONTES deslocadas pelo EDL (`cut_transcript.py` → `cut_mapped.json`), **nunca** de uma segunda transcrição do `cut.mp4`. Duas passadas do mesmo modelo sobre o mesmo áudio erram em lugares diferentes, e a segunda é a que vira legenda queimada: nesta série trocou "trabalhar" por "avaliar" e a frase continuou gramatical. Mais que precisão, é coerência — **o texto que o usuário lê e edita na Fase 1 tem de ser LITERALMENTE o que entra no vídeo**, senão apagar uma palavra no painel não corta o que ele acha que corta. Transcrever o corte é o caminho de fallback, só quando não há EDL (corte trazido de fora), e diga que está nele.
+15. **RODE O `transcript_audit.py` ANTES DE ESCREVER O EDL.** O transcrito parecer bom não é evidência de que está completo — o Whisper engole gaguejo e repetição sem deixar rastro no texto. Toda janela que ele acusar é fala sem texto ou texto sem fala; leve as reais ao usuário junto com a estratégia de corte. Pular esse passo entrega gaguejo no vídeo final, e o usuário descobre assistindo.
+16. **Pediu vídeo "transparente"? AVALIE O OVERLAY ANTES DE ESCOLHER.** Toda vez que o usuário quiser um vídeo transparente, ou tirar o fundo de uma gravação de tela, decida entre `mix-blend-mode: screen` (o escuro some de graça — só serve para arte CLARA) e alfa de verdade em VP9 `yuva420p` (a arte tem escuro que importa: texto escuro, sombra, contorno). **Olhe a arte e prove antes de renderizar** — compor `1-(1-a)*(1-b)` sobre um quadro real do corte custa segundos e responde o que uma render responderia em minutos. Screen apaga TODO pixel escuro, não só o fundo. A tabela de decisão, as armadilhas e a receita da matte estão em `references/shortform.md`, seção "Quero o vídeo transparente".
 
 ## Execution medium — ffmpeg pipeline (default) vs Adobe Premiere (MCP)
 
@@ -118,6 +118,8 @@ Phase 1:
 - **`transcribe.py <video> --edit-dir <edit> [--language pt] [--backend auto|groq|elevenlabs|whispercpp]`** — word-level, cached. `backend=auto` (default): ElevenLabs Scribe for sources >5 min (when `ELEVENLABS_API_KEY` set), else Groq Whisper. Audio uploads as CBR 64kbps mono MP3 (~0.5 MB/min); oversized audio auto-chunks **by bytes**, so every chunk is guaranteed under Groq's 25 MB cap regardless of length. Chunks fetch **in parallel** with per-chunk resume cache and 5x backoff retries (provider blips don't restart the job).
 - **`transcribe_batch.py <videos_dir> [--backend auto|groq|elevenlabs]`** — 4-worker parallel transcription for multi-take shoots; same per-file auto backend selection by length.
 - **`pack_transcripts.py --edit-dir <dir>`** — transcripts → `takes_packed.md` (phrase-level, breaks on ≥0.5s silence). **The** reading view: 1/10 the tokens of raw JSON.
+- **`transcript_audit.py <edit> [--recheck]`** — ONDE A TRANSCRIÇÃO MENTE, e é o portão que faltava antes do EDL. O Whisper **engole repetição**: o locutor gagueja, refaz a frase, e sai UMA passada limpa — o parágrafo lê perfeito e o `takes_packed.md` não tem como avisar. Também **troca palavra por palavra** ("trabalhar" → "avaliar", ambas plausíveis). Nenhum detector de TEXTO pega isso porque o texto está bem. Este pega por **densidade acústica** (região de fala com poucas palavras dentro = fala não transcrita; é física, não linguagem) e por **discordância entre as duas passadas** que o projeto já faz de graça. `--recheck` transcreve só a janela suspeita, isolada — sem contexto em volta o modelo não tem para onde suavizar e a repetição reaparece. Medido na série "170 Questões": achou 2 das 3 gaguejadas que o usuário só viu assistindo, uma delas com **0 palavras em 0,80s de fala**.
+- **`cut_transcript.py <edit> -o transcripts/cut_mapped.json`** — o transcrito do CORTE por mapeamento do EDL, não por transcrever de novo. É o que a Fase 2 usa para legenda (veja a Hard Rule 15).
 - **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is.
 - **`voice_levels.py <video> [--edit-dir <dir>] [--edl edl.json] [--drop-db 5]`** — the source of truth for speech LEVEL. Learns the noise floor (Ridler-Calvard intermeans, not a percentile) and the speaker's own median from the recording itself, then flags every phrase, sub-phrase run, and EDL range sitting ≥5 dB under that median and sizes a `gain_db` for each. Catches the failure nothing else sees: a whispered aside or a trailing-off sentence where every word is present, the transcript is perfect, `speech_regions` says "speech", `verify_cut` finds no pop and no dead air — and the viewer still hits a passage they cannot hear. **Run it in Phase 1 before writing the EDL.**
 - **`detect_color.py <video> [--json]`** — resolves NORMAL vs LOG from the file instead of asking. Tier 1 metadata (HLG/PQ declare themselves; Apple Log's signature is ProRes 10-bit 4:2:2 + BT.2020 primaries + EMPTY transfer; vendor tags when present), Tier 2 image statistics when the metadata is silent — which is common, since a Sony shooting S-Log3 to H.264 often declares plain bt709 and any transcode drops the tags. Returns the profile, a **confidence**, the evidence, and the `grade` to apply (measured from the footage for non-Apple LOG). Only `confidence: low` should send you back to the user.
@@ -268,7 +270,11 @@ Then delete `preview_edits.json` and update `state.json`.
 Goal: best take of every beat, cut on silence, graded image, clean `cut.mp4` for approval. No text, no graphics.
 
 1. **Inventory.** URL source? `ingest_url.py` first (`--section` when only a range of a longform video matters). `ffprobe` every source. `transcribe_batch.py` (or `transcribe.py`) → `pack_transcripts.py` → read `takes_packed.md`. Note dimensions/orientation and whether it looks flat/LOG. Material you can't picture from the transcript → `watch_video.py` for a one-Read visual survey.
-2. **Pre-scan** `takes_packed.md` for verbal slips, mis-speaks, and dead-air-stretched words (Whisper stretches a word's end across silence — verify long "phrases" against `speech_regions.py`/waveform before trusting them). **Then run `voice_levels.py` on every source** — the transcript is level-blind, so an inaudible passage reads exactly like a normal one. Anything it flags is a decision to make BEFORE the EDL: boost it with `gain_db`, or cut the take entirely.
+2. **Pre-scan** `takes_packed.md` for verbal slips, mis-speaks, and dead-air-stretched words (Whisper stretches a word's end across silence — verify long "phrases" against `speech_regions.py`/waveform before trusting them). **Then rode DOIS auditores, porque o transcrito é cego de dois jeitos diferentes:**
+   - **`transcript_audit.py <edit>`** — o transcrito é cego ao que ELE MESMO não escreveu. Gaguejo e repetição somem sem rastro: o parágrafo lê perfeito e falta uma frase inteira de áudio. Toda janela acusada é uma decisão a tomar ANTES do EDL. `--recheck` resolve as dúvidas transcrevendo só a janela, isolada.
+   - **`voice_levels.py` em cada fonte** — o transcrito é cego ao NÍVEL, então um trecho inaudível lê igual a um normal. O que ele acusar: reforce com `gain_db`, ou corte o take.
+
+   Os dois juntos cobrem o buraco que derrubou o #29 — três gaguejadas foram para o vídeo entregue porque nada olhava para "há fala aqui que ninguém transcreveu".
 3. **Converse.** Describe what you see; ask questions shaped by the material (content type, target length/aspect, pacing, must-keep/must-cut). No fixed checklist.
 4. **Detect the colour profile — do NOT ask.** Run `detect_color.py <source>`.
    The answer is in the file; asking put a measurable question on the user.

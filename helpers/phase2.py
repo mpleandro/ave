@@ -209,17 +209,31 @@ def main() -> None:
     if not caps_path.exists():
         # Gerar aqui em vez de desistir. Elas são DERIVADAS do corte, não uma
         # escolha do usuário — exigi-las prontas fazia o comando "faz tudo"
-        # parar no primeiro passo. E o transcrito tem de ser o do cut.mp4: o
-        # modo de fallback pelo EDL devolve zero palavras, porque o J-cut
-        # encurta a saída e os tempos das fontes não valem aqui.
+        # parar no primeiro passo.
+        #
+        # A ORIGEM é o transcrito das FONTES, deslocado pelo EDL — não uma
+        # segunda transcrição do cut.mp4. As duas passadas erram em lugares
+        # diferentes, e a segunda é a que vira legenda queimada: nesta série
+        # ela trocou "trabalhar" por "avaliar" e a frase continuou gramatical.
+        # Mapeando, o texto que o usuário lê e edita na Fase 1 é o MESMO que
+        # entra no vídeo — que é a premissa de editar por transcrição.
         print("  legendas ausentes — gerando do corte…")
         cut = edit / (load(edit / "state.json", {}).get("video") or "cut.mp4")
         if not cut.exists():
             sys.exit(f"não achei o corte em {cut}")
-        tr = edit / "transcripts" / "cut.json"
-        if not tr.exists():
-            run([sys.executable, str(HELPERS / "transcribe.py"), str(cut),
-                 "--edit-dir", str(edit), "--language", "pt"], quiet=True)
+        tr = edit / "transcripts" / "cut_mapped.json"
+        edl_ok = (edit / "edl.json").exists()
+        if edl_ok and not tr.exists():
+            run([sys.executable, str(HELPERS / "cut_transcript.py"), str(edit),
+                 "-o", str(tr)], quiet=True)
+        if not tr.exists() or not json.loads(tr.read_text()).get("words"):
+            # Sem EDL (corte trazido de fora) não há o que mapear — aí sim
+            # transcreve, e diga que está no caminho de menor confiança.
+            print("  sem EDL para mapear — transcrevendo o corte (menos confiável)")
+            tr = edit / "transcripts" / "cut.json"
+            if not tr.exists():
+                run([sys.executable, str(HELPERS / "transcribe.py"), str(cut),
+                     "--edit-dir", str(edit), "--language", "pt"], quiet=True)
         pub.mkdir(parents=True, exist_ok=True)
         run([sys.executable, str(HELPERS / "captions_words.py"),
              "--transcript", str(tr), "-o", str(caps_path)], quiet=True)
@@ -259,7 +273,12 @@ def main() -> None:
 
     if data.get("captions", {}).get("style") == "stacked":
         cues = pub / "caption-cues.json"
-        transcript = edit / "transcripts" / "cut.json"
+        # a MESMA origem das legendas — o mapeado, se existir. Duas origens
+        # diferentes aqui fariam a pilha e a legenda discordarem palavra a
+        # palavra, e o defeito só apareceria assistindo.
+        transcript = edit / "transcripts" / "cut_mapped.json"
+        if not transcript.exists():
+            transcript = edit / "transcripts" / "cut.json"
         if not cues.exists():
             if not transcript.exists():
                 sys.exit(f"o empilhado precisa da transcrição do corte em {transcript}")

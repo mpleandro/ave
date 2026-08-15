@@ -446,6 +446,25 @@ Medido montando a roleta da série "170 Questões":
   `src="nome.webm"`. Feio, mas é o único jeito de os dois acharem.
 - **Anime o INVÓLUCRO, nunca o `<video>`.** Um `<div>` posicionado por fora, o
   vídeo parado dentro dele.
+- **UM `<video>` DENTRO DE SUB-COMPOSIÇÃO ENTREGA ~0,5s E DEPOIS SOME.** Medido
+  com clipe de 5,1s: o card aparecia até 5,2s e sumia pelo resto da janela, sem
+  erro, sem aviso, com `minVideoFrameCoverageRatio: 1` (o motor jurava ter
+  extraído os 154 quadros). Descartados um a um, com render de verdade:
+  `mix-blend-mode`, animar o vídeo, codec (mp4 e webm), duração do bloco
+  batendo com a da sub-composição, keyframes esparsos (reencodei com `-g 15`),
+  cache de extração (renomeei o arquivo) e a própria linha do tempo GSAP
+  (neutralizei). Nenhum era a causa. Um clipe de 2,9s no MESMO arranjo funciona
+  inteiro — o teto é curto, não zero.
+  **A saída é não depender disso: vídeo só para o que se MOVE, `<img>` para o
+  que fica parado.** Na roleta, o giro virou um webm de 1,77s e os 3,4s de card
+  travado viraram um PNG com alfa — que é o que eles sempre foram, 100 quadros
+  idênticos. Sobreponha 2 quadros na emenda ou pisca um buraco. Imagem não tem
+  seek, não tem codec, não tem teto.
+- **O `snapshot` MENTE sobre tempo.** Ele posiciona o vídeo da sub-composição
+  pelo tempo ABSOLUTO do pai; o renderizador usa o relativo. No mesmo instante
+  o snapshot mostrava o card travado e a render mostrava o ocioso. Serve para
+  ver layout e cor, **nunca** para conferir sincronia — para isso, render curto
+  com `--end`.
 - **Um gráfico que entra sem som lê como falha de render.** O composer já emite o
   whoosh de entrada, igual aos cartões de inserção — não acrescente à mão no
   `index.html`, ele é regerado.

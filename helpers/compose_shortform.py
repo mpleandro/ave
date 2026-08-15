@@ -139,8 +139,16 @@ def fit_font(text: str, base: float, avail: float, factor: float) -> int:
     return int(avail / (n * factor)) if est > avail else int(base)
 
 
-def stacked_markup(cues: list[dict], st: dict, duration: float) -> tuple[str, int]:
-    """Deixas do empilhado, do arquivo preparado. Retorna (markup, n_estendidas)."""
+def stacked_markup(cues: list[dict], st: dict, duration: float,
+                   accent: str = "#5fd07a") -> tuple[str, int]:
+    """Deixas do empilhado, do arquivo preparado. Retorna (markup, n_estendidas).
+
+    O `accent` pinta o círculo do SOLO_OUTLINE. Ele era FIXO em `#5fd07a` aqui
+    dentro — um verde que atravessava qualquer paleta escolhida na aba Estilo e
+    aparecia no meio de uma composição laranja, sem nada reclamar. É exatamente
+    o anti-padrão que a Hard Rule 11 nomeia: cor decidida no composer em vez de
+    vir do dado.
+    """
     blocks, stretched = [], 0
     min_solo = st["minSoloMs"] / 1000
     for k, c in enumerate(cues):
@@ -165,7 +173,7 @@ def stacked_markup(cues: list[dict], st: dict, duration: float) -> tuple[str, in
             w = c["lines"][0][0]
             size = fit_font(w["text"], st["soloBase"], st["maxW"], st["soloFitFactor"])
             circle = ('<svg class="stk-ellipse" viewBox="0 0 200 100" fill="none">'
-                      '<ellipse cx="100" cy="50" rx="94" ry="42" stroke="#5fd07a" '
+                      f'<ellipse cx="100" cy="50" rx="94" ry="42" stroke="{accent}" '
                       'stroke-width="5" stroke-linecap="round" '
                       'stroke-dasharray="300 40" transform="rotate(-3 100 50)"/></svg>'
                       if c["preset"] == "SOLO_OUTLINE" else "")
@@ -1013,7 +1021,10 @@ def main() -> None:
                      f"  uv run python helpers/caption_style.py --transcript "
                      f"<edit>/transcripts/cut.json -o {cues_path}")
         cues = json.loads(cues_path.read_text())
-        mk, stretched = stacked_markup(cues, st, duration)
+        # o MESMO accent que o resto da composição usa — o círculo do solo era
+        # verde fixo e atravessava qualquer paleta escolhida na aba Estilo
+        mk, stretched = stacked_markup(cues, st, duration,
+                                       data.get("accent") or "#FF6B1A")
         data["_stackedMarkup"] = mk
         data["_soloCues"] = [
             (c["startMs"] / 1000,

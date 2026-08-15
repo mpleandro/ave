@@ -31,7 +31,7 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Node / Remotion (installed on demand, not vendored)
+# Node / HyperFrames (resolved on demand, not vendored)
 node_modules/
 package-lock.json
 yarn.lock
