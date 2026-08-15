@@ -155,51 +155,10 @@ header {
 .btn.icon svg { width: 13px; height: 13px; display: block; fill: currentColor; }
 .btn.small { padding: 5px 10px; font-size: 11px; }
 
-/* ---------- tabs ---------- */
-.tabs { display: flex; gap: 8px; margin: 10px 14px 0; flex: 0 0 auto; }
-
-/* As abas são as duas MESAS de trabalho, e agora carregam só o nome do ofício.
- * A numeração de fase saiu junto com o `.tab-num`: ela media o progresso do
- * produto, não o do vídeo.
- *
- * A serifada faz o serviço que o corpo em negrito fazia — o peso vem do
- * desenho da letra, não de encorpá-la. Por isso o ativo muda de tamanho e de
- * fundo, mas nunca de peso: Libre Baskerville é sempre 400 na marca. */
-.tab {
-  font-weight: 600;
-  font-size: 12.5px;
-  letter-spacing: -0.1px;
-  color: var(--dim);
-  background: var(--glass);
-  backdrop-filter: blur(18px);
-  border: 1px solid var(--stroke);
-  border-radius: 12px 12px 0 0;
-  border-bottom: none;
-  padding: 10px 22px 12px;
-  cursor: pointer;
-  align-self: flex-end;
-  position: relative;
-  transition: color 0.2s var(--ease-out), background 0.2s var(--ease-out);
-}
-.tab:hover:not(:disabled):not(.active) { color: var(--text); }
-.tab.active {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.11);
-  font-size: 13.5px;
-  padding: 12px 26px 14px;
-}
-/* o traço laranja é o que diz "você está aqui" agora que o número não diz */
-.tab.active::after {
-  content: '';
-  position: absolute;
-  left: 26px;
-  right: 26px;
-  bottom: 6px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--orange);
-}
-.tab:disabled { opacity: 0.35; cursor: not-allowed; }
+/* As abas saíram. Elas mostravam a MESMA linha do tempo — mesmo eixo, mesmos
+   trechos — e só mudavam quais pistas apareciam e qual arquivo tocava. A
+   primeira coisa agora depende do dado (pista existe se há o que mostrar) e a
+   segunda virou um botão explícito no player. */
 
 /* ---------- main ---------- */
 main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding: 10px 14px 8px; min-height: 0; }
@@ -1407,3 +1366,13 @@ button.tl-chip:disabled { cursor: default; }
 .player-hud .btn.icon { padding: 6px 9px; }
 
 }
+
+/* alterna a fonte do player: o corte limpo ou o render final */
+.btn.src {
+  padding: 4px 9px;
+  font-size: 10.5px;
+  letter-spacing: 0.4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.btn.src.on { background: rgb(var(--orange-rgb) / 0.22); border-color: rgb(var(--orange-rgb) / 0.5); color: var(--orange-soft); }

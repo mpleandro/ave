@@ -608,6 +608,7 @@ let S = {
   lastSig: '', // change detection
   savedPending: false,
   notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
+  showFinal: false, // tocando o render final em vez do corte
   pendingIn: null, // an IN is open, waiting for its OUT
   editingNote: null, // id of the note the editor is bound to
   style: null, // current picks {edit, captions, elements:{…}, note}
@@ -827,7 +828,6 @@ async function applyState(data) {
   $('setupNote').value = S.style.note || '';
   // a skill pediu uma escolha de estilo → leva o usuário para a Finalização,
   // onde o painel de camadas agora mora
-  if (S.state.awaitingStyle) S.tab = 2;
 
   const hasVideo = S.videoDuration > 0;
   $('playerWrap').classList.toggle('hidden', !hasVideo);
@@ -839,16 +839,6 @@ async function applyState(data) {
     loadThumbsMeta();
   }
 
-  // A Finalização abre quando há o que fazer nela: a Fase 2 existe no disco, OU
-  // há estilo a escolher. Esse segundo caso é o antigo portão — ele deixou de
-  // ser uma aba própria e virou o painel de camadas aqui dentro, porque escolher
-  // como o vídeo vai ficar é coisa que se faz olhando o vídeo.
-  const tab2 = document.querySelector('[data-tab="2"]');
-  tab2.disabled = (S.state.phase || 1) < 2 && !setupApplies();
-  if (tab2.disabled && S.tab === 2) S.tab = 1;
-  document.querySelectorAll('.tab').forEach((x) => {
-    x.classList.toggle('active', String(x.dataset.tab) === String(S.tab));
-  });
   S.captions = [];
   S.editData = null;
   S.insertsDraft = [];
@@ -867,6 +857,7 @@ async function applyState(data) {
     }
   }
 
+  refreshSrcToggle();
   fitZoom();
   renderAll();
   renderSetup();
@@ -876,7 +867,11 @@ async function applyState(data) {
 // Fase 1 plays the clean cut; Fase 2 plays the Phase-2 render (state.finalVideo)
 // when it exists, so captions/inserts are visible. Keeps the playback position.
 function updateVideoSrc() {
-  const rel = (S.tab === 2 && S.state.finalVideo) ? S.state.finalVideo : (S.state.video || 'cut.mp4');
+  // A fonte é ESCOLHA do usuário, não efeito colateral de trocar de aba. Antes,
+  // mudar de aba trocava o arquivo em silêncio e dava para passar minutos
+  // ouvindo o render antigo achando que era o corte novo.
+  const wantFinal = S.showFinal && S.state.finalVideo;
+  const rel = wantFinal ? S.state.finalVideo : (S.state.video || 'cut.mp4');
   const vsrc = `/media/${rel}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || 0}`;
   if (video.dataset.src === vsrc) return;
   const t = video.currentTime;
@@ -1273,7 +1268,7 @@ let wasShowing = false; // painel estava aberto no render anterior (para o re-fi
 const setupApplies = () => !!(S.state.awaitingStyle || S.state.style);
 
 function renderSetup() {
-  const show = S.tab === 2 && setupApplies();
+  const show = setupApplies();
   $('layersPanel').classList.toggle('hidden', !show);
   const hasVideo = S.videoDuration > 0;
   $('stage').classList.toggle('hidden', !hasVideo);
@@ -1532,7 +1527,7 @@ function renderClips() {
   const trimming = drag && drag.type === 'trim' ? drag.i : null;
   const dl = draftLayout(trimming);
   const rl = renderedLayout();
-  const editable = S.tab === 1;
+  const editable = true;
   dl.forEach((r, i) => {
     if (r.removed && r.dur === 0) {
       // removed: show a slim ghost at its slot
@@ -1673,7 +1668,8 @@ function renderJcutAudio() {
 }
 
 function renderChips() {
-  const phase2 = S.tab === 2;
+  // as pistas aparecem quando existe o que mostrar — a pergunta é sobre o dado
+  const phase2 = !!(S.captions.length || S.insertsDraft.length || (S.editData && S.editData.soundtrack));
   $('trkCaptions').classList.toggle('hidden', !phase2);
   insertTracksEl.classList.toggle('hidden', !phase2);
   insertTracksEl.innerHTML = '';
@@ -1836,7 +1832,7 @@ function liveCue(t, v) {
 function renderLive() {
   const ov = $('liveOverlay');
   if (!ov) return;
-  const on = S.tab === 2 && setupApplies() && video.videoWidth > 0;
+  const on = setupApplies() && video.videoWidth > 0;
   ov.classList.toggle('hidden', !on);
   if (!on) { LIVE.key = null; return; }
 
@@ -2078,21 +2074,21 @@ panel.addEventListener('pointerdown', (e) => {
   const clip = e.target.closest('.clip');
   const chip = e.target.closest('.chip.insert');
 
-  if (handle && clip && S.tab === 1) {
+  if (handle && clip) {
     const i = +handle.dataset.i;
     drag = { type: 'trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, r: { ...S.draft[i] } };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
     return;
   }
-  if (handle && chip && S.tab === 2) {
+  if (handle && chip) {
     const i = +handle.dataset.i;
     drag = { type: 'chip-trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, c: { ...S.insertsDraft[i] } };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
     return;
   }
-  if (chip && S.tab === 2) {
+  if (chip) {
     const i = +chip.dataset.i;
     drag = { type: 'chip-move', i, x0: e.clientX, c: { ...S.insertsDraft[i] } };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
@@ -2205,7 +2201,7 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const step = e.shiftKey ? 1 : 1 / S.fps;
     seekDraft(renderedToDraft(video.currentTime) + (e.key === 'ArrowRight' ? step : -step));
-  } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0 && S.tab === 1) {
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0) {
     const r = S.draft[S.selected];
     r.removed = !r.removed;
     renderAll(); refreshHeader();
@@ -2286,19 +2282,22 @@ panel.addEventListener('scroll', () => requestAnimationFrame(() => { drawRuler()
 // resize (or the short-pane media query kicking in) has to rebuild them
 window.addEventListener('resize', () => { fitZoom(); renderAll(); renderSetup(); });
 
-// tabs
-document.querySelectorAll('.tab').forEach((tab) =>
-  tab.addEventListener('click', () => {
-    if (tab.disabled) return;
-    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
-    tab.classList.add('active');
-    S.tab = +tab.dataset.tab;
-    S.selected = -1;
-    updateVideoSrc(); // Fase 2 plays the Phase-2 render when available
-    renderAll();
-    renderSetup();
-  })
-);
+// alterna entre o CORTE e o render final. Só aparece quando o final existe —
+// oferecer a troca sem ter o que trocar é prometer um estado que não há.
+$('srcToggle').addEventListener('click', () => {
+  S.showFinal = !S.showFinal;
+  refreshSrcToggle();
+  updateVideoSrc();
+});
+
+function refreshSrcToggle() {
+  const b = $('srcToggle');
+  const has = !!S.state.finalVideo;
+  b.classList.toggle('hidden', !has);
+  if (!has) S.showFinal = false;
+  b.textContent = S.showFinal ? 'final' : 'corte';
+  b.classList.toggle('on', !!S.showFinal);
+}
 
 // ---------- save / discard ----------
 $('btnSave').addEventListener('click', async () => {
@@ -2335,7 +2334,7 @@ $('btnSave').addEventListener('click', async () => {
       end: +n.end.toFixed(3),
       renderedStart: +draftToRendered(n.start).toFixed(3),
       renderedEnd: +draftToRendered(n.end).toFixed(3),
-      phase: S.tab === 2 ? 2 : 1,
+      phase: S.state.phase || 1,
       text: n.text,
     }));
   }

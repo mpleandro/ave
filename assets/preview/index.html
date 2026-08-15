@@ -34,15 +34,6 @@
   </div>
 </header>
 
-<nav id="tabs" class="tabs">
-  <!-- Nomes de OFÍCIO, não de etapa de processo: "Decupagem" e "Finalização" são
-       o que um editor chama essas duas mesas de trabalho. A numeração "FASE 1/2"
-       saiu porque contava ao usuário em que ponto do fluxo do produto ele está —
-       informação de bastidor — em vez de dizer o que se faz ali. -->
-  <button class="tab active" data-tab="1">Decupagem</button>
-  <button class="tab" data-tab="2">Finalização</button>
-</nav>
-
 <main>
   <section id="emptyState" class="empty glass hidden">
     <div class="empty-inner">
@@ -71,6 +62,7 @@
         <span id="timeNow" class="time">0:00.00</span>
         <span class="time dim">/</span>
         <span id="timeTotal" class="time dim">0:00.00</span>
+        <button id="srcToggle" class="btn src hidden" title="Alternar entre o corte e o render final">corte</button>
       </div>
     </div>
   </section>
