@@ -1462,7 +1462,7 @@ button.tl-chip:disabled { cursor: default; }
 .tx-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 14px 16px 10px; }
 .tx-body {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  font-size: 15px; line-height: 2.05; letter-spacing: 0.1px;
+  font-size: 15px; line-height: 1.85; letter-spacing: 0.1px;
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.16) transparent;
 }
 .tx-body::-webkit-scrollbar { width: 9px; }
@@ -1483,6 +1483,17 @@ button.tl-chip:disabled { cursor: default; }
 .tw.sel.tight, .tw.cut.tight { box-shadow: inset 0 -2px 0 rgb(var(--mark-rgb) / 0.7); }
 /* quebra de trecho: onde um take acaba e outro começa */
 .tw-cutmark { display: inline-block; width: 100%; height: 0; }
+.tx-line { display: flex; align-items: baseline; gap: 10px; padding: 1px 0; border-radius: 6px; }
+.tx-line.cut { opacity: 0.55; }
+/* o carimbo é a ALÇA da deixa: clicar nele pega a linha inteira */
+.tx-t {
+  flex: 0 0 auto; width: 58px; padding: 1px 0; border: 0; background: transparent;
+  color: var(--dim); font: inherit; font-size: 11px; font-variant-numeric: tabular-nums;
+  text-align: right; cursor: pointer;
+}
+.tx-t:hover { color: var(--orange-soft); }
+.tx-words { flex: 1 1 auto; min-width: 0; }
+
 .tw-src { display: block; margin: 14px 0 4px; font-size: 10px; letter-spacing: 1.2px;
   text-transform: uppercase; color: var(--dim); }
 

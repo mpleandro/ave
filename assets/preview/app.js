@@ -2657,6 +2657,33 @@ function setView(v) {
   renderTx();
 }
 
+/* AGRUPAMENTO EM DEIXAS — o texto aparece como a legenda vai aparecer.
+ *
+ * Duas regras, e a ordem importa: quebra no SILÊNCIO medido (é o que o
+ * compositor usa, e é onde uma deixa naturalmente termina) e, na falta dele,
+ * no teto de palavras do estilo escolhido. Agrupar só por contagem produziria
+ * linhas que cortam no meio de uma oração; agrupar só por silêncio produziria
+ * linhas gigantes em quem fala corrido — e este fala corrido.
+ *
+ * É uma PREVISÃO enquanto a Fase 2 não rodou: sem `captions.json` não existem
+ * deixas de verdade, existe a regra que vai gerá-las. */
+function txLines() {
+  const id = (S.style && S.style.captions) || 'karaoke';
+  const v = (LIVE.variants && LIVE.variants.styles && LIVE.variants.styles[id]) || {};
+  const max = v.maxWords || 3;
+  const linhas = [];
+  let cur = null;
+  S.words.forEach((w, i) => {
+    if (!cur || w.range !== cur.range || cur.idx.length >= max) {
+      cur = { range: w.range, start: w.outStart, idx: [] };
+      linhas.push(cur);
+    }
+    cur.idx.push(i);
+    if (w.gapAfter > 0.25) cur = null;   // silêncio real fecha a deixa
+  });
+  return linhas;
+}
+
 function renderTx() {
   const host = $('txBody');
   if (!host || S.view !== 'tx') return;
@@ -2667,23 +2694,32 @@ function renderTx() {
     return;
   }
   let lastRange = -1;
-  S.words.forEach((w, i) => {
-    if (w.range !== lastRange) {
-      lastRange = w.range;
-      const tag = el('span', 'tw-src', host);
-      const r = (S.draft && S.draft[w.range]) || {};
-      tag.textContent = `${r.beat || 'trecho'} · ${w.source}`;
+  for (const ln of txLines()) {
+    if (ln.range !== lastRange) {
+      lastRange = ln.range;
+      const r = (S.draft && S.draft[ln.range]) || {};
+      el('div', 'tw-src', host).textContent = `${r.beat || 'trecho'} · ${S.words[ln.idx[0]].source}`;
     }
-    const sp = el('span', 'tw', host);
-    sp.dataset.i = i;
-    sp.textContent = w.text;
-    // apertado = a IA vai ter de improvisar a emenda aqui
-    if (w.gapBefore === 0 && w.gapAfter === 0) sp.classList.add('tight');
-    if (S.cutWords.has(i)) sp.classList.add('cut');
-    if (S.selWords.has(i)) sp.classList.add('sel');
-    sp.title = `${fmt(w.outStart)} · folga ${w.gapBefore.toFixed(2)}s / ${w.gapAfter.toFixed(2)}s`;
-    host.append(' ');
-  });
+    const row = el('div', 'tx-line', host);
+    if (ln.idx.every((i) => S.cutWords.has(i))) row.classList.add('cut');
+    // o carimbo é também a alça da LINHA: clicar seleciona a deixa inteira
+    const t = el('button', 'tx-t', row);
+    t.type = 'button';
+    t.dataset.line = ln.idx.join(',');
+    t.textContent = fmt(ln.start);
+    const txt = el('div', 'tx-words', row);
+    for (const i of ln.idx) {
+      const w = S.words[i];
+      const sp = el('span', 'tw', txt);
+      sp.dataset.i = i;
+      sp.textContent = w.text;
+      if (w.gapBefore === 0 && w.gapAfter === 0) sp.classList.add('tight');
+      if (S.cutWords.has(i)) sp.classList.add('cut');
+      if (S.selWords.has(i)) sp.classList.add('sel');
+      sp.title = `${fmt(w.outStart)} · folga ${w.gapBefore.toFixed(2)}s / ${w.gapAfter.toFixed(2)}s`;
+      txt.append(' ');
+    }
+  }
   const n = S.cutWords.size;
   $('txCount').textContent = n ? `${n} palavra${n === 1 ? '' : 's'} marcada${n === 1 ? '' : 's'} para remoção` : '';
   markNowWord();
@@ -2708,20 +2744,60 @@ function markNowWord() {
 document.querySelectorAll('.vseg').forEach((b) =>
   b.addEventListener('click', () => setView(b.dataset.view)));
 
-$('txBody').addEventListener('click', (e) => {
+/* SELEÇÃO POR ARRASTO. Marcar palavra a palavra funciona para um gaguejo, mas
+   apagar uma oração inteira vira trabalho braçal — e apagar orações é o uso
+   real. Arrastar é o gesto que qualquer um já usa em texto. O carimbo de tempo
+   é a alça da deixa: um clique nele pega a linha toda. */
+let txDrag = null;
+
+const txPaint = (a, b) => {
+  S.selWords.clear();
+  for (let k = Math.min(a, b); k <= Math.max(a, b); k++) S.selWords.add(k);
+  // repinta sem reconstruir: remontar a cada movimento do mouse pisca a tela
+  $('txBody').querySelectorAll('.tw').forEach((n) => {
+    n.classList.toggle('sel', S.selWords.has(+n.dataset.i));
+  });
+};
+
+$('txBody').addEventListener('pointerdown', (e) => {
+  const t = e.target.closest('.tx-t');
+  if (t) {
+    const idx = t.dataset.line.split(',').map(Number);
+    S.selWords = new Set(idx);
+    seekDraft(S.words[idx[0]].outStart);
+    renderTx();
+    e.preventDefault();
+    return;
+  }
   const sp = e.target.closest('.tw');
   if (!sp) return;
   const i = +sp.dataset.i;
-  if (e.shiftKey && S.selWords.size) {
-    const anchor = Math.min(...S.selWords);
-    S.selWords.clear();
-    for (let k = Math.min(anchor, i); k <= Math.max(anchor, i); k++) S.selWords.add(k);
-  } else if (e.metaKey || e.ctrlKey) {
+  if (e.shiftKey && S.selWords.size) { txPaint(Math.min(...S.selWords), i); return; }
+  if (e.metaKey || e.ctrlKey) {
     S.selWords.has(i) ? S.selWords.delete(i) : S.selWords.add(i);
-  } else {
-    S.selWords.clear();
-    S.selWords.add(i);
-    seekDraft(S.words[i].outStart);   // clique simples também LEVA até a palavra
+    renderTx();
+    return;
   }
+  txDrag = { from: i, moved: false };
+  txPaint(i, i);
+  try { $('txBody').setPointerCapture(e.pointerId); } catch (err) { /* toque */ }
+  e.preventDefault();
+});
+
+$('txBody').addEventListener('pointermove', (e) => {
+  if (!txDrag) return;
+  const sp = document.elementFromPoint(e.clientX, e.clientY);
+  const w = sp && sp.closest && sp.closest('.tw');
+  if (!w) return;
+  const i = +w.dataset.i;
+  if (i !== txDrag.from) txDrag.moved = true;
+  txPaint(txDrag.from, i);
+});
+
+$('txBody').addEventListener('pointerup', (e) => {
+  if (!txDrag) return;
+  // clique seco (sem arrastar) também LEVA a agulha até a palavra
+  if (!txDrag.moved) seekDraft(S.words[txDrag.from].outStart);
+  txDrag = null;
   renderTx();
 });
