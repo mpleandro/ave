@@ -77,7 +77,7 @@ const ICON = {
 const PORTED = {
   captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked']),
   headlines: new Set(['outline', 'card', 'realce', 'misto']),
-  edits: new Set(['limpa']),
+  edits: new Set(['limpa', 'split', 'split2']),
 };
 
 const STYLE_CATALOG = {

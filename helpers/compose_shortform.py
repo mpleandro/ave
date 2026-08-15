@@ -179,6 +179,58 @@ def stacked_markup(cues: list[dict], st: dict, duration: float) -> tuple[str, in
     return "\n".join("    " + b for b in blocks), stretched
 
 
+def split_windows(data: dict, H: int, duration: float) -> list[dict]:
+    """Janelas de tela dividida, com a geometria já resolvida por layout."""
+    out = []
+    for it in (data.get("splitInserts") or []):
+        start = float(it.get("start", 0))
+        end = min(float(it.get("end", start)), duration)
+        if start >= duration or end <= start:
+            continue
+        layout = it.get("layout", "top")
+        lay = VARIANTS["split"].get(layout)
+        if lay is None:
+            continue
+        band = lay["band"]
+        is_top = layout == "top"
+        out.append({
+            "start": start, "end": end, "layout": layout,
+            "src": it.get("src") or it.get("ref"), "band": band,
+            # a arte ocupa a faixa; o vídeo fica com o resto do quadro
+            "artTop": 0 if is_top else H - band,
+            "vidTop": band if is_top else 0,
+            "vidHeight": H - band,
+            # Override POR JANELA. Num corte multi-take a cabeça se move —
+            # medido, ~170px entre tomadas — e um valor único para o vídeo
+            # inteiro corta as tomadas altas e deixa um vão sob a costura nas
+            # baixas.
+            "zoom": float(it.get("zoom", lay["zoom"])),
+            "focusY": float(it.get("focusY", lay["focusY"])),
+            "captionBottom": lay["captionBottom"],
+            "seam": lay["seam"],
+        })
+    return out
+
+
+def split_markup(wins: list[dict]) -> str:
+    blocks = []
+    for i, w in enumerate(wins):
+        art = (f'<img class="ave-split-art" src="{w["src"]}" alt="" '
+               f'style="top:{w["artTop"]}px; height:{w["band"]}px">'
+               if w["src"] else "")
+        # o degradê cobre a parte de baixo da arte, que é onde a legenda encosta
+        seam = (f'<div class="ave-split-seam" '
+                f'style="top:{w["artTop"] + w["band"] - 220}px; height:280px"></div>'
+                if w["seam"] else "")
+        blocks.append(
+            f'<div id="split{i}" class="ave-split-win clip" data-start="{w["start"]:.3f}" '
+            f'data-duration="{w["end"] - w["start"]:.3f}" data-track-index="5" '
+            f'data-zoom="{w["zoom"]}" data-focus="{w["focusY"]}" '
+            f'data-vid-top="{w["vidTop"]}" data-vid-height="{w["vidHeight"]}">'
+            f'{art}{seam}</div>')
+    return "\n".join("  " + b for b in blocks)
+
+
 def video_duration(path: Path) -> float:
     """Duração do stream de VÍDEO, nunca do container nem do áudio decodificado.
 
@@ -314,7 +366,7 @@ def hl_fit(lines: list[str], h: dict) -> float:
     return max(VARIANTS["headlineMinSize"], min(size, h["cap"]))
 
 
-def hook_markup(data: dict, accent: str) -> tuple[str, str]:
+def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tuple[str, str]:
     """(markup, css_extra) do hook. Bloco próprio, id estável, tempo próprio."""
     hook = data.get("hook", {})
     if not hook.get("enabled"):
@@ -334,28 +386,48 @@ def hook_markup(data: dict, accent: str) -> tuple[str, str]:
 
     size = hl_fit(raw, h)
     end = float(hook.get("endSec", 4.0))
+
+    # O gancho NÃO transfere de graça para a tela dividida: a altura padrão o
+    # põe DEBAIXO da arte (o linter acusa "texto escondido sob elemento
+    # opaco"). Cada layout tem a sua — 738 no `top`, onde o texto senta na
+    # costura sob a arte; ~920 no `bottom`, no vão entre o queixo e a costura.
+    top = h["top"]
+    for w in (splits or []):
+        if w["start"] < end and w["end"] > 0:
+            top = VARIANTS["split"][w["layout"]]["hookTop"]
+            break
     lines = "".join(f'<div class="hl-line">{esc(l)}</div>' for l in raw if l)
     block = (f'  <div id="hook" class="ave-hook {style_id} clip" data-start="0" '
              f'data-duration="{end:.3f}" data-track-index="2" '
              f'style="--hl-scale:1; --hl-size:{size}; --hl-lh:{h["lh"]}; '
-             f'--hl-top:{h["top"]}; --hl-accent:{accent}; --hl-stroke:{h["stroke"]}">'
+             f'--hl-top:{top}; --hl-accent:{accent}; --hl-stroke:{h["stroke"]}">'
              f'{lines}</div>')
     return block, '<link rel="stylesheet" href="styles/headline.css">'
 
 
-def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty) -> str:
+def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty,
+           splits: list[dict] | None = None) -> str:
     blocks = []
     for t in timed:
+        # A legenda DESVIA para a costura enquanto a tela dividida está no ar.
+        # Sem isso ela fica na posição de quadro cheio, que na tela dividida cai
+        # sobre o corpo em vez de na costura. O desvio é por deixa, não global:
+        # só as que caem dentro da janela se movem.
+        dodge = ""
+        for w in (splits or []):
+            if t["start"] < w["end"] and t["end"] > w["start"]:
+                dodge = f' style="bottom:{w["captionBottom"]}px"'
+                break
         attrs = (f'data-start="{t["start"]:.3f}" '
                  f'data-duration="{t["end"] - t["start"]:.3f}" data-track-index="1"')
         if st["animated"]:
             spans = "".join(f"<span>{esc(w['text'])}</span>" for w in t["cue"])
-            blocks.append(f'<div class="ave-cap-line clip" {attrs}>{spans}</div>')
+            blocks.append(f'<div class="ave-cap-line clip" {attrs}{dodge}>{spans}</div>')
         else:
             lines = split_two_lines(t["cue"], st, orphans, penalty)
             inner = "".join(
                 f'<div>{esc(" ".join(w["text"] for w in ln))}</div>' for ln in lines)
-            blocks.append(f'<div class="ave-cue clip" {attrs}>{inner}</div>')
+            blocks.append(f'<div class="ave-cue clip" {attrs}{dodge}>{inner}</div>')
     return "\n".join("    " + b for b in blocks)
 
 
@@ -374,8 +446,9 @@ def camera_parts(data, duration):
     els = data.get("elements", {}) or {}
     defaults = VARIANTS["camera"]
     segs = data.get("_segments") or []
-    zoom_cuts = bool(els.get("zoomCuts", True)) and bool(segs)
-    zoom_auto = bool(els.get("zoomAuto", True)) and bool(segs)
+    off = bool(data.get("_camOff"))
+    zoom_cuts = bool(els.get("zoomCuts", True)) and bool(segs) and not off
+    zoom_auto = bool(els.get("zoomAuto", True)) and bool(segs) and not off
 
     js, style, blocks = "", "", []
     if cam.get("enabled", True) and (zoom_cuts or zoom_auto):
@@ -414,11 +487,17 @@ def camera_parts(data, duration):
 
 def render_html(data, timed, st, style_id, video, duration, orphans, penalty) -> str:
     accent = data.get("accent") or "#FF6B1A"
-    hook_block, hook_css = hook_markup(data, accent)
     W, H = data.get("width", 1080), data.get("height", 1920)
     cfg = data.get("captions", {})
     bottom = cfg.get("paddingBottom", VARIANTS["bottom"])
     size = cfg.get("fontSize") or st["size"]
+    splits = split_windows(data, H, duration)
+    hook_block, hook_css = hook_markup(data, accent, splits)
+    # A câmera é DESLIGADA enquanto a tela dividida está no ar: ela move o
+    # quadro, e o efeito da tela dividida é justamente o rosto ficar parado
+    # numa região fixa. As duas juntas brigam pelo mesmo transform.
+    if splits:
+        data = {**data, "_camOff": True}
     cam_js, cam_style, flash_blocks = camera_parts(data, duration)
 
     gfont = st["gfont"]
@@ -466,6 +545,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         parts.append(cam_js)
     needs_tl = bool(parts)
 
+    split_block = split_markup(splits) if splits else ""
+    split_css = '<link rel="stylesheet" href="styles/split.css">' if splits else ""
+    split_tag = '<script src="styles/split.js"></script>' if splits else ""
+    if splits:
+        parts.append("  AVE_SPLIT.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+        needs_tl = True
+
     extra_css = ""
     if cam_js and flash_blocks:
         extra_css = '<link rel="stylesheet" href="styles/camera.css">'
@@ -487,9 +573,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 <link href="https://fonts.googleapis.com/css2?{gfont}&display=swap" rel="stylesheet">
 {gsap_tag}
 {cam_tag}
+{split_tag}
 {cap_css}
 {hook_css}
 {extra_css}
+{split_css}
 <style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   html, body {{ width:{W}px; height:{H}px; overflow:hidden; background:#000; }}
@@ -501,8 +589,10 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 <div id="root" data-composition-id="main" data-start="0" data-duration="{duration:.3f}"
      data-width="{W}" data-height="{H}"{no_tl}>
 
-  <video id="a-roll" class="clip" src="{video}" muted playsinline
-         data-start="0" data-duration="{duration:.3f}" data-track-index="0"></video>
+  <div id="vidwin">
+    <video id="a-roll" class="clip" src="{video}" muted playsinline
+           data-start="0" data-duration="{duration:.3f}" data-track-index="0"></video>
+  </div>
   <!-- Áudio como trilha própria, do mesmo arquivo. Medido: drift zero em 78s e
        em 786s. O `id` NÃO é opcional: sem ele o renderer não descobre o
        elemento e o vídeo sai MUDO, sem erro em lugar nenhum além do linter. -->
@@ -510,10 +600,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
          data-track-index="9" data-volume="1"></audio>
 
 {hook_block}
+{split_block}
 {chr(10).join(flash_blocks)}
 
   {container}
-{data["_stackedMarkup"] if style_id == "stacked" else (scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty))}
+{data["_stackedMarkup"] if style_id == "stacked" else (scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty, splits))}
   </div>
 </div>
 
@@ -562,6 +653,8 @@ def main() -> None:
     files = style_files(style_id, st)
     if data.get("hook", {}).get("enabled"):
         files.append("headline.css")
+    if data.get("splitInserts"):
+        files += ["split.css", "split.js"]
     if (data.get("camera", {}).get("enabled", True)
             and any((data.get("elements") or {}).get(k, True) for k in ("zoomCuts", "zoomAuto"))) \
             or data.get("transitions"):

@@ -205,5 +205,24 @@
     "durationFrames": 7,
     "blur": 16,
     "intensity": 1.0
+  },
+  "_split_readme": "Layouts da tela dividida. `focusY` é um y DA FONTE que vai parar no topo da janela de vídeo (y_src desenha em (y_src-focusY)*zoom). Os defaults servem uma cabeça de ~660px começando em y 455 — MEÇA antes de confiar: tire um quadro do corte, leia o topo do cabelo e o queixo, e ajuste. Cada janela pode sobrepor focusY/zoom, porque num corte multi-take a cabeça se move (medido: ~170px entre tomadas).",
+  "split": {
+    "top": {
+      "band": 750,
+      "zoom": 1.25,
+      "focusY": 400,
+      "captionBottom": 1074,
+      "seam": true,
+      "hookTop": 738
+    },
+    "bottom": {
+      "band": 750,
+      "zoom": 1.0,
+      "focusY": 225,
+      "captionBottom": 790,
+      "seam": false,
+      "hookTop": 920
+    }
   }
 }

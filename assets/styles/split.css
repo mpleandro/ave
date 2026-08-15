@@ -1,0 +1,55 @@
+/* TELA DIVIDIDA — duas variantes que fixam o rosto numa região e dão o resto do
+ * quadro para a imagem.
+ *
+ *   split  (top)     arte na faixa de CIMA, cabeça erguida embaixo
+ *   split2 (bottom)  arte na faixa de BAIXO, cabeça mantida no alto
+ *
+ * As duas são opostas num ponto, e é o truque inteiro: a fonte tem muita sobra
+ * acima da cabeça. `top` precisa aproximar para JOGAR FORA essa sobra; `bottom`
+ * a MANTÉM, e é isso que põe o rosto encostado na borda em vez de no meio.
+ * Trocar o par zoom/foco entre os dois quebra os dois.
+ *
+ * `--split-focus` é um y DA FONTE que vai parar no topo da janela de vídeo: um
+ * ponto y_src desenha em (y_src - focus) * zoom. Por isso a ordem do transform
+ * é `scale() translateY()` com origem no canto — inverter dá outra conta.
+ */
+
+#vidwin {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+#vidwin > video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: 0 0;
+}
+
+/* a arte ocupa a faixa; corte seco, sem fade — a troca é um corte, não uma
+   transição */
+.ave-split-art {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  object-fit: cover;
+  display: none;
+}
+
+/* Degradê na costura, SÓ no layout `top`.
+ *
+ * Ali a legenda senta sobre a arte e precisa de base para se ler. No `bottom`
+ * a legenda fica no vão acima da costura, então o degradê não teria função
+ * nenhuma além de acinzentar o topo da foto. */
+.ave-split-seam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.55) 100%);
+  display: none;
+}
