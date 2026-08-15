@@ -14,9 +14,9 @@ description: A.V.E. (Avelin Video Edit) — edit any video by conversation, in p
 > in `reference/remotion-legacy/` as the VISUAL SPEC the port was written
 > against — reference, never code to run.
 >
-> Still missing, and say so rather than faking: eye-tracking (`tracking`), the
-> behind-the-subject layer, and the caption dodge on split for the `disperso`
-> and `empilhado` styles.
+> Still missing, and say so rather than faking: the behind-the-subject layer
+> (the cutout tool is validated — `hyperframes remove-background` — but the
+> effect is not assembled).
 >
 > Fork of [edvid](https://github.com/fillrochaa/edvid) (MIT, Creator Factory) —
 > see `LICENSE`. Upstream is tracked as the `upstream` remote; keep the diff
@@ -317,13 +317,18 @@ not — verified in the render. Any other error still blocks.
 | Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` |
 | Headlines | `outline` `card` `realce` `misto` |
 | Edição | `limpa` `split` `split2` |
-| Câmera | zoom por corte, aproximação lenta, flash na transição |
+| Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash |
 | Curta | inserts, palavras em destaque, gráficos sob medida |
 | Longform | B-roll, lower-thirds, cards de capítulo, callouts |
 | Som | efeitos por evento + trilha |
 
-**Not ported: `tracking` (eye-tracking) and the behind-the-subject layer.** A
-style outside the ported set is refused BY NAME — never substituted.
+**Not ported: the behind-the-subject layer.** A style outside the ported set is
+refused BY NAME — never substituted.
+
+`tracking` absorbs the zoom rather than animating alongside it: the translation
+depends on the face point AND the zoom at that instant, so two separate
+animations would fight over the same transform. It refuses to combine with
+split-screen, which already pins the face by itself.
 
 `empilhado` is the only style with a prep step (a director groups the words and
 picks the orange serif accent). `phase2.py` generates it when missing.
