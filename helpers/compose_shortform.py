@@ -231,6 +231,39 @@ def split_markup(wins: list[dict]) -> str:
     return "\n".join("  " + b for b in blocks)
 
 
+def adaptive_accent(video: Path, brand_accent: str, top: float, height: float,
+                    windows: list[tuple[float, float]]) -> list[str]:
+    """Uma cor de accent por janela, medindo o FUNDO onde o elemento vai ficar.
+
+    Existe porque #FF6B1A tem luminância MÉDIA (L=0.318): ele só passa em WCAG
+    contra fundo bem escuro ou bem claro, e entre 0.10 e 0.35 fica em 1.09–2.46.
+    Medido numa palavra em destaque sobre fundo quente: 1.05:1.
+
+    A regra é de RESERVA, não de otimização: a laranja canônica sempre, e só
+    escala para outra da paleta quando ela reprova. Escolher sempre a de maior
+    contraste trocaria a cor da marca em todo quadro, que é abandoná-la.
+    """
+    if not video.exists() or not windows:
+        return [brand_accent] * len(windows)
+    try:
+        from backdrop_luma import sample_band, pick_accent
+        palette = json.loads((SKILL_DIR / "brand" / "avelin.json").read_text())["palette"]
+        samples = sample_band(video, top, height, 0.06, 0.88)
+    except Exception:
+        return [brand_accent] * len(windows)
+    if not samples:
+        return [brand_accent] * len(windows)
+
+    out = []
+    for a, b in windows:
+        inside = [l for t, l in samples if a <= t < b]
+        if not inside:
+            inside = [min(samples, key=lambda tl: abs(tl[0] - (a + b) / 2))[1]]
+        name, _ = pick_accent(sum(inside) / len(inside), palette)
+        out.append(palette.get(name, brand_accent))
+    return out
+
+
 def sfx_blocks(events: list[tuple[float, str]], proj: Path, duration: float,
                track: int = 8) -> tuple[list[str], list[str]]:
     """Elementos de áudio dos efeitos. Retorna (blocos, avisos).
@@ -550,7 +583,14 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         events.append(c)
 
     splits = split_windows(data, H, duration)
-    hook_block, hook_css = hook_markup(data, accent, splits)
+    hook_accent = accent
+    hk = data.get("hook") or {}
+    if hk.get("enabled") and VARIANTS["headlines"].get(hk.get("style", "card"), {}).get("usesAccent"):
+        hv = Path(data.get("_proj", ".")) / data.get("_video", "cut.mp4")
+        htop = VARIANTS["headlines"][hk["style"]]["top"] / H
+        hook_accent = adaptive_accent(hv, accent, max(0.0, htop - 0.01), 0.14,
+                                      [(0.0, float(hk.get("endSec", 4.0)))])[0]
+    hook_block, hook_css = hook_markup(data, hook_accent, splits)
     # A câmera é DESLIGADA enquanto a tela dividida está no ar: ela move o
     # quadro, e o efeito da tela dividida é justamente o rosto ficar parado
     # numa região fixa. As duas juntas brigam pelo mesmo transform.
@@ -620,15 +660,20 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         events.append((st_, "hook"))   # whoosh na entrada do cartão
 
     # palavras em destaque — trilha de TEXTO, ao lado do gancho
-    wa_blocks = []
-    for i, w in enumerate(data.get("wordAccents") or []):
+    wa_items = []
+    for w in (data.get("wordAccents") or []):
         st_, en = float(w.get("start", 0)), min(float(w.get("end", 0)), duration)
-        if st_ >= duration or en <= st_ or not w.get("text"):
-            continue
+        if st_ < duration and en > st_ and w.get("text"):
+            wa_items.append((st_, en, w["text"]))
+    wa_video = Path(data.get("_proj", ".")) / data.get("_video", "cut.mp4")
+    wa_colors = adaptive_accent(wa_video, accent, 0.36, 0.12,
+                                [(a, b) for a, b, _ in wa_items])
+    wa_blocks = []
+    for i, ((st_, en, text), col) in enumerate(zip(wa_items, wa_colors)):
         wa_blocks.append(
             f'  <div id="wa{i}" class="ave-wordaccent clip" data-start="{st_:.3f}" '
             f'data-duration="{en - st_:.3f}" data-track-index="6" '
-            f'style="--wa-scale:1; --wa-accent:{accent}">{esc(w["text"])}</div>')
+            f'style="--wa-scale:1; --wa-accent:{col}">{esc(text)}</div>')
 
     # Gráficos sob medida: substituem o CustomGraphics.tsx, que era "o único
     # arquivo de código editável" do template Remotion. Aqui cada um é um HTML
@@ -877,6 +922,7 @@ def main() -> None:
     orphans = set(VARIANTS["orphansPt"])
     penalty = VARIANTS["orphanPenalty"]
     data["_proj"] = str(proj)
+    data["_video"] = args.video
     args.output.write_text(render_html(data, timed, st, style_id, args.video,
                                        duration, orphans, penalty))
 

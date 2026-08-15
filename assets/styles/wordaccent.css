@@ -30,6 +30,15 @@
   padding: 0 calc(90px * var(--wa-scale));
   /* sombra dupla: a palavra é grande e cheia de cor, e sobre fundo claro a cor
      sozinha não separa do fundo */
+  /* Contorno azul-noite, PORTANTE.
+   *
+   * A cor sozinha não resolve aqui, e a medição explica: mesmo escolhendo a
+   * melhor laranja da paleta para o fundo, esta palavra ficou em 1.7:1 sobre
+   * um ambiente de luz quente. Nenhuma laranja vence fundo de luminância
+   * média — é o mesmo teto estrutural já medido nas legendas, e lá também foi
+   * o contorno que carregou. */
+  -webkit-text-stroke: calc(7px * var(--wa-scale)) rgba(13, 33, 55, 0.62);
+  paint-order: stroke fill;
   filter: drop-shadow(0 calc(6px * var(--wa-scale)) calc(16px * var(--wa-scale)) rgba(0, 0, 0, 0.55))
           drop-shadow(0 calc(2px * var(--wa-scale)) calc(4px * var(--wa-scale)) rgba(0, 0, 0, 0.5));
   opacity: 0;
