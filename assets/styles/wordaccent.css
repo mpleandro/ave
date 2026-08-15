@@ -1,0 +1,37 @@
+/* PALAVRA EM DESTAQUE — uma palavra sustentada, na linguagem visual da legenda.
+ *
+ * Não é legenda: é uma batida de ênfase, ou uma palavra-chave que o espectador
+ * precisa guardar. Por isso ela vive na trilha de TEXTO, ao lado do gancho, e
+ * não na trilha de legenda — some junto com a legenda seria perder o efeito.
+ *
+ * Fica no terço central-alto, acima da legenda e abaixo do insert: as três
+ * zonas não se cruzam.
+ */
+
+.ave-wordaccent {
+  --wa-scale: 1;
+  --wa-size: 104;
+  --wa-top: 0.42;
+  --wa-accent: #ff6b1a;
+
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--wa-top) * 100%);
+  transform: translateY(-50%);
+  text-align: center;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 900;
+  font-style: italic;
+  font-size: calc(var(--wa-size) * var(--wa-scale) * 1px);
+  letter-spacing: calc(-2px * var(--wa-scale));
+  line-height: 1.04;
+  color: var(--wa-accent);
+  padding: 0 calc(90px * var(--wa-scale));
+  /* sombra dupla: a palavra é grande e cheia de cor, e sobre fundo claro a cor
+     sozinha não separa do fundo */
+  filter: drop-shadow(0 calc(6px * var(--wa-scale)) calc(16px * var(--wa-scale)) rgba(0, 0, 0, 0.55))
+          drop-shadow(0 calc(2px * var(--wa-scale)) calc(4px * var(--wa-scale)) rgba(0, 0, 0, 0.5));
+  opacity: 0;
+  pointer-events: none;
+}

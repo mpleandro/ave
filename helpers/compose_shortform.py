@@ -619,6 +619,40 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
             f'<img src="{it.get("src") or it.get("ref")}" alt=""></div>')
         events.append((st_, "hook"))   # whoosh na entrada do cartão
 
+    # palavras em destaque — trilha de TEXTO, ao lado do gancho
+    wa_blocks = []
+    for i, w in enumerate(data.get("wordAccents") or []):
+        st_, en = float(w.get("start", 0)), min(float(w.get("end", 0)), duration)
+        if st_ >= duration or en <= st_ or not w.get("text"):
+            continue
+        wa_blocks.append(
+            f'  <div id="wa{i}" class="ave-wordaccent clip" data-start="{st_:.3f}" '
+            f'data-duration="{en - st_:.3f}" data-track-index="6" '
+            f'style="--wa-scale:1; --wa-accent:{accent}">{esc(w["text"])}</div>')
+
+    # Gráficos sob medida: substituem o CustomGraphics.tsx, que era "o único
+    # arquivo de código editável" do template Remotion. Aqui cada um é um HTML
+    # próprio montado como sub-composição — mecanismo nativo do HyperFrames.
+    # Sem arquivo, o gráfico não aparece; avisar é obrigatório, porque a
+    # composição renderiza sem erro e a falta só se vê assistindo.
+    bg_blocks, bg_missing = [], []
+    for i, g in enumerate(data.get("brollGraphics") or []):
+        st_, en = float(g.get("start", 0)), min(float(g.get("end", 0)), duration)
+        gid = g.get("id") or g.get("label") or f"grafico{i}"
+        if st_ >= duration or en <= st_:
+            continue
+        rel = f"compositions/{gid}.html"
+        if not (Path(data.get("_proj", ".")) / rel).exists():
+            bg_missing.append(gid)
+            continue
+        bg_blocks.append(
+            f'  <div id="bg{i}" class="clip" data-start="{st_:.3f}" '
+            f'data-duration="{en - st_:.3f}" data-track-index="4" '
+            f'data-composition-id="{gid}" data-composition-src="{rel}"></div>')
+    for gid in bg_missing:
+        print(f"  aviso: gráfico sob medida '{gid}' sem arquivo em "
+              f"compositions/{gid}.html — não vai aparecer", file=sys.stderr)
+
     proj = Path(data.get("_proj", "."))
     sfx_list, sfx_warns = sfx_blocks(events, proj, duration)
     for w in sfx_warns:
@@ -635,6 +669,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
                        f'data-volume="{snd.get("volume", 0.1)}"></audio>')
 
     insert_html = "\n".join(insert_blocks)
+    wa_html = "\n".join(wa_blocks)
+    wa_css = '<link rel="stylesheet" href="styles/wordaccent.css">' if wa_blocks else ""
+    wa_tag = '<script src="styles/wordaccent.js"></script>' if wa_blocks else ""
+    if wa_blocks:
+        parts.append("  AVE_WORDACCENT.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+        needs_tl = True
+    bg_html = "\n".join(bg_blocks)
     insert_css = '<link rel="stylesheet" href="styles/insert.css">' if insert_blocks else ""
     insert_tag = '<script src="styles/insert.js"></script>' if insert_blocks else ""
     if insert_blocks:
@@ -671,11 +712,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {cam_tag}
 {split_tag}
 {insert_tag}
+{wa_tag}
 {cap_css}
 {hook_css}
 {extra_css}
 {split_css}
 {insert_css}
+{wa_css}
 <style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   html, body {{ width:{W}px; height:{H}px; overflow:hidden; background:#000; }}
@@ -701,6 +744,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {split_block}
 {chr(10).join(flash_blocks)}
 {insert_html}
+{wa_html}
+{bg_html}
 {track_block}
 {sfx_html}
 
@@ -758,6 +803,8 @@ def main() -> None:
         files += ["split.css", "split.js"]
     if data.get("inserts"):
         files += ["insert.css", "insert.js"]
+    if data.get("wordAccents"):
+        files += ["wordaccent.css", "wordaccent.js"]
 
     # os efeitos vão para o projeto: o renderer resolve caminho relativo a ele
     sfxdir = proj / "sfx"
