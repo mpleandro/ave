@@ -27,10 +27,7 @@
     <div id="projectName" class="project-name">—</div>
   </div>
   <div class="head-actions">
-    <span id="dirtyPill" class="pill hidden"><b id="dirtyCount">0</b> ajuste(s) ainda no navegador</span>
     <span id="savedPill" class="pill saved hidden">✓ enviado ao Claude</span>
-    <button id="btnDiscard" class="btn ghost hidden">Descartar</button>
-    <button id="btnSave" class="btn primary hidden">Enviar para o Claude</button>
   </div>
 </header>
 
@@ -85,10 +82,6 @@
       <div class="layers-body-wrap">
         <div id="layerTabs" class="layer-tabs"></div>
         <div id="layerBody" class="layer-body"></div>
-      </div>
-      <div class="layers-actions">
-        <textarea id="setupNote" rows="2" placeholder="Alterações extras"></textarea>
-        <button id="setupGo" class="btn primary">Visualizar</button>
       </div>
     </section>
 
@@ -157,6 +150,35 @@
       <div id="needle" class="needle"><div class="needle-head"></div></div>
       </div>
     </section>
+
+    <!-- A BARRA DE AÇÃO. Uma só, e embaixo da linha do tempo — que é onde o
+         trabalho acontece. Antes havia duas, em cantos opostos: "Visualizar"
+         no painel de camadas e "Enviar" no cabeçalho, para a mesma ação mental
+         de mandar o que mudou. Marcar embaixo à esquerda e ter de caçar um
+         botão que aparece em cima à direita foi o que já custou um lote de
+         marcações perdidas.
+
+         Ela só existe quando há o que enviar, e o rótulo diz a CONSEQUÊNCIA:
+         refazer o corte não é a mesma coisa que montar a finalização, e o
+         segundo leva minutos. -->
+    <div id="actionBar" class="actionbar glass hidden">
+      <div class="actionbar-what">
+        <b id="actionCount"></b>
+        <span id="actionWhat"></span>
+      </div>
+      <textarea id="setupNote" rows="1" placeholder="Alterações extras"></textarea>
+      <button id="btnDiscard" class="btn ghost">Descartar</button>
+      <button id="setupGo" class="btn primary">Enviar</button>
+    </div>
+
+    <!-- ENQUANTO A IA TRABALHA. O clique dispara trabalho fora do navegador que
+         leva minutos; sem sinal na tela a interface fica idêntica a antes do
+         clique, e a leitura natural é que nada aconteceu — então se clica de
+         novo. O recado vem do state.json, que a skill atualiza a cada etapa. -->
+    <div id="procBar" class="actionbar proc glass hidden">
+      <span class="proc-spin"></span>
+      <div class="actionbar-what"><b>A IA está trabalhando</b> <span id="procWhat">…</span></div>
+    </div>
   </div>
   </div>
 

@@ -78,6 +78,7 @@ const ICON = {
   music: '<svg viewBox="0 0 16 16"><path d="M13.1 1.9 6.6 3.5a.8.8 0 0 0-.6.78v6.06a2.25 2.25 0 1 0 1.5 2.12V6.6l5-1.22v3.5a2.25 2.25 0 1 0 1.5 2.12V2.68a.8.8 0 0 0-.9-.78z"/></svg>',
   text: '<svg viewBox="0 0 16 16"><path d="M2 2.6h12v2.5h-1.5V4.1H8.75v8.1h1.6v1.3H5.65v-1.3h1.6V4.1H3.5v1H2V2.6z"/></svg>',
   notes: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
+  ai: '<svg viewBox="0 0 16 16"><path d="M8 .9l1.5 4.1 4.1 1.5-4.1 1.5L8 12.1 6.5 8 2.4 6.5 6.5 5 8 .9zM13 10.4l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7.7-1.9zM3.2 10.9l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5.5-1.4z"/></svg>',
   zoomIn: '<svg viewBox="0 0 16 16"><path d="M7 1.6a5.4 5.4 0 1 0 3.3 9.7l3.2 3.2a.9.9 0 0 0 1.3-1.3l-3.2-3.2A5.4 5.4 0 0 0 7 1.6zm0 1.8a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2zm-.9 1.5v1.2H4.9v1.8h1.2v1.2h1.8V7.9h1.2V6.1H7.9V4.9H6.1z"/></svg>',
   zoomOut: '<svg viewBox="0 0 16 16"><path d="M7 1.6a5.4 5.4 0 1 0 3.3 9.7l3.2 3.2a.9.9 0 0 0 1.3-1.3l-3.2-3.2A5.4 5.4 0 0 0 7 1.6zm0 1.8a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2zM4.9 6.1v1.8h4.2V6.1H4.9z"/></svg>',
   fit: '<svg viewBox="0 0 16 16"><path d="M2 2h4.2v1.8H3.8v2.4H2V2zm7.8 0H14v4.2h-1.8V3.8H9.8V2zM2 9.8h1.8v2.4h2.4V14H2V9.8zm10.2 0H14V14H9.8v-1.8h2.4V9.8z"/></svg>',
@@ -609,6 +610,8 @@ let S = {
   savedPending: false,
   notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
   showFinal: false, // tocando o render final em vez do corte
+  processing: false, // a IA está refazendo algo lá fora
+  procFrom: 0,
   pendingIn: null, // an IN is open, waiting for its OUT
   editingNote: null, // id of the note the editor is bound to
   style: null, // current picks {edit, captions, elements:{…}, note}
@@ -772,12 +775,56 @@ function dirtyCount() {
   return n;
 }
 function refreshHeader() {
-  const n = dirtyCount();
-  $('dirtyPill').classList.toggle('hidden', n === 0);
-  $('dirtyCount').textContent = n;
-  $('btnSave').classList.toggle('hidden', n === 0);
-  $('btnDiscard').classList.toggle('hidden', n === 0);
-  $('savedPill').classList.toggle('hidden', !(S.savedPending && n === 0));
+  $('savedPill').classList.toggle('hidden', !(S.savedPending && dirtyCount() === 0));
+  refreshActionBar();
+}
+
+/* O estilo mudou em relação ao gravado no projeto? `awaitingStyle` conta como
+ * mudança porque nunca houve escolha — há o que enviar. */
+function styleDirty() {
+  if (!setupApplies()) return false;
+  if (S.state.awaitingStyle) return true;
+  const cur = S.state.style || {};
+  const eq = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  return !(eq(S.style.edit, cur.edit) && eq(S.style.headline, cur.headline)
+    && eq(S.style.captions, cur.captions) && eq(S.style.accent, cur.accent)
+    && eq(S.style.capColor, cur.capColor) && eq(S.style.headlineText, cur.headlineText)
+    && eq(S.style.elements, cur.elements));
+}
+
+/* A BARRA DE AÇÃO nomeia a CONSEQUÊNCIA, não o verbo. "Enviar" não distingue
+ * mandar duas marcações de disparar um render de minutos, e essas duas coisas
+ * não podem custar o mesmo clique sem aviso. */
+function refreshActionBar() {
+  const bar = $('actionBar');
+  if (!bar) return;
+  const cuts = edlDirty();
+  const ins = insertsDirty();
+  const notes = S.notes.length;
+  const style = styleDirty();
+  const has = cuts || ins || notes || style;
+  bar.classList.toggle('hidden', !has || S.processing);
+  $('procBar').classList.toggle('hidden', !S.processing);
+  if (!has || S.processing) return;
+
+  // dirtyCount() conta corte, inserções e marcações — não conta estilo. Sem
+  // este ajuste, mudar só o estilo mostrava "0 alterações" ao lado de um botão
+  // que ia renderizar o vídeo inteiro.
+  const total = dirtyCount() + (style ? 1 : 0);
+  $('actionCount').textContent = total === 1 ? '1 alteração' : `${total} alterações`;
+
+  const vai = [];
+  if (cuts) vai.push('refazer o corte');
+  if (style || ins) vai.push(S.state.finalVideo ? 'refazer a finalização' : 'montar a finalização');
+  if (notes) vai.push('ler as suas marcações');
+  $('actionWhat').textContent = vai.length ? `— vai ${vai.join(' e ')}` : '';
+
+  const caro = style || ins || cuts;
+  $('setupGo').innerHTML = `<span class="btn-ai">${ICON.ai}</span>`
+    + (caro ? 'Enviar e renderizar' : 'Enviar marcações');
+  $('setupGo').title = caro
+    ? 'Vai para a IA e renderiza de novo — leva alguns minutos'
+    : 'Manda as marcações para a IA ler; não renderiza nada';
 }
 
 // ---------- data loading ----------
@@ -786,6 +833,7 @@ async function poll() {
     const res = await fetch('/api/state');
     const data = await res.json();
     const sig = JSON.stringify([data.state, data.edl, data.mtimes, data.videoDuration]);
+    checkProcessing();
     if (sig !== S.lastSig) {
       const hadEdits = dirtyCount() > 0;
       if (!hadEdits) {
@@ -1475,7 +1523,7 @@ document.addEventListener('input', (e) => {
   if (e.target && e.target.id === 'headlineText') S.style.headlineText = e.target.value;
 });
 
-$('setupGo').addEventListener('click', async () => {
+async function sendStyle() {
   S.style.note = $('setupNote').value.trim();
   const rerender = !S.state.awaitingStyle;
   const payload = {
@@ -1507,15 +1555,8 @@ $('setupGo').addEventListener('click', async () => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  if ((await res.json()).ok) {
-    renderSetup();
-    toast(rerender
-      ? '✓ Novo estilo enviado — o Claude vai refazer a finalização com ele'
-      : '✓ Estilo enviado — o Claude vai montar a finalização com essas escolhas', 5000);
-  } else {
-    toast('Erro ao enviar — o servidor está de pé?', 4000);
-  }
-});
+  return (await res.json()).ok;
+}
 
 // Declarado ANTES de renderClips porque ela lê o arrasto em curso para
 // congelar o trecho sendo aparado; um `let` depois do primeiro uso cai na
@@ -2300,7 +2341,7 @@ function refreshSrcToggle() {
 }
 
 // ---------- save / discard ----------
-$('btnSave').addEventListener('click', async () => {
+async function sendTimeline() {
   const payload = { type: 'timeline-edits' };
   if (edlDirty()) {
     payload.edl = {
@@ -2339,20 +2380,48 @@ $('btnSave').addEventListener('click', async () => {
     }));
   }
   const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  if ((await res.json()).ok) {
-    S.savedPending = true;
-    S.notes = [];
-    S.pendingIn = null;
-    S.draft.forEach((r) => { r.orig = { start: r.start, end: r.end }; if (r.removed) r.hardRemoved = true; });
-    // keep visual state but clear dirty counters
-    S.draft = S.draft.filter((r) => !r.removed);
-    S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
-    renderAll(); refreshHeader();
-    toast('✓ Salvo — o Claude foi avisado e vai aplicar os ajustes', 5000);
-  } else {
-    toast('Erro ao salvar — o servidor está de pé?', 4000);
-  }
+  if (!(await res.json()).ok) return false;
+  S.savedPending = true;
+  S.notes = [];
+  S.pendingIn = null;
+  S.draft.forEach((r) => { r.orig = { start: r.start, end: r.end }; if (r.removed) r.hardRemoved = true; });
+  S.draft = S.draft.filter((r) => !r.removed);
+  S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
+  return true;
+}
+
+/* UM clique, os dois pacotes. Eles continuam indo para arquivos separados —
+   escolha de estilo e correção de linha do tempo são consumidas em momentos
+   diferentes, e um arquivo só faria uma sobrescrever a outra. O que se unifica
+   é o GESTO, não o formato. */
+$('setupGo').addEventListener('click', async () => {
+  const quer = { style: styleDirty(), tl: edlDirty() || insertsDirty() || S.notes.length > 0 };
+  const caro = quer.style || edlDirty() || insertsDirty();
+  let ok = true;
+  if (quer.style) ok = (await sendStyle()) && ok;
+  if (quer.tl) ok = (await sendTimeline()) && ok;
+  if (ok && caro) startProcessing();
+  renderAll();
+  renderSetup();
+  refreshHeader();
+  toast(ok ? '✓ Enviado — a IA foi avisada' : 'Erro ao enviar — o servidor está de pé?', 5000);
 });
+
+/* ESTADO DE PROCESSAMENTO. O clique dispara trabalho que acontece FORA do
+   navegador e leva minutos — sem sinal na tela, a interface fica idêntica a
+   antes do clique e o usuário clica de novo. Sai quando um render novo chega:
+   o mtime do vídeo mudar é o único sinal que não depende de ninguém avisar. */
+function startProcessing() {
+  S.processing = true;
+  S.procFrom = (S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || 0;
+  refreshHeader();
+}
+function checkProcessing() {
+  if (!S.processing) return;
+  const now = (S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || 0;
+  if (now !== S.procFrom) { S.processing = false; S.savedPending = false; refreshHeader(); }
+  else $('procWhat').textContent = S.state.message || 'trabalhando…';
+}
 
 $('btnDiscard').addEventListener('click', () => {
   S.draft = S.rendered.map((r) => ({ ...r, removed: false, orig: { start: r.start, end: r.end } }));

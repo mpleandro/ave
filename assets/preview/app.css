@@ -1376,3 +1376,51 @@ button.tl-chip:disabled { cursor: default; }
   background: rgba(255, 255, 255, 0.07);
 }
 .btn.src.on { background: rgb(var(--orange-rgb) / 0.22); border-color: rgb(var(--orange-rgb) / 0.5); color: var(--orange-soft); }
+
+
+/* ---------- barra de ação ----------
+   Embaixo da linha do tempo, que é onde o trabalho acontece. Antes eram dois
+   botões em cantos opostos para a mesma ação mental — marcar embaixo à esquerda
+   e caçar o envio em cima à direita já custou um lote de marcações perdidas. */
+.actionbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-color: rgb(var(--orange-rgb) / 0.34);
+  background: rgb(var(--orange-rgb) / 0.06);
+}
+.actionbar-what { flex: 0 0 auto; font-size: 11.5px; color: var(--dim); }
+.actionbar-what b { color: var(--orange-soft); font-weight: 600; }
+.actionbar textarea {
+  flex: 1 1 200px;
+  min-width: 0;
+  min-height: 34px;
+  resize: vertical;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--stroke);
+  border-radius: 9px;
+  padding: 7px 10px;
+}
+.actionbar textarea:focus { outline: none; border-color: rgb(var(--orange-rgb) / 0.5); }
+.actionbar .btn { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; }
+.btn-ai { display: inline-flex; width: 14px; height: 14px; }
+.btn-ai svg { width: 14px; height: 14px; fill: currentColor; display: block; }
+
+.actionbar.proc { border-color: rgb(var(--blue-rgb) / 0.4); background: rgb(var(--blue-rgb) / 0.07); }
+.actionbar.proc .actionbar-what b { color: var(--blue); }
+.proc-spin {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgb(var(--blue-rgb) / 0.25);
+  border-top-color: var(--blue);
+  animation: proc-turn 0.8s linear infinite;
+}
+@keyframes proc-turn { to { transform: rotate(360deg); } }
