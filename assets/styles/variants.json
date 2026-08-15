@@ -214,7 +214,11 @@
       "focusY": 400,
       "captionBottom": 1074,
       "seam": true,
-      "hookTop": 738
+      "hookTop": 738,
+      "centreOffset": {
+        "stacked": -0.167,
+        "scatter": 0.16
+      }
     },
     "bottom": {
       "band": 750,
@@ -222,8 +226,13 @@
       "focusY": 225,
       "captionBottom": 790,
       "seam": false,
-      "hookTop": 920
-    }
+      "hookTop": 920,
+      "centreOffset": {
+        "stacked": -0.3,
+        "scatter": -0.03
+      }
+    },
+    "_centre_readme": "Para os estilos ancorados no CENTRO (empilhado, disperso), a tela dividida precisa de deslocamento próprio — converter o `captionBottom` põe o centro do bloco onde ficaria a BASE do karaokê, que é mais baixo do que se quer. `stacked`/`top` = -0.167 é o valor documentado e medido no original. Os outros três são DERIVADOS da janela de vídeo de cada layout (top: 750–1920, bottom: 0–1170) e nunca foram conferidos em filmagem — se a legenda encostar no queixo ou na costura, é aqui que se ajusta."
   },
   "_sfx_readme": "Efeitos por evento. Volumes vêm do original. O arquivo é escolhido por NÍVEL medido: click2.mp3 (-25 dB) é inaudível sob fala e por isso não aparece aqui; cut-click.mp3 (-2 dB) é o que lê. O silêncio inicial de cada arquivo é medido em tempo de composição e compensado — não está fixado aqui de propósito, para que trocar o arquivo não introduza atraso silencioso.",
   "sfx": {

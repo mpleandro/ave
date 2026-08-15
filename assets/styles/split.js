@@ -19,6 +19,16 @@
     var wins = rootEl.querySelectorAll('.ave-split-win');
     if (!win || !vid || !wins.length) return tl;
 
+    /* Legendas ancoradas no CENTRO (empilhado, disperso) não se resolvem com o
+       `captionBottom`: converter a base em centro põe o bloco mais baixo do que
+       se quer, e na tela dividida ele acaba na boca de quem fala. Elas têm
+       deslocamento próprio por layout, aplicado na variável do contêiner. */
+    var centred = rootEl.querySelector('.ave-stacked, .ave-scatter');
+    var centreVar = centred && centred.classList.contains('ave-stacked')
+      ? '--stk-offset-y' : '--scat-offset-y';
+    var centreBase = centred
+      ? getComputedStyle(centred).getPropertyValue(centreVar).trim() : '';
+
     for (var i = 0; i < wins.length; i++) {
       var w = wins[i];
       var start = parseFloat(w.getAttribute('data-start')) || 0;
@@ -35,6 +45,11 @@
       tl.set(vid, { scale: zoom, y: -focus * scale }, start);
       if (art) tl.set(art, { display: 'block' }, start);
       if (seam) tl.set(seam, { display: 'block' }, start);
+      var off = w.getAttribute('data-centre-offset');
+      if (centred && off !== null) {
+        var props = {}; props[centreVar] = off;
+        tl.set(centred, props, start);
+      }
 
       // sai — o quadro cheio volta e o vídeo perde o reenquadramento
       var end = start + dur;
@@ -42,6 +57,10 @@
       tl.set(vid, { scale: 1, y: 0 }, end);
       if (art) tl.set(art, { display: 'none' }, end);
       if (seam) tl.set(seam, { display: 'none' }, end);
+      if (centred && off !== null && centreBase) {
+        var back = {}; back[centreVar] = centreBase;
+        tl.set(centred, back, end);
+      }
     }
     return tl;
   }

@@ -30,6 +30,27 @@ VARIANTS = json.loads((STYLES_DIR / "variants.json").read_text())
 
 HOLD = 0.6  # sobra depois da última palavra antes de a deixa sair
 
+# Ordem das camadas, de baixo para cima. A arte da tela dividida fica logo
+# ACIMA do vídeo e ABAIXO de tudo mais: o deslocamento documentado do empilhado
+# põe a pilha DENTRO da arte, logo acima da costura, e com a arte por cima a
+# legenda simplesmente sumia. É também por isso que o layout `top` tem degradê
+# na costura — ele existe para dar base ao texto que fica SOBRE a arte.
+TRACK = {
+    "aroll": 0,
+    "split": 1,      # arte + costura
+    "insert": 2,
+    "bespoke": 3,
+    "caption": 4,
+    "wordaccent": 5,
+    "hook": 6,       # acima da legenda: os dois disputam a costura
+    "flash": 7,      # por cima de tudo que é imagem
+    "soundtrack": 8,
+    "sfx": 9,
+    "audio": 10,
+}
+
+
+
 
 def style_files(style_id: str, style: dict) -> list[str]:
     if style_id in ("scatter", "stacked"):
@@ -100,7 +121,7 @@ def scatter_markup(timed: list[dict], st: dict) -> str:
 
         blocks.append(
             f'<div class="scat-cue clip" data-start="{t["start"]:.3f}" '
-            f'data-duration="{t["end"] - t["start"]:.3f}" data-track-index="1">'
+            f'data-duration="{t["end"] - t["start"]:.3f}" data-track-index="{TRACK["caption"]}">'
             f'{"".join(rows)}</div>')
     return "\n".join("    " + b for b in blocks)
 
@@ -175,7 +196,7 @@ def stacked_markup(cues: list[dict], st: dict, duration: float) -> tuple[str, in
         blocks.append(
             f'<div class="stk-cue clip" data-start="{start:.3f}" '
             f'data-duration="{end - start:.3f}" data-exit="{c.get("exit", "abrupt")}" '
-            f'data-track-index="1">{"".join(rows)}</div>')
+            f'data-track-index="{TRACK["caption"]}">{"".join(rows)}</div>')
     return "\n".join("    " + b for b in blocks), stretched
 
 
@@ -208,11 +229,12 @@ def split_windows(data: dict, H: int, duration: float) -> list[dict]:
             "focusY": float(it.get("focusY", lay["focusY"])),
             "captionBottom": lay["captionBottom"],
             "seam": lay["seam"],
+            "centre": (lay.get("centreOffset") or {}),
         })
     return out
 
 
-def split_markup(wins: list[dict]) -> str:
+def split_markup(wins: list[dict], style_id: str = "") -> str:
     blocks = []
     for i, w in enumerate(wins):
         art = (f'<img class="ave-split-art" src="{w["src"]}" alt="" '
@@ -224,9 +246,10 @@ def split_markup(wins: list[dict]) -> str:
                 if w["seam"] else "")
         blocks.append(
             f'<div id="split{i}" class="ave-split-win clip" data-start="{w["start"]:.3f}" '
-            f'data-duration="{w["end"] - w["start"]:.3f}" data-track-index="5" '
+            f'data-duration="{w["end"] - w["start"]:.3f}" data-track-index="{TRACK['split']}" '
             f'data-zoom="{w["zoom"]}" data-focus="{w["focusY"]}" '
-            f'data-vid-top="{w["vidTop"]}" data-vid-height="{w["vidHeight"]}">'
+            f'data-vid-top="{w["vidTop"]}" data-vid-height="{w["vidHeight"]}"'
+            f'{w.get("centreAttr", "")}>'
             f'{art}{seam}</div>')
     return "\n".join("  " + b for b in blocks)
 
@@ -265,7 +288,7 @@ def adaptive_accent(video: Path, brand_accent: str, top: float, height: float,
 
 
 def sfx_blocks(events: list[tuple[float, str]], proj: Path, duration: float,
-               track: int = 8) -> tuple[list[str], list[str]]:
+               track: int = TRACK["sfx"]) -> tuple[list[str], list[str]]:
     """Elementos de áudio dos efeitos. Retorna (blocos, avisos).
 
     Duas coisas que a referência documenta como já vividas e que só aparecem
@@ -478,7 +501,7 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
             break
     lines = "".join(f'<div class="hl-line">{esc(l)}</div>' for l in raw if l)
     block = (f'  <div id="hook" class="ave-hook {style_id} clip" data-start="0" '
-             f'data-duration="{end:.3f}" data-track-index="2" '
+             f'data-duration="{end:.3f}" data-track-index="{TRACK['hook']}" '
              f'style="--hl-scale:1; --hl-size:{size}; --hl-lh:{h["lh"]}; '
              f'--hl-top:{top}; --hl-accent:{accent}; --hl-stroke:{h["stroke"]}">'
              f'{lines}</div>')
@@ -499,7 +522,7 @@ def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty,
                 dodge = f' style="bottom:{w["captionBottom"]}px"'
                 break
         attrs = (f'data-start="{t["start"]:.3f}" '
-                 f'data-duration="{t["end"] - t["start"]:.3f}" data-track-index="1"')
+                 f'data-duration="{t["end"] - t["start"]:.3f}" data-track-index="{TRACK["caption"]}"')
         if st["animated"]:
             spans = "".join(f"<span>{esc(w['text'])}</span>" for w in t["cue"])
             blocks.append(f'<div class="ave-cap-line clip" {attrs}{dodge}>{spans}</div>')
@@ -555,7 +578,7 @@ def camera_parts(data, duration):
         dur = (fl["durationFrames"] * 2) / fps
         blocks.append(
             f'  <div id="flash{k}" class="ave-flash clip" data-start="{start:.3f}" '
-            f'data-duration="{min(dur, duration - start):.3f}" data-track-index="6" '
+            f'data-duration="{min(dur, duration - start):.3f}" data-track-index="{TRACK['flash']}" '
             f'style="--flash-intensity:{tr.get("intensity", fl["intensity"])}; '
             f'--flash-blur:{fl["blur"]}"></div>'
         )
@@ -653,7 +676,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
             continue
         insert_blocks.append(
             f'  <div id="ins{i}" class="ave-insert clip" data-start="{st_:.3f}" '
-            f'data-duration="{en - st_:.3f}" data-track-index="3" '
+            f'data-duration="{en - st_:.3f}" data-track-index="{TRACK['insert']}" '
             f'style="--ins-scale:1; --ins-w:{ins["w"]}; --ins-h:{ins["h"]}; '
             f'--ins-top:{ins["top"]}">'
             f'<img src="{it.get("src") or it.get("ref")}" alt=""></div>')
@@ -672,7 +695,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     for i, ((st_, en, text), col) in enumerate(zip(wa_items, wa_colors)):
         wa_blocks.append(
             f'  <div id="wa{i}" class="ave-wordaccent clip" data-start="{st_:.3f}" '
-            f'data-duration="{en - st_:.3f}" data-track-index="6" '
+            f'data-duration="{en - st_:.3f}" data-track-index="{TRACK['wordaccent']}" '
             f'style="--wa-scale:1; --wa-accent:{col}">{esc(text)}</div>')
 
     # Gráficos sob medida: substituem o CustomGraphics.tsx, que era "o único
@@ -692,7 +715,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
             continue
         bg_blocks.append(
             f'  <div id="bg{i}" class="clip" data-start="{st_:.3f}" '
-            f'data-duration="{en - st_:.3f}" data-track-index="4" '
+            f'data-duration="{en - st_:.3f}" data-track-index="{TRACK['bespoke']}" '
             f'data-composition-id="{gid}" data-composition-src="{rel}"></div>')
     for gid in bg_missing:
         print(f"  aviso: gráfico sob medida '{gid}' sem arquivo em "
@@ -710,7 +733,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     track_block = ""
     if snd.get("enabled") and snd.get("file"):
         track_block = (f'  <audio id="soundtrack" src="{snd["file"]}" data-start="0" '
-                       f'data-duration="{duration:.3f}" data-track-index="7" '
+                       f'data-duration="{duration:.3f}" data-track-index="{TRACK['soundtrack']}" '
                        f'data-volume="{snd.get("volume", 0.1)}"></audio>')
 
     insert_html = "\n".join(insert_blocks)
@@ -727,7 +750,10 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         parts.append("  AVE_INSERT.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
         needs_tl = True
 
-    split_block = split_markup(splits) if splits else ""
+    for w in splits:
+        off = w["centre"].get(style_id)
+        w["centreAttr"] = f' data-centre-offset="{off}"' if off is not None else ""
+    split_block = split_markup(splits, style_id) if splits else ""
     split_css = '<link rel="stylesheet" href="styles/split.css">' if splits else ""
     split_tag = '<script src="styles/split.js"></script>' if splits else ""
     if splits:
@@ -777,13 +803,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 
   <div id="vidwin">
     <video id="a-roll" class="clip" src="{video}" muted playsinline
-           data-start="0" data-duration="{duration:.3f}" data-track-index="0"></video>
+           data-start="0" data-duration="{duration:.3f}" data-track-index="{TRACK['aroll']}"></video>
   </div>
   <!-- Áudio como trilha própria, do mesmo arquivo. Medido: drift zero em 78s e
        em 786s. O `id` NÃO é opcional: sem ele o renderer não descobre o
        elemento e o vídeo sai MUDO, sem erro em lugar nenhum além do linter. -->
   <audio id="a-roll-audio" src="{video}" data-start="0" data-duration="{duration:.3f}"
-         data-track-index="9" data-volume="1"></audio>
+         data-track-index="{TRACK['audio']}" data-volume="1"></audio>
 
 {hook_block}
 {split_block}

@@ -23,7 +23,11 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(50% + var(--stk-offset-y) * 100%);
+  /* A soma vai DENTRO do parêntese: com o deslocamento negativo da tela
+     dividida, `calc(50% + -0.167 * 100%)` é sintaxe inválida — o sinal logo
+     após o `+` não é aceito. O `top` cai para `auto` e o bloco desaparece do
+     lugar esperado, sem erro em lugar nenhum. */
+  top: calc((0.5 + var(--stk-offset-y)) * 100%);
   height: 0;
   pointer-events: none;
 }
