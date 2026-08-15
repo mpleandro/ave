@@ -17,6 +17,7 @@ Routes:
   /styles/<file>        camada de estilo COMPARTILHADA com o render (assets/styles/)
   /media/<path>         files under --root (the edit dir) — Range supported
   /gen/waveform.json    min/max audio peaks of cut.mp4 (auto-(re)generated)
+  /gen/words.json       transcrito DO CORTE com a folga medida de cada fronteira
   /gen/thumbs/<n>.jpg   timeline filmstrip thumbs (auto-generated, 1 per 2s)
   /api/state    GET     state.json + mtimes (UI polls this to hot-reload)
   /api/save     POST    body → <edit>/preview_edits.json (atomic), or
@@ -215,6 +216,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path.startswith("/media/"):
             p = self._safe(self.root, path[len("/media/"):])
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)
+        elif path == "/gen/words.json":
+            self._words()
         elif path == "/gen/waveform.json":
             self._waveform()
         elif path.startswith("/gen/thumbs/"):
@@ -323,6 +326,32 @@ class Handler(BaseHTTPRequestHandler):
                 pass
         if stale:
             gen_waveform(video, out)
+        self._send_file(out)
+
+    def _words(self) -> None:
+        """O transcrito do corte. Caro de gerar — roda detector de fala em cada
+        fonte — então é cacheado pelo mtime do edl.json, que é exatamente o que
+        muda quando o corte muda."""
+        edl = self.root / "edl.json"
+        if not edl.exists():
+            self._json({"words": [], "error": "sem edl.json"}, 200)
+            return
+        out = self.root / ".preview_cache" / "words.json"
+        stale = True
+        if out.exists():
+            try:
+                stale = json.loads(out.read_text()).get("edlMtime") != edl.stat().st_mtime
+            except json.JSONDecodeError:
+                pass
+        if stale:
+            r = subprocess.run(
+                [sys.executable, str(Path(__file__).resolve().parent / "cut_words.py"),
+                 str(self.root), "-o", str(out)],
+                capture_output=True, text=True,
+            )
+            if r.returncode != 0 or not out.exists():
+                self._json({"words": [], "error": (r.stderr or "falhou")[-300:]}, 200)
+                return
         self._send_file(out)
 
     def _thumbs(self, name: str) -> None:

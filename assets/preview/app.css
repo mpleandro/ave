@@ -1448,3 +1448,46 @@ button.tl-chip:disabled { cursor: default; }
 .ablock .handle.l { left: -3px; }
 .ablock .handle.r { right: -3px; }
 .ablock .handle:hover { background: rgb(var(--orange-rgb) / 0.45); border-radius: 3px; }
+
+/* ---------- switch de modo ---------- */
+.viewseg { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--stroke); }
+.vseg {
+  padding: 5px 11px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--dim); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.vseg:hover { color: var(--text); }
+.vseg.on { color: var(--text); background: rgb(var(--orange-rgb) / 0.2); }
+
+/* ---------- transcrição ---------- */
+.tx-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 14px 16px 10px; }
+.tx-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  font-size: 15px; line-height: 2.05; letter-spacing: 0.1px;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.16) transparent;
+}
+.tx-body::-webkit-scrollbar { width: 9px; }
+.tx-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+
+.tw { padding: 2px 3px; border-radius: 5px; cursor: pointer; user-select: none; }
+.tw:hover { background: rgba(255, 255, 255, 0.09); }
+.tw.sel { background: rgb(var(--orange-rgb) / 0.28); }
+/* a palavra que está tocando agora — é o que amarra o texto à agulha */
+.tw.now { background: rgb(var(--blue-rgb) / 0.3); color: #fff; }
+.tw.cut { text-decoration: line-through; text-decoration-thickness: 2px;
+  text-decoration-color: var(--mark); color: var(--dim); opacity: 0.75; }
+/* Fronteira apertada: a IA vai ter de improvisar a emenda aqui.
+   Só aparece na palavra SELECIONADA ou RISCADA. Marcar todas deixava 170 de 241
+   sublinhadas neste vídeo — quem fala colado tem quase toda palavra sem folga, e
+   um aviso que vale para 70% do texto não avisa nada, só suja a leitura. A
+   informação importa no instante da DECISÃO, não como decoração de fundo. */
+.tw.sel.tight, .tw.cut.tight { box-shadow: inset 0 -2px 0 rgb(var(--mark-rgb) / 0.7); }
+/* quebra de trecho: onde um take acaba e outro começa */
+.tw-cutmark { display: inline-block; width: 100%; height: 0; }
+.tw-src { display: block; margin: 14px 0 4px; font-size: 10px; letter-spacing: 1.2px;
+  text-transform: uppercase; color: var(--dim); }
+
+.tx-foot { flex: 0 0 auto; display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--stroke); }
+.tx-hint { font-size: 11px; color: var(--dim); }
+.tx-hint kbd { font-size: 10px; }
+.tx-count { font-size: 11.5px; color: var(--mark-soft); white-space: nowrap; }

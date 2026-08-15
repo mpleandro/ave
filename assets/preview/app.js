@@ -610,6 +610,10 @@ let S = {
   savedPending: false,
   notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
   showFinal: false, // tocando o render final em vez do corte
+  view: 'tl',       // 'tl' linha do tempo · 'tx' transcrição
+  words: [],        // transcrito do corte (/gen/words.json)
+  cutWords: new Set(), // índices riscados = PEDIDO de corte, não corte feito
+  selWords: new Set(),
   processing: false, // a IA está refazendo algo lá fora
   procFrom: 0,
   pendingIn: null, // an IN is open, waiting for its OUT
@@ -783,6 +787,7 @@ function renderedToDraft(t) {
 }
 
 // ---------- dirty tracking ----------
+const wordsDirty = () => S.cutWords.size > 0;
 const jcutDirty = () => S.draft.some((r) => r.leadF != null || r.tailF != null);
 
 function edlDirty() {
@@ -823,7 +828,7 @@ function refreshActionBar() {
   if (!bar) return;
   const cuts = edlDirty();
   const ins = insertsDirty();
-  const notes = S.notes.length;
+  const notes = S.notes.length + (wordsDirty() ? 1 : 0);
   const style = styleDirty();
   const has = cuts || ins || notes || style;
   bar.classList.toggle('hidden', !has || S.processing);
@@ -839,7 +844,7 @@ function refreshActionBar() {
   const vai = [];
   if (cuts) vai.push('refazer o corte');
   if (style || ins) vai.push(S.state.finalVideo ? 'refazer a finalização' : 'montar a finalização');
-  if (notes) vai.push('ler as suas marcações');
+  if (notes) vai.push(wordsDirty() ? 'ler as palavras riscadas e as marcações' : 'ler as suas marcações');
   $('actionWhat').textContent = vai.length ? `— vai ${vai.join(' e ')}` : '';
 
   const caro = style || ins || cuts;
@@ -2165,6 +2170,7 @@ function rafLoop() {
     for (const step of capAnims) step(now);
   }
   positionNeedle();
+  markNowWord();
   renderLive();
   if (!video.paused && !video.ended) {
     // keep needle visible
@@ -2356,6 +2362,14 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     const step = e.shiftKey ? 1 : 1 / S.fps;
     seekDraft(renderedToDraft(video.currentTime) + (e.key === 'ArrowRight' ? step : -step));
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.view === 'tx' && S.selWords.size) {
+    // rasura = PEDIDO. Alternar deixa desfazer com a mesma tecla.
+    const todas = [...S.selWords].every((i) => S.cutWords.has(i));
+    for (const i of S.selWords) todas ? S.cutWords.delete(i) : S.cutWords.add(i);
+    S.selWords.clear();
+    renderTx();
+    refreshHeader();
+    e.preventDefault();
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0) {
     const r = S.draft[S.selected];
     r.removed = !r.removed;
@@ -2474,6 +2488,20 @@ async function sendTimeline() {
       })),
     };
   }
+  if (wordsDirty()) {
+    /* PEDIDO, não corte. Vai com o texto e os tempos DA FONTE para a IA achar a
+       borda limpa — mais a folga medida, que é o que diz onde ela vai ter de
+       improvisar. Deliberadamente não mando um EDL já recortado: os tempos de
+       palavra do Whisper não são bordas de corte, e um recorte feito aqui
+       chegaria com a emenda no meio da sílaba. */
+    payload.cutWords = [...S.cutWords].sort((a, b) => a - b).map((i) => {
+      const w = S.words[i];
+      return { text: w.text, source: w.source, range: w.range,
+               srcStart: w.srcStart, srcEnd: w.srcEnd, outStart: w.outStart,
+               gapBefore: w.gapBefore, gapAfter: w.gapAfter };
+    });
+  }
+
   if (insertsDirty()) {
     payload.editData = {
       inserts: S.insertsDraft.filter((c) => c.kind === 'insert').map((c) => ({ ref: c.ref, start: +c.start.toFixed(3), end: +c.end.toFixed(3) })),
@@ -2505,6 +2533,8 @@ async function sendTimeline() {
   S.draft.forEach((r) => { r.orig = { start: r.start, end: r.end }; if (r.removed) r.hardRemoved = true; });
   S.draft = S.draft.filter((r) => !r.removed);
   S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
+  S.cutWords.clear();
+  renderTx();
   return true;
 }
 
@@ -2513,7 +2543,7 @@ async function sendTimeline() {
    diferentes, e um arquivo só faria uma sobrescrever a outra. O que se unifica
    é o GESTO, não o formato. */
 $('setupGo').addEventListener('click', async () => {
-  const quer = { style: styleDirty(), tl: edlDirty() || insertsDirty() || S.notes.length > 0 };
+  const quer = { style: styleDirty(), tl: edlDirty() || insertsDirty() || S.notes.length > 0 || wordsDirty() };
   const caro = quer.style || edlDirty() || insertsDirty();
   let ok = true;
   if (quer.style) ok = (await sendStyle()) && ok;
@@ -2596,3 +2626,102 @@ fetch('/styles/variants.json')
   .then((v) => { LIVE.variants = v; LIVE.key = null; renderLive(); })
   .catch(() => { /* sem os números a prévia cai no CSS puro, que já é honesto */ });
 }
+
+
+/* ---------- TRANSCRIÇÃO ----------
+ *
+ * Riscar palavra é INDICAR onde cortar, não executar o corte. Quem resolve a
+ * borda é a IA, com o áudio na mão — os tempos do Whisper adiantam o início e
+ * esticam o fim, e cortar neles come a palavra vizinha. Foi essa distinção que
+ * salvou o desenho: como ferramenta de corte, o dado dizia que só 3 das 241
+ * palavras deste vídeo eram removíveis sem emenda, o que a tornaria inútil.
+ * Como indicação, as 241 valem — a emenda é problema de quem executa.
+ *
+ * A marca de risco discreta (`.tight`) diz onde a emenda vai ser apertada. É
+ * informação para quem edita, não impedimento. */
+async function loadWords() {
+  try {
+    const d = await (await fetch(`/gen/words.json?v=${Date.now()}`)).json();
+    S.words = d.words || [];
+  } catch (e) { S.words = []; }
+  renderTx();
+}
+
+function setView(v) {
+  S.view = v;
+  document.querySelectorAll('.vseg').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
+  $('timelinePanel').classList.toggle('hidden', v !== 'tl');
+  $('txPanel').classList.toggle('hidden', v !== 'tx');
+  if (v === 'tx' && !S.words.length) loadWords();
+  if (v === 'tl') requestAnimationFrame(() => { fitZoom(); renderAll(); });
+  renderTx();
+}
+
+function renderTx() {
+  const host = $('txBody');
+  if (!host || S.view !== 'tx') return;
+  host.innerHTML = '';
+  if (!S.words.length) {
+    host.innerHTML = '<div class="tx-hint">montando o transcrito do corte… '
+      + '(mede o silêncio de cada fronteira na fonte, leva alguns segundos)</div>';
+    return;
+  }
+  let lastRange = -1;
+  S.words.forEach((w, i) => {
+    if (w.range !== lastRange) {
+      lastRange = w.range;
+      const tag = el('span', 'tw-src', host);
+      const r = (S.draft && S.draft[w.range]) || {};
+      tag.textContent = `${r.beat || 'trecho'} · ${w.source}`;
+    }
+    const sp = el('span', 'tw', host);
+    sp.dataset.i = i;
+    sp.textContent = w.text;
+    // apertado = a IA vai ter de improvisar a emenda aqui
+    if (w.gapBefore === 0 && w.gapAfter === 0) sp.classList.add('tight');
+    if (S.cutWords.has(i)) sp.classList.add('cut');
+    if (S.selWords.has(i)) sp.classList.add('sel');
+    sp.title = `${fmt(w.outStart)} · folga ${w.gapBefore.toFixed(2)}s / ${w.gapAfter.toFixed(2)}s`;
+    host.append(' ');
+  });
+  const n = S.cutWords.size;
+  $('txCount').textContent = n ? `${n} palavra${n === 1 ? '' : 's'} marcada${n === 1 ? '' : 's'} para remoção` : '';
+  markNowWord();
+}
+
+/* A palavra que está tocando. É o que amarra o texto à agulha — sem isso são
+   duas telas, e a razão de o switch existir é serem a mesma. */
+function markNowWord() {
+  if (S.view !== 'tx' || !S.words.length) return;
+  const t = renderedToDraft(video.currentTime || 0);
+  let hit = -1;
+  for (let i = 0; i < S.words.length; i++) {
+    if (S.words[i].outStart <= t) hit = i; else break;
+  }
+  document.querySelectorAll('.tw.now').forEach((n) => n.classList.remove('now'));
+  if (hit >= 0) {
+    const n = $('txBody').querySelector(`.tw[data-i="${hit}"]`);
+    if (n) n.classList.add('now');
+  }
+}
+
+document.querySelectorAll('.vseg').forEach((b) =>
+  b.addEventListener('click', () => setView(b.dataset.view)));
+
+$('txBody').addEventListener('click', (e) => {
+  const sp = e.target.closest('.tw');
+  if (!sp) return;
+  const i = +sp.dataset.i;
+  if (e.shiftKey && S.selWords.size) {
+    const anchor = Math.min(...S.selWords);
+    S.selWords.clear();
+    for (let k = Math.min(anchor, i); k <= Math.max(anchor, i); k++) S.selWords.add(k);
+  } else if (e.metaKey || e.ctrlKey) {
+    S.selWords.has(i) ? S.selWords.delete(i) : S.selWords.add(i);
+  } else {
+    S.selWords.clear();
+    S.selWords.add(i);
+    seekDraft(S.words[i].outStart);   // clique simples também LEVA até a palavra
+  }
+  renderTx();
+});

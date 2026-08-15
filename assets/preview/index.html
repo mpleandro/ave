@@ -89,6 +89,13 @@
          subiu para cima da imagem, e esta barra ficou rasa o bastante para
          viver colada nas trilhas, em vez de tomar uma faixa da coluna. -->
     <div class="tlbar">
+      <!-- O SWITCH troca só o que está ABAIXO dele. Transporte, preview e barra
+           de ação ficam nos dois modos: são a mesma edição vista de dois
+           ângulos, não duas telas. -->
+      <div class="viewseg" role="group" aria-label="Modo de edição">
+        <button class="vseg on" data-view="tl" type="button">Linha do tempo</button>
+        <button class="vseg" data-view="tx" type="button">Transcrição</button>
+      </div>
       <button id="btnMark" class="btn mark" title="Marcar Início / Fim (tecla M)">
         <span id="markIcon"></span><span id="markText">Marcar</span>
       </button>
@@ -104,6 +111,19 @@
       <button id="btnFit" class="btn icon" title="Ajustar à janela"></button>
       <input id="zoom" type="range" min="0" max="100" value="0" class="hidden" aria-hidden="true">
     </div>
+
+    <!-- TRANSCRIÇÃO — riscar palavra é INDICAR onde cortar, não executar o
+         corte. Quem resolve a borda é a IA, com o áudio na mão: os tempos de
+         palavra do Whisper adiantam o início e esticam o fim, e cortar neles
+         come a vizinha. A marca de risco discreta avisa onde a emenda vai ser
+         apertada — é informação, não impedimento. -->
+    <section id="txPanel" class="tx-panel glass hidden">
+      <div id="txBody" class="tx-body"></div>
+      <div class="tx-foot">
+        <span id="txHint" class="tx-hint">clique numa palavra para ir até ela · selecione e aperte <kbd>delete</kbd> para marcar remoção</span>
+        <span id="txCount" class="tx-count"></span>
+      </div>
+    </section>
 
     <section id="timelinePanel" class="timeline-panel glass">
     <div id="timeline" class="timeline">
