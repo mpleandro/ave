@@ -103,11 +103,35 @@ def fmt(t: float) -> str:
     return f"{int(m)}:{s:05.2f}"
 
 
+def notes_digest(p: Path) -> str:
+    """As marcações escritas que o apply_edits separou por não poder aplicá-las."""
+    try:
+        notes = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return f"pending_notes.json ilegível ({e.__class__.__name__})"
+    if not notes:
+        return ""
+    out = [f"MARCAÇÕES AGUARDANDO LEITURA ({len(notes)}) — o corte mecânico já foi aplicado:"]
+    for n in notes:
+        a = fmt(n.get("renderedStart", n.get("start", 0)))
+        b = fmt(n.get("renderedEnd", n.get("end", 0)))
+        out.append(f"· [{a} → {b}] {(n.get('text') or '').strip()}")
+    return "\n".join(out)
+
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").expanduser().resolve()
     watched = {
         root / "preview_edits.json": digest,
         root / "preview_style.json": style_digest,
+        # TERCEIRO ALVO, e ele existe por causa de uma corrida real.
+        # Com o servidor em --auto, o apply_edits.py dispara no mesmo instante
+        # do salvamento, move as marcações escritas para cá e APAGA o
+        # preview_edits.json. Entre duas sondagens o arquivo aparece e some, e o
+        # aviso nunca sai: o usuário vê "enviado", o agente não recebe nada, e
+        # os dois lados acham que a bola está com o outro. Vigiar o arquivo de
+        # destino fecha a corrida — quem chegar primeiro, avisa.
+        root / "pending_notes.json": notes_digest,
     }
     # a file already sitting there at startup means it is pending — say so once
     last: dict[Path, float | None] = {}

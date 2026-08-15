@@ -1036,6 +1036,7 @@ function renderAll() {
 
 // ---------- correction markers ----------
 function renderNotes() {
+  refreshCounts();   // a contagem vive aqui: adicionar uma nota não passa por renderAll
   const lane = $('laneNotes');
   lane.innerHTML = '';
   for (const n of S.notes) {
