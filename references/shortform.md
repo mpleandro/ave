@@ -415,6 +415,46 @@ already encodes — do not re-learn them:
 
 Matte ONLY the windows you need — each file's frame 0 = its window start.
 
+## Gráficos sob medida (`brollGraphics`) — a escotilha
+
+O que não cabe em nenhum estilo pronto vira uma sub-composição sua:
+
+```json
+"brollGraphics": [{"id": "roleta", "label": "roleta 029",
+                   "start": 5.32, "end": 7.587}]
+```
+
+e o arquivo em `<projeto>/hyperframes/compositions/<id>.html` — um documento
+COMPLETO, com `data-composition-id` igual ao `id`, `data-width`/`data-height`
+1080×1920 e a linha do tempo registrada em `window.__timelines['<id>']`. Sem o
+arquivo, o composer avisa pelo nome e a render segue sem ele. **`scaffold()` não
+apaga `compositions/`** — o que você escreve ali sobrevive às re-renderizações;
+o `index.html` não.
+
+Quatro coisas medidas montando a roleta da série "170 Questões":
+
+- **`mix-blend-mode` NÃO atravessa a fronteira da sub-composição.** Ela é outro
+  contexto de empilhamento, então não há como misturar com o vídeo da composição
+  pai. Para tirar o fundo de uma gravação de tela não existe blend: ou você
+  assume a chapa (cantos redondos + fio + sombra, que lê como cartão) ou você
+  precisa de alfa de verdade no arquivo. **Assuma a chapa** — é determinístico.
+  (Dentro da MESMA composição o blend vale; aí sim a regra de sempre: nunca
+  `opacity<1` acima de um `mix-blend-mode`, o fade vai por `filter: brightness()`.)
+- **`src` relativo resolve a partir de `compositions/`**, não da raiz do projeto.
+  Deixe a mídia do gráfico ao lado do HTML.
+- **Esmague o fundo do app antes**, com `colorlevels` medido no próprio quadro
+  (pegue o máximo de um trecho de fundo e ponha o `imin` logo acima). Fundo preto
+  de verdade some contra a chapa; fundo "quase preto" aparece como uma mancha.
+- **Um gráfico que entra sem som lê como falha de render.** O composer já emite o
+  whoosh de entrada, igual aos cartões de inserção — não acrescente à mão no
+  `index.html`, ele é regerado.
+
+**Sincronia:** o gráfico serve a fala, não o contrário. Meça a janela de silêncio
+em `cut.mp4` com `speech_regions.py` e encaixe o gráfico DENTRO dela, terminando
+o movimento pouco antes de a voz voltar. Se a animação da fonte não couber,
+**acelere e corte o estado ocioso** — entra já em movimento. Isso é decisão de
+ofício (Princípio 9): faça e informe.
+
 ## Illustrative images
 
 Pexels for generic concepts (key: `PEXELS_API_KEY`). For brands/people/specific

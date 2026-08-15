@@ -793,6 +793,9 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
             f'  <div id="bg{i}" class="clip" data-start="{st_:.3f}" '
             f'data-duration="{en - st_:.3f}" data-track-index="{TRACK['bespoke']}" '
             f'data-composition-id="{gid}" data-composition-src="{rel}"></div>')
+        # mesmo whoosh de entrada dos cartões de inserção: um gráfico que
+        # aparece sem som lê como falha de render, não como escolha
+        events.append((st_, "hook"))
     for gid in bg_missing:
         print(f"  aviso: gráfico sob medida '{gid}' sem arquivo em "
               f"compositions/{gid}.html — não vai aparecer", file=sys.stderr)

@@ -32,6 +32,7 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
 6. **Artistic freedom is the default.** Specific values here are worked examples, not mandates. Only the Hard Rules are mandatory.
 7. **Verify your own output before showing it** — numbers first, images only where the numbers flag (see Self-eval).
 8. **Spend tokens where taste lives.** Machine data (raw transcripts, captions.json, track.json, template code) is for programs, not for reading. Batch visual checks into one montage instead of N images.
+9. **Decisão de ofício é sua — você decide e INFORMA.** Ritmo, duração de um gráfico, curva de aceleração, onde um overlay entra e sai, qual quadro do B-roll usar, quanto acelerar uma tela gravada: escolha, execute, e diga em uma linha **o que fez e por quê**. Não pare para perguntar. O usuário pede diferente se quiser diferente — essa é a via, não a pergunta prévia. Isto NÃO afasta o item 4 nem a Hard Rule 8: **a estratégia do corte** (quais tomadas, o que entra, o que sai, o que o vídeo diz) continua confirmada antes de executar. A linha é: *o que o vídeo diz* se confirma; *como ele diz* se decide.
 
 ## Hard Rules (production correctness — non-negotiable)
 
