@@ -166,6 +166,15 @@ def main() -> None:
     # as palavras em deixas curtas, escolhe qual leva o acento serifado laranja
     # e marca as que ficam sozinhas ou circuladas. Gerado aqui quando falta, em
     # vez de exigir que alguém lembre da ordem.
+    # A perseguição do olhar precisa do rastreio de rosto. Gerado aqui quando
+    # falta, em vez de a composição sair sem o efeito e ninguém notar.
+    if (data.get("elements") or {}).get("tracking") and not data.get("splitInserts"):
+        track = pub / "track.json"
+        if not track.exists():
+            print("  rastreando o rosto…")
+            run([sys.executable, str(SKILL / "helpers" / "face_track.py"),
+                 str(cut), "-o", str(track)])
+
     if data.get("captions", {}).get("style") == "stacked":
         cues = pub / "caption-cues.json"
         transcript = edit / "transcripts" / "cut.json"

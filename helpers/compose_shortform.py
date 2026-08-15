@@ -534,6 +534,62 @@ def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty,
     return "\n".join("    " + b for b in blocks)
 
 
+def tracking_path(data, W, H, duration, track_file: Path, step: int = 3):
+    """Caminho (t, tx, ty, escala) da câmera COM perseguição do olhar.
+
+    Zoom e perseguição são UMA conta, não duas animações. A translação depende
+    do ponto do rosto E do zoom daquele instante:
+
+        tx = alvoX*W − cx*W*S        ty = alvoY*H − cy*H*S
+
+    e é LIMITADA para nunca revelar borda — sem a trava o quadro sai do vídeo e
+    entra preto, que é o defeito clássico de um follow solto.
+
+    Amostrado a cada `step` quadros porque o caminho já vem suavizado do
+    rastreador. Em cada corte são forçados dois pontos no mesmo instante, para
+    o salto de zoom continuar seco em vez de deslizar entre tomadas.
+    """
+    if not track_file.exists():
+        return [], "rastreio de rosto ausente — rode helpers/face_track.py"
+    tk = json.loads(track_file.read_text())
+    pts = tk.get("points") or []
+    if not pts:
+        return [], "rastreio de rosto vazio"
+
+    cam = data.get("camera", {}) or {}
+    d = VARIANTS["camera"]
+    zooms = cam.get("zooms") or d["zooms"]
+    push = cam.get("pushIn", d["pushIn"])
+    tgt_x, tgt_y = cam.get("targetX", d["targetX"]), cam.get("targetY", d["targetY"])
+    fps = data.get("fps", 30)
+    segs = data.get("_segments") or [{"start": 0.0, "end": duration}]
+
+    def state(t):
+        i = max(0, sum(1 for s in segs if s["start"] <= t) - 1)
+        seg = segs[min(i, len(segs) - 1)]
+        span = max(1e-6, seg["end"] - seg["start"])
+        S = zooms[i % len(zooms)] + push * min(1.0, max(0.0, (t - seg["start"]) / span))
+        cx, cy = pts[min(int(round(t * fps)), len(pts) - 1)]
+        tx = tgt_x * W - cx * W * S
+        ty = tgt_y * H - cy * H * S
+        tx = min(0.0, max(W - W * S, tx))   # nunca revelar borda
+        ty = min(0.0, max(H - H * S, ty))
+        return round(tx, 2), round(ty, 2), round(S, 4)
+
+    bounds = sorted({round(s["start"], 3) for s in segs if 0 < s["start"] < duration})
+    path, t, k = [], 0.0, step / fps
+    while t < duration:
+        path.append((round(t, 3),) + state(t))
+        nxt = t + k
+        for b in bounds:
+            if t < b < nxt:
+                path.append((round(b - 1 / fps, 3),) + state(b - 1 / fps))
+                path.append((round(b, 3),) + state(b))
+        t = nxt
+    path.append((round(duration, 3),) + state(max(0.0, duration - 1e-3)))
+    return path, ""
+
+
 def camera_parts(data, duration):
     """(js da timeline, estilo do a-roll, blocos de flash).
 
@@ -605,6 +661,23 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     for c in (data.get("_soloCues") or []):
         events.append(c)
 
+    # Perseguição do olhar: quando ligada, ela ABSORVE o zoom — o caminho já
+    # traz a escala de cada instante. Deixar a câmera também animando `scale`
+    # faria duas fontes disputarem o mesmo transform.
+    track_js, track_warn = "", ""
+    els = data.get("elements") or {}
+    if els.get("tracking") and not data.get("splitInserts"):
+        tk = Path(data.get("_proj", ".")).parent / "remotion" / "public" / "track.json"
+        path, track_warn = tracking_path(data, W, H, duration, tk)
+        if path:
+            track_js = ("  AVE_TRACKING.buildTimeline(document.getElementById('a-roll'), "
+                        "gsap, tl, " + json.dumps(path) + ");")
+            data = {**data, "_camOff": True}
+    elif els.get("tracking"):
+        track_warn = "perseguição do olhar ignorada: a tela dividida fixa o rosto por conta própria"
+    if track_warn:
+        print(f"  aviso: {track_warn}", file=sys.stderr)
+
     splits = split_windows(data, H, duration)
     hook_accent = accent
     hk = data.get("hook") or {}
@@ -662,9 +735,12 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         parts.append("  AVE_SCATTER.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif st["animated"]:
         parts.append("  AVE_KARAOKE.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+    if track_js:
+        parts.append(track_js)
     if cam_js:
         parts.append(cam_js)
     needs_tl = bool(parts)
+    track_tag = '<script src="styles/tracking.js"></script>' if track_js else ""
 
     # inserts: cartão de imagem no terço superior
     ins = VARIANTS["insert"]
@@ -781,6 +857,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 <link href="https://fonts.googleapis.com/css2?{gfont}&display=swap" rel="stylesheet">
 {gsap_tag}
 {cam_tag}
+{track_tag}
 {split_tag}
 {insert_tag}
 {wa_tag}
@@ -794,7 +871,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   html, body {{ width:{W}px; height:{H}px; overflow:hidden; background:#000; }}
   #a-roll {{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
-             {cam_style} }}
+             {"transform-origin:0 0;" if track_js else cam_style} }}
 </style>
 </head>
 <body>
@@ -874,6 +951,8 @@ def main() -> None:
         files += ["split.css", "split.js"]
     if data.get("inserts"):
         files += ["insert.css", "insert.js"]
+    if (data.get("elements") or {}).get("tracking"):
+        files += ["tracking.js"]
     if data.get("wordAccents"):
         files += ["wordaccent.css", "wordaccent.js"]
 
