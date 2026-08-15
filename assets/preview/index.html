@@ -57,8 +57,6 @@
            numa barra separada eles gastavam uma faixa inteira da coluna para
            dizer coisas que só fazem sentido olhando o vídeo. -->
       <div class="player-hud">
-        <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
-        <button id="btnMute" class="btn icon" title="Mudo"></button>
         <span id="timeNow" class="time">0:00.00</span>
         <span class="time dim">/</span>
         <span id="timeTotal" class="time dim">0:00.00</span>
@@ -89,7 +87,7 @@
         <div id="layerBody" class="layer-body"></div>
       </div>
       <div class="layers-actions">
-        <textarea id="setupNote" rows="2" placeholder="Observações para a finalização (opcional)"></textarea>
+        <textarea id="setupNote" rows="2" placeholder="Alterações extras"></textarea>
         <button id="setupGo" class="btn primary">Visualizar</button>
       </div>
     </section>
@@ -101,6 +99,12 @@
       <button id="btnMark" class="btn mark" title="Marcar Início / Fim (tecla M)">
         <span id="markIcon"></span><span id="markText">Marcar</span>
       </button>
+      <div class="spacer"></div>
+      <!-- REPRODUÇÃO NO CENTRO. Sobre a imagem ela cobria justamente o que se
+           está olhando; aqui fica equidistante das duas pontas da barra. O
+           relógio segue no player, onde é lido junto com o quadro. -->
+      <button id="btnPlay" class="btn icon" title="Play/Pause (espaço)"></button>
+      <button id="btnMute" class="btn icon" title="Mudo"></button>
       <div class="spacer"></div>
       <button id="btnZoomOut" class="btn icon" title="Afastar"></button>
       <button id="btnZoomIn" class="btn icon" title="Aproximar"></button>

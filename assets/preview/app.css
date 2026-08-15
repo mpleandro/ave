@@ -779,7 +779,7 @@ kbd {
 .hl-text:focus { outline: none; border-color: rgb(var(--orange-rgb) / 0.5); }
 .layer-soon { font-size: 11.5px; color: var(--dim); font-style: italic; }
 
-.layers-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.layers-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .layers-actions textarea { flex: 1 1 240px; min-height: 52px; resize: vertical; }
 .layers-actions .btn { flex: 0 0 auto; }
 /* o resumo virou o conteúdo da tira, então perde a margem de rodapé */
