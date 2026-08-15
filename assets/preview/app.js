@@ -626,6 +626,8 @@ function defaultStyle() {
     headline: STYLE_CATALOG.headlines[0].id,
     captions: STYLE_CATALOG.captions[0].id,
     accent: ACCENT_DEFAULT,
+    capColor: '#FFFFFF',
+    headlineText: '',
     elements,
     note: '',
   };
@@ -1134,10 +1136,15 @@ function applyAccent() {
 /* One spectral swatch (the OS picker) plus a hex field — no preset row. A grid of
  * canned colours competes with the style cards for attention and still never has
  * the brand colour the user actually wants. */
-function renderAccents() {
-  const host = $('optAccent');
+/* O MESMO widget para as duas cores. Generalizado por parâmetro em vez de
+ * copiado: o par de campos (roda do sistema + hexa, sincronizados nos dois
+ * sentidos) tem sutileza suficiente — não brigar com quem digita no meio da
+ * tecla — para que duas cópias divergissem na primeira correção. */
+function renderColor(hostId, key, fallback, label) {
+  const host = $(hostId);
+  if (!host) return;
   host.innerHTML = '';
-  const cur = normHex(S.style.accent) || ACCENT_DEFAULT;
+  const cur = normHex(S.style[key]) || fallback;
 
   const custom = el('label', 'swatch custom', host);
   custom.title = 'Escolher cor';
@@ -1153,18 +1160,19 @@ function renderAccents() {
   hex.spellcheck = false;
   hex.maxLength = 7;
   hex.value = cur.slice(1).toUpperCase();
-  hex.setAttribute('aria-label', 'Cor de destaque em hexadecimal');
+  hex.setAttribute('aria-label', `${label} em hexadecimal`);
 
   const commit = (v, {fromHexField} = {}) => {
     const n = normHex(v);
     if (!n) return false;
-    S.style.accent = n;
+    S.style[key] = n;
     custom.style.setProperty('--swatch-fill', n);
     inp.value = n;
     if (!fromHexField) hex.value = n.slice(1).toUpperCase();
     applyAccent();   // live — no full rebuild, so dragging the picker stays smooth
     updateAccentNote();
     updateSummary();
+    LIVE.key = null; renderLive();   // a legenda sobre o vídeo segue a cor na hora
     return true;
   };
 
@@ -1183,6 +1191,11 @@ function renderAccents() {
   hex.addEventListener('keydown', (e) => { if (e.key === 'Enter') hex.blur(); });
 
   updateAccentNote();
+}
+
+function renderAccents() {
+  renderColor('optAccent', 'accent', ACCENT_DEFAULT, 'Cor de destaque');
+  renderColor('optCapColor', 'capColor', '#FFFFFF', 'Cor principal da legenda');
 }
 
 const accentUsed = () =>
@@ -1225,20 +1238,18 @@ function updateSummary() {
  * Uma linha sem controle NENHUM ainda aparece, com o motivo escrito. Some-la
  * faria o painel prometer que a lista está completa. */
 const LAYERS = [
-  { id: 'texto', name: 'Texto & legendas', sub: 'Títulos, legendas, quebras de linha e destaques',
-    // legenda ANTES de headline: é o controle que mais se mexe, e a área do
-    // inspetor tem altura fixa — o que vem depois exige rolagem
-    ico: 'text', accent: true, groups: ['captions', 'headlines'] },
-  { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
-    ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
   { id: 'elementos', name: 'Elementos visuais', sub: 'Figurinhas, imagens, formas e gráficos',
     ico: 'inserts', groups: ['edits'] },
-  { id: 'transicoes', name: 'Transições', sub: 'Cortes, fades, slides e transições entre clipes',
-    ico: 'captions', elements: ['flashCut'] },
+  { id: 'headline', name: 'Headline', sub: 'O título fixo sobre a imagem',
+    ico: 'text', headlineText: true, groups: ['headlines'] },
+  { id: 'legendas', name: 'Legendas', sub: 'Estilo, cor principal e cor de destaque',
+    ico: 'captions', colors: true, groups: ['captions'] },
+  { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
+    ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
+  { id: 'transicoes', name: 'Transições', sub: 'Cortes, fades e transições entre clipes',
+    ico: 'notes', elements: ['flashCut'] },
   { id: 'trilha', name: 'Trilha & mixagem', sub: 'Áudio, níveis, ducking e mixagem final',
     ico: 'music', elements: ['musicAI'] },
-  { id: 'tratamento', name: 'Tratamento visual', sub: 'Cor, contraste, nitidez e efeitos',
-    ico: 'notes', soon: 'a cor é decidida na Decupagem, a partir do perfil detectado na fonte' },
 ];
 
 const GROUP_TITLE = { edits: 'Tipo de edição', headlines: 'Estilo de headline', captions: 'Estilo de legenda' };
@@ -1247,7 +1258,7 @@ const GROUP_TITLE = { edits: 'Tipo de edição', headlines: 'Estilo de headline'
  * altura do painel e empurrava a linha do tempo e o preview. Trocar de camada
  * não é redimensionar a mesa de trabalho. Aqui a área não muda de tamanho
  * nunca; só muda o que está dentro dela. */
-let activeLayer = 'texto';
+let activeLayer = 'elementos';
 
 let wasShowing = false; // painel estava aberto no render anterior (para o re-fit)
 
@@ -1364,20 +1375,39 @@ function buildLayerRows() {
   }
 
   const L = LAYERS.find((x) => x.id === activeLayer) || LAYERS[0];
-  const hint = el('div', 'layer-hint', body);
-  el('b', '', hint).textContent = L.name;
-  hint.append(` — ${L.sub}`);
   if (L.soon) { el('div', 'layer-soon', body).textContent = L.soon; return; }
 
-  if (L.accent) {
-    // O destaque vem ANTES dos estilos de texto: é a tinta com que eles pintam,
-    // e as prévias abaixo — inclusive a que está sobre o vídeo — reagem a ele.
+  if (L.headlineText) {
+    /* A headline é a única escolha desta tela que é CONTEÚDO, não estilo — e
+       por isso ela nunca coube num catálogo de cartões. Quem escreve é o
+       usuário; os cartões abaixo só decidem como ela é pintada. */
+    const g = el('div', 'setup-group', body);
+    el('span', 'group-title', el('div', 'group-head', g)).textContent = 'Texto da headline';
+    const ta = el('textarea', 'hl-text', g);
+    ta.id = 'headlineText';
+    ta.rows = 2;
+    ta.placeholder = 'Ex.: 3 respostas dizem se você está na carreira certa';
+    ta.value = S.style.headlineText || '';
+  }
+
+  if (L.colors) {
+    /* DUAS cores, e a distinção importa: a principal é o corpo da legenda (era
+       branco cravado na folha), a de destaque é a que pinta a palavra realçada
+       — e ela é a MESMA da headline, porque um vídeo com dois laranjas
+       diferentes não lê como um vídeo, lê como um erro. */
     const g = el('div', 'setup-group', body);
     const h = el('div', 'group-head', g);
-    el('span', 'group-title', h).textContent = 'Cor de destaque';
+    el('span', 'group-title', h).textContent = 'Cores';
     el('span', 'group-note', h).id = 'accentNote';
-    el('div', 'swatches', g).id = 'optAccent';
+    const row = el('div', 'color-row', g);
+    const main = el('div', 'color-slot', row);
+    el('span', 'color-lab', main).textContent = 'principal';
+    el('div', 'swatches', main).id = 'optCapColor';
+    const acc = el('div', 'color-slot', row);
+    el('span', 'color-lab', acc).textContent = 'destaque';
+    el('div', 'swatches', acc).id = 'optAccent';
   }
+
   for (const gid of L.groups || []) {
     const g = el('div', 'setup-group', body);
     el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
@@ -1441,6 +1471,10 @@ $('layersPanel').addEventListener('click', (e) => {
   }
 });
 
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'headlineText') S.style.headlineText = e.target.value;
+});
+
 $('setupGo').addEventListener('click', async () => {
   S.style.note = $('setupNote').value.trim();
   const rerender = !S.state.awaitingStyle;
@@ -1457,6 +1491,8 @@ $('setupGo').addEventListener('click', async () => {
     captionsName: styleName('captions', S.style.captions),
     accent: S.style.accent,
     accentName: accentName(S.style.accent),
+    capColor: S.style.capColor || '#FFFFFF',
+    headlineText: (S.style.headlineText || '').trim(),
     // whether the picked styles actually paint it — so the skill does not go
     // hunting for an accent in a look that has none
     accentUsed: accentUsed(),
@@ -1855,6 +1891,7 @@ function renderLive() {
   } else if (id === 'karaoke') {
     const box = el('div', 'ave-cap', ov);
     box.style.setProperty('--cap-scale', sc);
+    box.style.setProperty('--cap-color', S.style.capColor || '#fff');
     if (v.size) box.style.setProperty('--cap-size', v.size);
     const line = el('div', 'ave-cap-line', box);
     for (const word of words) el('span', '', line).textContent = word;
@@ -1867,6 +1904,7 @@ function renderLive() {
     if (v.sy != null) box.style.setProperty('--cap-sy', v.sy);
     if (v.cssFamily) box.style.setProperty('--cap-family', v.cssFamily);
     if (v.weight) box.style.setProperty('--cap-weight', v.weight);
+    box.style.setProperty('--cap-color', S.style.capColor || '#fff');
     el('div', 'ave-cue', box).textContent = cue.text;
   }
   if (cue.sample) el('div', 'live-sample', ov).textContent = 'exemplo — a legenda real entra na finalização';

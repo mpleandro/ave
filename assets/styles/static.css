@@ -9,6 +9,7 @@
  */
 
 .ave-cap-static {
+  --cap-color: #fff;  /* cor principal da legenda (captions.color) */
   --cap-scale: 1;
   --cap-bottom: 430;
   --cap-size: 82;
@@ -29,7 +30,7 @@
 
   text-align: center;
   line-height: 1.14;
-  color: #fff;
+  color: var(--cap-color);
   font-family: var(--cap-family);
   font-weight: var(--cap-weight);
   font-size: calc(var(--cap-size) * var(--cap-scale) * 1px);

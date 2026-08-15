@@ -751,8 +751,23 @@ kbd {
 }
 .layer-chip .layer-ico { flex: 0 0 auto; width: 15px; height: 15px; color: inherit; }
 .layer-chip .layer-ico svg { width: 15px; height: 15px; fill: currentColor; display: block; }
-.layer-chip-name { font-weight: 600; white-space: nowrap; }
-.layer-chip-sum { font-size: 10.5px; color: var(--orange-soft); white-space: nowrap; }
+/* SÓ A CAMADA ABERTA mostra o nome. Seis rótulos numa faixa quebravam em três
+   linhas e gastavam mais altura em texto do que o inspetor tinha para
+   trabalhar; seis ícones mudos exigiam decorar quais são. O rótulo viaja com a
+   seleção: o que está aberto se nomeia, o resto fica ícone. Isso também
+   dispensa a linha de dica que antes repetia esse nome dentro da caixa. */
+.layer-chip-name,
+.layer-chip-sum {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition: max-width 0.22s var(--ease-out), opacity 0.16s var(--ease-out);
+}
+.layer-chip.on .layer-chip-name,
+.layer-chip.on .layer-chip-sum { max-width: 220px; opacity: 1; }
+.layer-chip-name { font-weight: 600; }
+.layer-chip-sum { font-size: 10.5px; color: var(--orange-soft); }
 .layer-chip.on .layer-chip-sum { color: var(--orange); }
 /* faixa estreita: o nome é o que fica — o resumo completo já está na tira */
 @container layers (max-width: 620px) { .layer-chip-sum { display: none; } }
@@ -786,8 +801,25 @@ kbd {
   background-clip: padding-box;
 }
 /* Em modo ícone esta linha é o ÚNICO lugar que nomeia a camada aberta. */
-.layer-hint { font-size: 11px; color: var(--dim); }
-.layer-hint b { color: var(--text); font-weight: 600; }
+/* o par de cores da legenda: principal e destaque, lado a lado */
+.color-row { display: flex; flex-wrap: wrap; gap: 18px; }
+.color-slot { display: flex; flex-direction: column; gap: 5px; }
+.color-lab { font-size: 10px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--dim); }
+
+/* a headline é conteúdo, então ganha uma caixa de texto de verdade */
+.hl-text {
+  width: 100%;
+  min-height: 54px;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.hl-text:focus { outline: none; border-color: rgb(var(--orange-rgb) / 0.5); }
 .layer-soon { font-size: 11.5px; color: var(--dim); font-style: italic; }
 
 .layers-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
@@ -1388,26 +1420,4 @@ button.tl-chip:disabled { cursor: default; }
 .player-hud .time { font-size: 11.5px; }
 .player-hud .btn.icon { padding: 6px 9px; }
 
-/* ---------- painel largo: lista à esquerda, inspetor à direita ----------
-   Em coluna, as seis camadas cabem sem competir com o inspetor pela mesma
-   altura, e o grupo aberto ganha a coluna inteira para rolar dentro. */
-@container layers (min-width: 720px) {
-  .layers-body-wrap { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 14px; }
-  .layer-tabs { flex-direction: column; align-items: stretch; }
-  .layer-chip { justify-content: flex-start; }
-  .layer-body { border-top: 0; border-left: 1px solid var(--stroke); padding: 0 2px 2px 14px; }
-}
-
-/* ---------- painel estreito: SÓ os ícones ----------
-   Seis nomes numa faixa estreita quebram em três linhas e comem a altura que o
-   inspetor precisa. O ícone identifica a camada; o nome de quem está aberto
-   aparece no inspetor logo abaixo. */
-/* Abaixo do ponto da coluna lateral existe UM modo só: fila de ícones.
-   Deixar os nomes nesta faixa produzia três linhas de botões — mais altura
-   gasta em rótulo do que o inspetor inteiro tem para trabalhar. Quem diz o nome
-   da camada aberta é a linha de dica logo abaixo. */
-@container layers (max-width: 719px) {
-  .layer-chip-name, .layer-chip-sum { display: none; }
-  .layer-chip { padding: 8px 11px; }
-  .layer-tabs { flex-wrap: nowrap; }
 }

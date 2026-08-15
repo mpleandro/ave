@@ -18,6 +18,7 @@
  */
 
 .ave-cap {
+  --cap-color: #fff;  /* cor principal da legenda (captions.color) */
   --cap-scale: 1;
   --cap-size: 76;    /* captions.fontSize */
   --cap-gap: 18;     /* espaço entre palavras, ref 1080 */
@@ -46,7 +47,7 @@
      escolheu. A identidade Avelin tem estilo próprio (`editorial`). */
   font-family: 'Poppins', sans-serif;
   font-weight: 900;
-  color: #fff;
+  color: var(--cap-color);
   line-height: 1;
   letter-spacing: calc(-1px * var(--cap-scale));
   font-size: calc(var(--cap-size) * var(--cap-scale) * 1px);
