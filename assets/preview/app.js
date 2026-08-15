@@ -1518,6 +1518,8 @@ $('layersPanel').addEventListener('click', (e) => {
   if (e.target.closest('#layersToggle')) {
     const wrap = $('layersPanel');
     wrap.classList.toggle('collapsed');
+    // abrir as camadas devolve a linha do tempo: é ela que convive com o painel
+    if (!wrap.classList.contains('collapsed') && S.view !== 'tl') setView('tl');
     // a timeline acabou de ganhar (ou perder) altura — reajusta a escala nela
     requestAnimationFrame(() => { fitZoom(); renderAll(); });
     return;
@@ -2649,8 +2651,13 @@ async function loadWords() {
   renderTx();
 }
 
+/* Camadas e transcrição DISPUTAM a mesma altura: uma quer o painel de cima
+ * aberto, a outra quer a área de baixo alta. Deixar as duas abertas espreme as
+ * duas. Então elas se alternam — abrir uma recolhe a outra, e voltar a abrir as
+ * camadas devolve a linha do tempo embaixo. */
 function setView(v) {
   S.view = v;
+  if (v === 'tx') $('layersPanel').classList.add('collapsed');
   document.querySelectorAll('.vseg').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
   $('timelinePanel').classList.toggle('hidden', v !== 'tl');
   $('txPanel').classList.toggle('hidden', v !== 'tx');
