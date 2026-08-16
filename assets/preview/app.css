@@ -1721,3 +1721,33 @@ button.tl-chip:disabled { cursor: default; }
   .prog { padding: 8px 12px; gap: 9px; }
   .prog-label { font-size: 12px; }
 }
+
+
+/* BOTÃO EXPORTAR — o arquivo pronto sai daqui, sem passar pela IA */
+.btn-export {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 14px; border-radius: 9px;
+  font: inherit; font-size: 12.5px; font-weight: 700;
+  color: var(--text); cursor: pointer;
+  background: rgb(var(--orange-rgb) / .12);
+  border: 1px solid rgb(var(--orange-rgb) / .42);
+  transition: background .16s var(--ease-out), border-color .16s var(--ease-out),
+              opacity .16s var(--ease-out);
+}
+.btn-export:hover:not(:disabled) {
+  background: rgb(var(--orange-rgb) / .22);
+  border-color: rgb(var(--orange-rgb) / .70);
+}
+/* desabilitado continua LEGÍVEL: o texto diz por que não dá para exportar
+   (via title), e apagá-lo esconderia justamente a explicação */
+.btn-export:disabled { opacity: .40; cursor: not-allowed; }
+.btn-export .exp-ico { font-size: 14px; line-height: 1; }
+.btn-export.busy { pointer-events: none; }
+.btn-export.busy .exp-ico { animation: prog-pulse 1.1s ease-in-out infinite; }
+
+@media (max-width: 560px) {
+  /* em tela estreita o ícone basta — o cabeçalho não pode empurrar o nome do
+     projeto para fora */
+  .btn-export #exportLabel { display: none; }
+  .btn-export { padding: 7px 10px; }
+}

@@ -28,6 +28,11 @@
   </div>
   <div class="head-actions">
     <span id="savedPill" class="pill saved hidden">✓ enviado ao Claude</span>
+    <!-- Exportar não passa pela IA: o arquivo já existe no disco, e pedir a um
+         agente para copiá-lo seria gastar uma conversa inteira num download. -->
+    <button id="exportBtn" class="btn-export" disabled>
+      <span class="exp-ico">↓</span><span id="exportLabel">Exportar</span>
+    </button>
   </div>
 </header>
 

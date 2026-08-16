@@ -854,22 +854,41 @@ function dirtyCount() {
 }
 function refreshHeader() {
   $('savedPill').classList.toggle('hidden', !(S.savedPending && dirtyCount() === 0));
+  refreshExport();
   refreshActionBar();
 }
 
-/* O estilo mudou em relação ao gravado no projeto? `awaitingStyle` conta como
- * mudança porque nunca houve escolha — há o que enviar. */
-function styleDirty() {
-  if (!setupApplies()) return false;
-  if (S.state.awaitingStyle) return true;
+/* O estilo diverge do que está gravado no projeto?
+ *
+ * Devolve 'changed' (o usuário mexeu), 'unset' (nunca houve escolha) ou ''.
+ * A distinção não é cosmética: as duas coisas pedem frases OPOSTAS na barra.
+ * Enquanto isto era um booleano, um projeto com `awaitingStyle` anunciava
+ * "1 alteração — vai refazer a finalização" sem ninguém ter alterado nada,
+ * e a barra descrevia um refazimento onde não havia o que refazer.
+ */
+function styleState() {
+  if (!setupApplies()) return '';
+  if (S.state.awaitingStyle) return 'unset';
+  const def = defaultStyle();
   const cur = S.state.style || {};
-  const eq = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-  return !(eq(S.style.edit, cur.edit) && eq(S.style.headline, cur.headline)
-    && eq(S.style.captions, cur.captions) && eq(S.style.accent, cur.accent)
-    && eq(S.style.capColor, cur.capColor) && eq(S.style.headlineText, cur.headlineText)
-    && eq(S.style.capDy || 0, cur.capDy || 0)
-    && eq(S.style.elements, cur.elements));
+  /* AUSENTE é igual ao PADRÃO. Sem isto, toda chave nova (o `capColor` foi a
+   * última) marcava como alterado todo projeto salvo antes dela existir: o
+   * lado local tinha o padrão, o gravado não tinha a chave, e a comparação
+   * dizia "mudou" para sempre — uma alteração fantasma que não some nem
+   * salvando, porque salvar grava o padrão e o próximo projeto antigo repete. */
+  const val = (o, k, d) => {
+    const v = o[k];
+    return JSON.stringify((v === undefined || v === null ? d : v) ?? null);
+  };
+  const same = (k, d) => val(S.style, k, d) === val(cur, k, d);
+  const ok = same('edit', def.edit) && same('headline', def.headline)
+    && same('captions', def.captions) && same('accent', def.accent)
+    && same('capColor', def.capColor) && same('headlineText', def.headlineText)
+    && same('capDy', 0)
+    && same('elements', def.elements);
+  return ok ? '' : 'changed';
 }
+const styleDirty = () => styleState() !== '';
 
 /* A BARRA DE AÇÃO nomeia a CONSEQUÊNCIA, não o verbo. "Enviar" não distingue
  * mandar duas marcações de disparar um render de minutos, e essas duas coisas
@@ -908,14 +927,22 @@ function refreshActionBar() {
   // dirtyCount() conta corte, inserções e marcações — não conta estilo. Sem
   // este ajuste, mudar só o estilo mostrava "0 alterações" ao lado de um botão
   // que ia renderizar o vídeo inteiro.
+  const stState = styleState();
   const total = dirtyCount() + (style ? 1 : 0);
-  $('actionCount').textContent = total === 1 ? '1 alteração' : `${total} alterações`;
+  /* "escolha nunca feita" NÃO é alteração. Contá-la como uma dava
+     "1 alteração" numa tela onde o usuário não tinha tocado em nada. */
+  const onlyUnset = stState === 'unset' && dirtyCount() === 0;
+  $('actionCount').textContent = onlyUnset
+    ? 'Estilo ainda não escolhido'
+    : (total === 1 ? '1 alteração' : `${total} alterações`);
 
   const vai = [];
   if (cuts) vai.push('refazer o corte');
   if (style || ins) vai.push(S.state.finalVideo ? 'refazer a finalização' : 'montar a finalização');
   if (notes) vai.push(wordsDirty() ? 'ler o que foi riscado no texto e as marcações' : 'ler as suas marcações');
-  $('actionWhat').textContent = vai.length ? `— vai ${vai.join(' e ')}` : '';
+  $('actionWhat').textContent = onlyUnset
+    ? '— escolha os elementos e envie para montar a finalização'
+    : (vai.length ? `— vai ${vai.join(' e ')}` : '');
 
   const caro = style || ins || cuts;
   $('setupGo').innerHTML = `<span class="btn-ai">${ICON.ai}</span>`
@@ -3279,3 +3306,111 @@ function setProgress(p) {
   // o relógio só corre enquanto há o que cronometrar
   if (p && p.state === 'running') progTick = setInterval(paintProgress, 1000);
 }
+
+/* ---------- Exportar: o arquivo pronto, sem passar pela IA ----------
+ *
+ * O arquivo já existe no disco. Pedir a um agente para copiá-lo gastaria uma
+ * conversa inteira (e tokens) num download — e o usuário ainda ficaria sem
+ * escolher onde salvar.
+ *
+ * Dois caminhos, e o primeiro só existe em navegador que o suporte:
+ *   1. `showSaveFilePicker` — o diálogo NATIVO de salvar. É o único que deixa
+ *      escolher a pasta de verdade; o `download` do <a> obedece à configuração
+ *      do navegador e normalmente joga em Downloads sem perguntar.
+ *   2. `<a download>` — a reserva, que funciona em qualquer lugar.
+ *
+ * O nome do arquivo vem do servidor (do `project` do state), não daqui: baixar
+ * `final.mp4` é inútil na pasta de quem edita cinco vídeos por semana.
+ */
+function exportName() {
+  const slug = String(S.state.project || 'avelin')
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70).toLowerCase();
+  return `${slug || 'avelin'}-${S.state.finalVideo ? 'final' : 'corte'}.mp4`;
+}
+
+function refreshExport() {
+  const b = $('exportBtn');
+  if (!b) return;
+  const temFinal = !!S.state.finalVideo;
+  const temAlgo = temFinal || S.videoDuration > 0;
+  b.disabled = !temAlgo;
+  $('exportLabel').textContent = temFinal ? 'Exportar' : 'Baixar corte';
+  b.title = !temAlgo
+    ? 'Ainda não há vídeo para exportar'
+    : (temFinal
+        ? `Baixa o vídeo finalizado (${exportName()})`
+        : 'A finalização ainda não foi montada — isto baixa o CORTE, sem legenda nem gráficos');
+}
+
+async function doExport() {
+  const b = $('exportBtn');
+  if (!b || b.disabled) return;
+  const nome = exportName();
+  const lab = $('exportLabel');
+  const textoOriginal = lab.textContent;
+  b.classList.add('busy');
+
+  try {
+    const res = await fetch('/download');
+    if (!res.ok) throw new Error(`servidor respondeu ${res.status}`);
+
+    // Progresso por bytes: um arquivo de 80MB em rede local é rápido, mas em
+    // disco lento não é — e um botão que não muda durante a espera parece
+    // um clique que não pegou, que é o defeito que esta interface já corrigiu
+    // em outros lugares.
+    const total = +(res.headers.get('Content-Length') || 0);
+    const reader = res.body && res.body.getReader ? res.body.getReader() : null;
+    let blob;
+    if (reader) {
+      const partes = []; let lidos = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        partes.push(value); lidos += value.length;
+        lab.textContent = total
+          ? `${Math.round(lidos / total * 100)}%`
+          : `${(lidos / 1048576).toFixed(0)} MB`;
+      }
+      blob = new Blob(partes, { type: 'video/mp4' });
+    } else {
+      blob = await res.blob();
+    }
+
+    if (window.showSaveFilePicker) {
+      let handle;
+      try {
+        handle = await window.showSaveFilePicker({
+          suggestedName: nome,
+          types: [{ description: 'Vídeo MP4', accept: { 'video/mp4': ['.mp4'] } }],
+        });
+      } catch (e) {
+        // cancelar o diálogo é uma escolha, não um erro: sair calado.
+        if (e && e.name === 'AbortError') return;
+        handle = null;
+      }
+      if (handle) {
+        const w = await handle.createWritable();
+        await w.write(blob); await w.close();
+        toast('Exportado', 2500);
+        return;
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    // revogar cedo demais cancela o download em alguns navegadores
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast('Exportado para a pasta de downloads', 3000);
+  } catch (e) {
+    toast(`Não consegui exportar: ${e.message}`, 5000);
+  } finally {
+    b.classList.remove('busy');
+    lab.textContent = textoOriginal;
+    refreshExport();
+  }
+}
+
+if ($('exportBtn')) $('exportBtn').addEventListener('click', doExport);

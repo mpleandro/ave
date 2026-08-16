@@ -67,6 +67,21 @@ MIME = {
     ".srt": "text/plain; charset=utf-8",
 }
 
+def _slug(text: str) -> str:
+    """Nome de arquivo a partir do nome do projeto: sem acento, sem pontuação."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", text)
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    t = re.sub(r"[^A-Za-z0-9]+", "-", t).strip("-")
+    return (t[:70] or "avelin").lower()
+
+
+def _ascii_name(name: str) -> str:
+    """Reserva ASCII do Content-Disposition — aspas quebrariam o cabeçalho."""
+    return re.sub(r'[^A-Za-z0-9._-]', "_", _slug(name.rsplit(".", 1)[0])) + \
+        ("." + name.rsplit(".", 1)[1] if "." in name else "")
+
+
 _thumb_lock = threading.Lock()
 _thumb_state: dict[str, float] = {}  # video path -> mtime generated
 
@@ -154,8 +169,13 @@ class Handler(BaseHTTPRequestHandler):
         self._hdr(code, "application/json; charset=utf-8", len(body))
         self.wfile.write(body)
 
-    def _send_file(self, path: Path) -> None:
-        """Static file with HTTP Range support (video scrubbing needs it)."""
+    def _send_file(self, path: Path, download_as: str | None = None) -> None:
+        """Static file with HTTP Range support (video scrubbing needs it).
+
+        `download_as` liga o Content-Disposition: o mesmo arquivo que o <video>
+        toca embutido é o que o botão Exportar baixa, e a única diferença é
+        este cabeçalho.
+        """
         if not path.is_file():
             self._json({"error": f"not found: {path.name}"}, 404)
             return
@@ -175,7 +195,16 @@ class Handler(BaseHTTPRequestHandler):
                     start = max(0, size - int(m.group(2)))
                 code = 206
         length = end - start + 1
-        extra = {"Content-Range": f"bytes {start}-{end}/{size}"} if code == 206 else None
+        extra = {"Content-Range": f"bytes {start}-{end}/{size}"} if code == 206 else {}
+        if download_as:
+            # RFC 6266: o filename* em UTF-8 carrega acento; o filename simples
+            # fica de reserva para quem não lê o estendido.
+            from urllib.parse import quote
+            extra = dict(extra or {})
+            extra["Content-Disposition"] = (
+                f'attachment; filename="{_ascii_name(download_as)}"; '
+                f"filename*=UTF-8''{quote(download_as)}")
+        extra = extra or None
         self._hdr(code, ctype, length, extra)
         with open(path, "rb") as f:
             f.seek(start)
@@ -227,6 +256,8 @@ class Handler(BaseHTTPRequestHandler):
             self._thumbs(path[len("/gen/thumbs/"):])
         elif path == "/api/state":
             self._state()
+        elif path == "/download":
+            self._download()
         else:
             self._json({"error": "unknown route"}, 404)
 
@@ -302,6 +333,33 @@ class Handler(BaseHTTPRequestHandler):
             return True
         except OSError:
             return False
+
+    def _download(self) -> None:
+        """Exportar: o entregue, com nome que sobrevive fora desta pasta.
+
+        Baixar `final.mp4` é inútil na pasta de Downloads de quem edita cinco
+        vídeos por semana — em uma hora são cinco `final(3).mp4`. O nome sai do
+        `project` do state, que é justamente a frase que identifica o vídeo.
+
+        Sem `finalVideo` ainda, exporta o CORTE, marcado como corte no nome.
+        Recusar o download porque a Fase 2 não rodou seria esconder um arquivo
+        que existe e serve — o usuário pode querer o corte limpo.
+        """
+        state = {}
+        try:
+            state = json.loads((self.root / "state.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+        rel = state.get("finalVideo")
+        kind = "final"
+        if not rel or not (self.root / rel).exists():
+            rel, kind = (state.get("video") or "preview.mp4"), "corte"
+        p = self._safe(self.root, rel)
+        if not p or not p.exists():
+            self._json({"error": "nada para exportar ainda"}, 404)
+            return
+        base = _slug(state.get("project") or "avelin")
+        self._send_file(p, download_as=f"{base}-{kind}{p.suffix}")
 
     def _patch_state(self, **kv) -> None:
         p = self.root / "state.json"
