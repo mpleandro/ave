@@ -207,8 +207,17 @@ const STYLE_CATALOG = {
       icon: '<svg viewBox="0 0 16 16"><path d="M3 13.2L13 3.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/><path d="M6.6 14L9.4 11.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/><path d="M6.6 4.8L3.8 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/></svg>',
     },
     {
+      id: 'sfx',
+      /* Efeitos LOCAIS, da biblioteca em assets/sfx/. Vem antes da geração por
+       * IA de propósito: é o caminho que não custa token nem espera, e a
+       * ordem da lista é a ordem em que se pensa nas opções. */
+      name: 'Aplicar efeitos sonoros',
+      def: true,
+      icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 2.2 4.6 5H2.2v6h2.4L8 13.8z" fill="currentColor" stroke-linejoin="round"/><path d="M11.2 5.6a3.4 3.4 0 0 1 0 4.8" opacity=".75"/><path d="M13.4 3.4a6.4 6.4 0 0 1 0 9.2" opacity=".45"/></svg>',
+    },
+    {
       id: 'musicAI',
-      name: 'Trilha sonora com IA',
+      name: 'Gerar com IA',
       def: true,
       icon: '<svg viewBox="0 0 16 16"><path d="M12.6 1.6L6.9 3a.7.7 0 00-.55.68v5.6a2 2 0 101.35 1.9V5.9l4.4-1.05v2.9a2 2 0 101.35 1.9V2.3a.7.7 0 00-.85-.7z"/><path d="M2.4 2.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></svg>',
     },
@@ -1549,7 +1558,7 @@ const LAYERS = [
   { id: 'transicoes', name: 'Transições', sub: 'Cortes, fades e transições entre clipes',
     ico: 'notes', elements: ['flashCut'] },
   { id: 'trilha', name: 'Trilha & mixagem', sub: 'Áudio, níveis, ducking e mixagem final',
-    ico: 'music', elements: ['musicAI'] },
+    ico: 'music', elements: ['sfx', 'musicAI'] },
 ];
 
 const GROUP_TITLE = { edits: 'Tipo de edição', headlines: 'Estilo de headline', captions: 'Estilo de legenda' };

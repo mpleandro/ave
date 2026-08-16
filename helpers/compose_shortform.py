@@ -895,7 +895,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
               f"compositions/{gid}.html — não vai aparecer", file=sys.stderr)
 
     proj = Path(data.get("_proj", "."))
-    sfx_list, sfx_warns = sfx_blocks(events, proj, duration)
+    # O interruptor da aba Estilo. Desligado, nenhum efeito entra — antes disso
+    # os efeitos eram consequência automática de haver um evento, e não havia
+    # como pedir um vídeo sem eles.
+    if (data.get("elements") or {}).get("sfx", True):
+        sfx_list, sfx_warns = sfx_blocks(events, proj, duration)
+    else:
+        sfx_list, sfx_warns = [], []
     for w in sfx_warns:
         print(w, file=sys.stderr)
     sfx_html = "\n".join(sfx_list)

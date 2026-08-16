@@ -53,7 +53,8 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
 | `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" |
-| `elements.musicAI` | Phase 3 via `treblo_music.py`; OFF → deliver with voice only |
+| `elements.sfx` | **"Aplicar efeitos sonoros"** — os efeitos LOCAIS de `assets/sfx/`, disparados pelos eventos da composição (entrada de cartão, flash, deixa em destaque). Ligado por padrão. OFF → nenhum efeito entra, mesmo havendo evento. Não custa token nem espera: é o caminho barato, e vem antes da geração por IA na lista por isso |
+| `elements.musicAI` | **"Gerar com IA"** — Phase 3 via `treblo_music.py`; OFF → deliver with voice only. Custa token e minutos |
 | `note` | free text — read it, it overrides the defaults above |
 
 An unchecked box is an explicit NO, not a silence. Copy the picks into
