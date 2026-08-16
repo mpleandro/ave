@@ -119,6 +119,31 @@ def _has_key(name: str) -> bool:
     return False
 
 
+def _deps() -> dict:
+    """O que esta máquina TEM — para a interface poder pedir o que falta.
+
+    Hoje a pessoa descobre cada dependência por mensagem de erro, uma de cada
+    vez, e sempre no meio de um trabalho. Publicando o estado, a tela pode
+    mostrar tudo de uma vez, na primeira rodada, com o que é obrigatório
+    separado do que é opcional.
+
+    `shutil.which` e não "tentar rodar": rodar o ffmpeg só para saber se ele
+    existe custa um processo por poll, e o poll é de 2 em 2 segundos.
+    """
+    import shutil
+    return {
+        # sem estes, nada funciona
+        "ffmpeg": bool(shutil.which("ffmpeg")),
+        "ffprobe": bool(shutil.which("ffprobe")),
+        "uv": bool(shutil.which("uv")),
+        # só a Fase 2 precisa
+        "node": bool(shutil.which("node")),
+        # o motor da Fase 2 resolve sozinho pelo npx; o cache é o sinal de que
+        # ele já foi baixado uma vez (~365 MB, compartilhado entre projetos)
+        "hyperframes": (Path.home() / ".cache" / "hyperframes").exists(),
+    }
+
+
 def _stale() -> bool:
     """Algum arquivo do app mudou DEPOIS que este processo subiu?"""
     watched = [Path(__file__).resolve(), APP_DIR / "app.js",
@@ -500,9 +525,12 @@ class Handler(BaseHTTPRequestHandler):
             # arquivos servidos = funcionalidade na tela que a rota não atende
             "serverStale": _stale(),
             # o que a ferramenta PODE oferecer nesta máquina. Presença, não valor.
-            "keys": {"treblo": _has_key("TREBLO_API_KEY"),
+            "keys": {"groq": _has_key("GROQ_API_KEY"),
+                     "elevenlabs": _has_key("ELEVENLABS_API_KEY"),
                      "pexels": _has_key("PEXELS_API_KEY"),
-                     "groq": _has_key("GROQ_API_KEY")},
+                     "google": _has_key("GOOGLE_API_KEY") and _has_key("GOOGLE_CSE_ID"),
+                     "treblo": _has_key("TREBLO_API_KEY")},
+            "deps": _deps(),
             "now": time.time(),
         })
 
