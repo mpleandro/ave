@@ -82,8 +82,30 @@ def _ascii_name(name: str) -> str:
         ("." + name.rsplit(".", 1)[1] if "." in name else "")
 
 
+# QUANDO ESTE PROCESSO SUBIU.
+#
+# O servidor serve os arquivos do app LENDO O DISCO a cada requisição, mas as
+# ROTAS são código carregado na partida. Depois de atualizar a skill, o
+# navegador recebe um app novo falando com um servidor velho — e o sintoma é
+# um 404 cru numa funcionalidade que aparece na tela. Aconteceu com o botão
+# Exportar: o botão existia, a rota não.
+#
+# Comparar a data dos arquivos com esta marca detecta isso sozinho, sem
+# ninguém ter de manter um número de versão em dois lugares.
+STARTED_AT = time.time()
+
 _thumb_lock = threading.Lock()
 _thumb_state: dict[str, float] = {}  # video path -> mtime generated
+
+
+def _stale() -> bool:
+    """Algum arquivo do app mudou DEPOIS que este processo subiu?"""
+    watched = [Path(__file__).resolve(), APP_DIR / "app.js",
+               APP_DIR / "app.css", APP_DIR / "index.html"]
+    try:
+        return max(f.stat().st_mtime for f in watched if f.exists()) > STARTED_AT
+    except (OSError, ValueError):
+        return False
 
 
 def probe_duration(path: Path) -> float:
@@ -453,6 +475,9 @@ class Handler(BaseHTTPRequestHandler):
             # períodos diferentes mostram estados de instantes diferentes, e a
             # barra fica discordando do texto ao lado dela.
             "progress": progress.read(self.root),
+            # o app compara com o que ele mesmo é: servidor mais VELHO que os
+            # arquivos servidos = funcionalidade na tela que a rota não atende
+            "serverStale": _stale(),
             "now": time.time(),
         })
 

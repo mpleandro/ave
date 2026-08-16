@@ -963,6 +963,12 @@ async function poll() {
     // "você tem ajustes não salvos" logo abaixo bloquearia a atualização
     // justamente enquanto o usuário espera, que é quando ele mais precisa ver.
     setProgress(data.progress || null);
+    // servidor velho servindo app novo: avisa UMA vez, com a instrução, em vez
+    // de deixar o usuário descobrir por 404 em cada botão novo
+    if (data.serverStale && !S.staleWarned) {
+      S.staleWarned = true;
+      toast('O servidor de preview está desatualizado em relação ao editor — reinicie-o para liberar o que é novo', 9000);
+    }
     checkProcessing();
     if (sig !== S.lastSig) {
       const hadEdits = dirtyCount() > 0;
@@ -3353,7 +3359,17 @@ async function doExport() {
 
   try {
     const res = await fetch('/download');
-    if (!res.ok) throw new Error(`servidor respondeu ${res.status}`);
+    if (!res.ok) {
+      // a MENSAGEM do servidor, não o número: "unknown route" significa
+      // servidor velho (reinicie), "nada para exportar" significa outra coisa
+      // completamente. Um "404" cru não distingue as duas.
+      let motivo = `HTTP ${res.status}`;
+      try { motivo = (await res.json()).error || motivo; } catch (_) {}
+      if (/unknown route/i.test(motivo)) {
+        throw new Error('o servidor de preview é anterior a este botão — reinicie-o');
+      }
+      throw new Error(motivo);
+    }
 
     // Progresso por bytes: um arquivo de 80MB em rede local é rápido, mas em
     // disco lento não é — e um botão que não muda durante a espera parece
