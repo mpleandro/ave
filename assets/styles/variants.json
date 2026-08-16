@@ -263,6 +263,46 @@
     "broll": {
       "file": "whoosh.mp3",
       "volume": 0.08
+    },
+    "tension": {
+      "file": "riser-tension.mp3",
+      "volume": 0.1
+    },
+    "intro": {
+      "file": "riser-short.mp3",
+      "volume": 0.28
+    },
+    "transition": {
+      "file": "glitch.mp3",
+      "volume": 0.22
+    },
+    "transitionCut": {
+      "file": "glitch-short.mp3",
+      "volume": 0.2
+    },
+    "transitionSoft": {
+      "file": "film-burn.mp3",
+      "volume": 0.3
+    },
+    "element": {
+      "file": "whoosh-soft.mp3",
+      "volume": 0.09
+    },
+    "elementOut": {
+      "file": "whoosh-long.mp3",
+      "volume": 0.26
+    },
+    "tick": {
+      "file": "click-tick.mp3",
+      "volume": 0.3
+    },
+    "impact": {
+      "file": "impact.mp3",
+      "volume": 0.2
+    },
+    "camera": {
+      "file": "camera.mp3",
+      "volume": 0.26
     }
   },
   "insert": {

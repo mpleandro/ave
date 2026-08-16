@@ -56,3 +56,32 @@ Os eventos e seus arquivos vivem em `assets/styles/variants.json`, na chave
 `hook` · `flash` · `soloWord` · `circled` · `callout` · `chapter` · `broll`
 
 Trocar o arquivo de um evento é editar essa entrada — o resto se ajusta sozinho.
+
+## Papéis novos — a biblioteca pessoal
+
+Dez efeitos vieram das pastas em `~/Music` e estão declarados em
+`assets/styles/variants.json`. **Não vão para o git**: são de pacotes
+licenciados (Envato Elements e afins) que não permitem redistribuição, e este
+repositório é um fork público. Os dez originais seguem versionados; o que for
+adicionado depois fica de fora por regra no `.gitignore`.
+
+| papel | arquivo | pico | quando |
+|---|---|---|---|
+| `tension` | `riser-tension.mp3` | −0.0 dB | riser de 9,1s — tensão que resolve na virada; é o riser do gancho |
+| `intro` | `riser-short.mp3` | −10.4 dB | riser de 2,3s para abertura, quando o de 9s não cabe |
+| `transition` | `glitch.mp3` | −3.9 dB | corte de imagem com quebra — a transição padrão |
+| `transitionCut` | `glitch-short.mp3` | −4.1 dB | o mesmo em 0,57s, para cortes secos em sequência |
+| `transitionSoft` | `film-burn.mp3` | −7.9 dB | queima de filme; transição quente, menos agressiva |
+| `element` | `whoosh-soft.mp3` | −0.0 dB | elemento ENTRANDO (cartão, gráfico, legenda) |
+| `elementOut` | `whoosh-long.mp3` | −10.2 dB | elemento SAINDO — cauda mais longa |
+| `tick` | `click-tick.mp3` | −1.4 dB | marcação seca: item de lista, número, contagem |
+| `impact` | `impact.mp3` | −3.0 dB | ênfase numa palavra ou numa revelação |
+| `camera` | `camera.mp3` | −6.8 dB | obturador; corte que finge foto, zoom duro |
+
+**O volume sai do pico medido**, não do gosto: arquivo mais quente pede número
+menor. É a mesma convenção dos sete que já existiam — `whoosh.mp3` mede −2,3 dB
+e vale `0.10`. Um efeito a −10 dB no mesmo `0.10` simplesmente não é ouvido.
+
+Dois deles pedem cuidado: `riser-tension` e `whoosh-soft` medem **0,0 dB** —
+estão no teto, e é por isso que ficaram com volume baixo. Subir esses dois é o
+caminho mais curto para a mixagem final clipar.

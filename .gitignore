@@ -65,3 +65,9 @@ templates/
 # Overlays pessoais — o pacote e de cada um, e binario grande atrapalha o fork
 assets/overlays/*
 !assets/overlays/README.md
+
+# SFX pessoais: a biblioteca do usuario vem de pacotes licenciados (Envato
+# Elements e afins) que NAO permitem redistribuicao. Os 10 originais do pacote
+# seguem versionados; tudo que for adicionado depois fica de fora.
+assets/sfx/*.mp3
+assets/sfx/*.wav

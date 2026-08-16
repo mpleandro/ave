@@ -35,6 +35,56 @@ deveria estar suave. O composer converte para `filter: brightness()`, que no
 `screen` faz o mesmo trabalho (fonte mais escura contribui menos) sem quebrar o
 blend. Regra registrada na Hard Rule 16 e aprendida na roleta do #29.
 
+## Os overlays desta biblioteca, e para que serve cada um
+
+Nomes fixos — o composer e o agente procuram por eles.
+
+### Fecho de vídeo (CTA)
+
+| arquivo | quando |
+|---|---|
+| `ig_follow` | CTA **"siga o perfil"** no Instagram. Overlay simples: entra no fim, sem preparo nenhum |
+| `ig_follow_profile` | mesma função, versão em **chromakey** — mais rico, mas **exige a foto do usuário** para preencher o espaço do avatar |
+
+O `ig_follow_profile` não é o `ig_follow` melhorado: é outro fluxo. Sem a foto
+ele entra com um buraco no lugar do rosto, que lê como render quebrado. **Se a
+foto não estiver no projeto, use o `ig_follow` e diga por quê** — nunca entregue
+o chromakey vazio.
+
+Sendo chromakey, ele precisa de key na composição, não de `blend`. O verde
+não sai com `screen` nem com `multiply`: ou a matte vem pronta no arquivo
+(alfa), ou o verde tem de ser removido antes — mesma decisão da Hard Rule 16,
+e a resposta aqui é alfa.
+
+### Profundidade
+
+| arquivo | quando |
+|---|---|
+| `Element_shaddow_overlay 1` e `2` | sombra para dar **profundidade a elementos quadrados ou retangulares** — cartões, inserções, molduras |
+
+São sombra, ou seja, arte **escura**: vão de `multiply`, nunca de `screen`.
+Com `screen` a sombra simplesmente desaparece, que é o comportamento correto
+do blend e o erro mais fácil de cometer aqui.
+
+Posicione atrás do elemento, não sobre ele. Uma sombra por cima do cartão
+escurece o próprio cartão em vez de assentá-lo no fundo.
+
+### Legibilidade de texto
+
+| arquivo | quando |
+|---|---|
+| `Black_Blur_overlay 1` e `2` | base para **elementos de tela: textos e legendas**. Escurece e borra o fundo atrás do texto para o texto sobreviver a qualquer cena |
+
+Este é o único que quebra a regra de ficar abaixo da legenda: ele existe
+**para** a legenda, então entra logo abaixo dela e acima de todo o resto.
+Também é `multiply`, e a intensidade importa — forte demais vira uma tarja e
+mata a imagem que a legenda deveria estar acompanhando.
+
+Vale lembrar da medição que a série já fez: na parede clara deste projeto
+**nenhum laranja passa a régua de contraste** (o melhor deu 1,74:1 contra 3,0).
+Um `Black_Blur` sob a legenda é exatamente o que resolve isso sem trocar a cor
+da marca.
+
 ## Conferir antes de usar
 
 O erro que não aparece olhando o arquivo sozinho é **fundo que não é preto de
