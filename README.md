@@ -14,15 +14,14 @@ horizontal** (YouTube).
 > legenda, quatro headlines, três tipos de edição, a câmera dinâmica e as quatro
 > camadas de longform. Ainda falta a camada *atrás do sujeito* — a skill recusa
 > pelo nome em vez de substituir por algo parecido.
->
-> A URL de clone abaixo é um marcador: troque `<REPO>` pelo endereço do seu
-> repositório.
 
 ## Origem e licença
 
 A.V.E. é um fork de [edvid](https://github.com/fillrochaa/edvid) (MIT,
 © 2026 Creator Factory), com o aviso de copyright preservado conforme o MIT
-exige. Veja `LICENSE`. O repositório original é rastreado no remote `upstream`,
+exige — o `LICENSE` traz os dois: o do projeto original e o deste fork
+(© 2026 Marcos Fonseca). A licença continua MIT: use, altere e redistribua,
+mantendo os dois avisos. O repositório original é rastreado no remote `upstream`,
 e o diff é mantido confinado à Fase 2 para que melhorias no motor de corte
 continuem sendo integráveis.
 
@@ -65,7 +64,7 @@ falhar de um jeito bem menos claro.
 **3. Baixe a skill:**
 
 ```powershell
-git clone <REPO> "$env:USERPROFILE\.claude\skills\ave"
+git clone https://github.com/mpleandro/ave "$env:USERPROFILE\.claude\skills\ave"
 ```
 
 **4. Instale as dependências Python:**
@@ -101,7 +100,7 @@ Se algum disser *"command not found"*, resolva antes de continuar.
 **3. Baixe a skill:**
 
 ```bash
-git clone <REPO> "$HOME/.claude/skills/ave"
+git clone https://github.com/mpleandro/ave "$HOME/.claude/skills/ave"
 ```
 
 **4. Instale as dependências Python:**

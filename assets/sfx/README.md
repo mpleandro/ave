@@ -59,11 +59,14 @@ Trocar o arquivo de um evento é editar essa entrada — o resto se ajusta sozin
 
 ## Papéis novos — a biblioteca pessoal
 
-Dez efeitos vieram das pastas em `~/Music` e estão declarados em
-`assets/styles/variants.json`. **Não vão para o git**: são de pacotes
-licenciados (Envato Elements e afins) que não permitem redistribuição, e este
-repositório é um fork público. Os dez originais seguem versionados; o que for
-adicionado depois fica de fora por regra no `.gitignore`.
+Dez efeitos além do pacote base, declarados em
+`assets/styles/variants.json`. Vão versionados junto com o repositório.
+
+> **Se você for adicionar os seus:** confira a licença antes. Pacotes como o
+> Envato Elements permitem usar nos seus vídeos e **não** permitem
+> redistribuir o arquivo — num repositório público isso é redistribuição.
+> Quando for o caso, deixe-os fora com uma regra no `.gitignore` e descreva o
+> papel aqui, para quem clonar saber o que falta.
 
 | papel | arquivo | pico | quando |
 |---|---|---|---|
