@@ -2,7 +2,7 @@
 
 Read this file when the user wants the edit to happen **inside Premiere via the
 `premiere-pro` MCP** (e.g. "edit the sequence X in Premiere", "corte no Premiere
-via MCP") rather than through `render.py`/`cut.mp4`.
+via MCP") rather than through `render.py`/`preview.mp4`.
 
 ## Golden rule — the medium changes, the METHOD does not
 
@@ -13,7 +13,7 @@ So the analysis half (transcribe → `takes_packed.md` → `edl.json`) is IDENTI
 and CACHED — **reuse an existing approved `edl.json`** if `<videos_dir>/edit/`
 already has one; the timeline just replays those ranges.
 
-Do NOT build `cut.mp4` / clips_graded / the preview server for a Premiere job —
+Do NOT build `preview.mp4` / clips_graded / the preview server for a Premiere job —
 the Premiere sequence itself is the deliverable and the user watches in the
 Program Monitor. `verify_cut.py` is replaced by `get_full_sequence_info` +
 `export_frame` (see Verify below).

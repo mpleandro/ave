@@ -285,7 +285,7 @@ def build_cues(words: list[dict]) -> list[dict]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="→ caption-cues.json (stacked caption style)")
-    ap.add_argument("--transcript", type=Path, required=True, help="Transcript of the final cut.mp4")
+    ap.add_argument("--transcript", type=Path, required=True, help="Transcript of the final preview.mp4")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output caption-cues.json path")
     ap.add_argument("--lang", default="pt", help="Language hint for accent/negation lists (default pt)")
     args = ap.parse_args()

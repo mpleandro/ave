@@ -691,7 +691,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     hook_accent = accent
     hk = data.get("hook") or {}
     if hk.get("enabled") and VARIANTS["headlines"].get(hk.get("style", "card"), {}).get("usesAccent"):
-        hv = Path(data.get("_proj", ".")) / data.get("_video", "cut.mp4")
+        hv = Path(data.get("_proj", ".")) / data.get("_video", "preview.mp4")
         htop = VARIANTS["headlines"][hk["style"]]["top"] / H
         hook_accent = adaptive_accent(hv, accent, max(0.0, htop - 0.01), 0.14,
                                       [(0.0, float(hk.get("endSec", 4.0)))])[0]
@@ -773,7 +773,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         st_, en = float(w.get("start", 0)), min(float(w.get("end", 0)), duration)
         if st_ < duration and en > st_ and w.get("text"):
             wa_items.append((st_, en, w["text"]))
-    wa_video = Path(data.get("_proj", ".")) / data.get("_video", "cut.mp4")
+    wa_video = Path(data.get("_proj", ".")) / data.get("_video", "preview.mp4")
     wa_colors = adaptive_accent(wa_video, accent, 0.36, 0.12,
                                 [(a, b) for a, b, _ in wa_items])
     wa_blocks = []
@@ -928,7 +928,7 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("edit_data", type=Path)
     ap.add_argument("--captions", type=Path, required=True)
-    ap.add_argument("--video", default="cut.mp4")
+    ap.add_argument("--video", default="preview.mp4")
     ap.add_argument("-o", "--output", type=Path, required=True)
     ap.add_argument("--style", default=None)
     ap.add_argument("--end", type=float, default=None)

@@ -7,7 +7,7 @@ temporally-stable hair edges. Reads a video, estimates the person + alpha per
 frame (carrying recurrent state for stability), and writes an **alpha WebM**
 (VP9 `yuva420p`) of the person over transparency. In the composition, layer:
 
-    <DynamicVideo src="cut.mp4">     {/* base: background + person */}
+    <DynamicVideo src="preview.mp4">     {/* base: background + person */}
       {behindElement}                {/* the thing that goes behind */}
     </DynamicVideo>
     <DynamicVideo src="fg.webm" />   {/* person on top → element sits behind */}
@@ -15,9 +15,9 @@ frame (carrying recurrent state for stability), and writes an **alpha WebM**
 Needs the `matting` extra (torch): `uv sync --extra matting`.
 
 Usage:
-    python helpers/person_matte.py cut.mp4 -o hyperframes/fg.webm
-    python helpers/person_matte.py cut.mp4 -o fg.webm --model resnet50   # higher quality, slower
-    python helpers/person_matte.py cut.mp4 -o fg.webm --start 8 --duration 6
+    python helpers/person_matte.py preview.mp4 -o hyperframes/fg.webm
+    python helpers/person_matte.py preview.mp4 -o fg.webm --model resnet50   # higher quality, slower
+    python helpers/person_matte.py preview.mp4 -o fg.webm --start 8 --duration 6
 """
 from __future__ import annotations
 

@@ -24,7 +24,7 @@ Cue tiles are labeled "cue" and are never evicted by the frame cap.
 Usage:
     python helpers/watch_video.py <video>
     python helpers/watch_video.py <video> --mode keyframe --max-frames 36
-    python helpers/watch_video.py cut.mp4 --times 12.5 1:45 3:02
+    python helpers/watch_video.py preview.mp4 --times 12.5 1:45 3:02
     python helpers/watch_video.py <video> --start 10:00 --end 14:00
 
 Output: sheet PNGs in --out-dir (default <video_dir>/edit/verify/watch_<stem>/)

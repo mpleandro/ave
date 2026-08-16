@@ -1,8 +1,8 @@
 """Emit the word-level caption JSON the Phase-2 composition reads.
 
 Two modes:
-  --transcript <cut.json>   PREFERRED. Transcribe the FINAL cut.mp4 first
-      (`transcribe.py cut.mp4`), then feed that transcript here. Its word times
+  --transcript <cut.json>   PREFERRED. Transcribe the FINAL preview.mp4 first
+      (`transcribe.py preview.mp4`), then feed that transcript here. Its word times
       are already on the output timeline and free of the source's stretch/dead
       -air artifacts, so the first word of every segment (e.g. the hook) is
       captioned with correct timing. This is the robust default.
@@ -92,7 +92,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="→ JSON de legendas palavra a palavra")
     ap.add_argument("edl", type=Path, nargs="?", help="edl.json (fallback mode)")
     ap.add_argument("--transcript", type=Path, default=None,
-                    help="Transcript of the final cut.mp4 (preferred mode)")
+                    help="Transcript of the final preview.mp4 (preferred mode)")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output captions.json path")
     args = ap.parse_args()
 

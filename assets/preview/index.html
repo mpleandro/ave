@@ -31,12 +31,32 @@
   </div>
 </header>
 
+<!-- O QUE ESTÁ ACONTECENDO AGORA.
+     Entre clicar e ver, esta ferramenta some por minutos — um encode leva ~1min,
+     uma Fase 2 leva ~2min. Sem isto, a tela "processando" é idêntica à tela
+     travada, e a diferença entre as duas é a única coisa que o usuário quer
+     saber. `aria-live` porque quem usa leitor de tela tem o mesmo problema, pior. -->
+<div id="progress" class="prog hidden" role="status" aria-live="polite">
+  <span class="prog-dot"></span>
+  <span id="progAi" class="prog-ai hidden">IA</span>
+  <div class="prog-body">
+    <div class="prog-line">
+      <span id="progLabel" class="prog-label"></span>
+      <span id="progTime" class="prog-time"></span>
+    </div>
+    <div id="progTrack" class="prog-track"><div id="progFill" class="prog-fill"></div></div>
+    <div id="progDetail" class="prog-detail"></div>
+  </div>
+</div>
+
 <main>
   <section id="emptyState" class="empty glass hidden">
     <div class="empty-inner">
       <div class="empty-icon">🎬</div>
       <h2>Aguardando o primeiro render</h2>
-      <p>Assim que o <code>cut.mp4</code> existir, a timeline aparece aqui sozinha.</p>
+      <p>Assim que o <code>preview_proxy.mp4</code> existir, a timeline aparece
+         aqui sozinha. É a versão rápida, de trabalho — o render final só é feito
+         depois que você aprovar a Fase&nbsp;1.</p>
     </div>
   </section>
 
@@ -68,6 +88,16 @@
          estilo é uma coisa que se faz OLHANDO o material, não de memória.
          As linhas são montadas por JS a partir de LAYERS — o HTML só reserva a
          casca, como todo o resto desta interface. -->
+    <!-- O PORTÃO, dito em voz alta. Enquanto o vídeo em tela é o proxy, as
+         camadas do render não existem — e um painel que simplesmente some lê
+         como interface quebrada, não como etapa a cumprir. -->
+    <div id="gateNote" class="gate-note hidden">
+      <strong>Fase 1 em revisão.</strong> Este é o corte de trabalho
+      (<code>preview_proxy.mp4</code>, 720p) — julgue as tomadas e o ritmo, não a
+      compressão. <em>Aprove a Fase 1</em> para renderizar o corte final e liberar
+      as camadas do render, as legendas e a trilha.
+    </div>
+
     <section id="layersPanel" class="layers glass hidden">
       <!-- A tira é o acordeão MESTRE. Recolhido, o painel some inteiro e devolve
            a altura para a linha do tempo — que é o que falta em tela baixa. O
@@ -91,6 +121,11 @@
       <!-- O SWITCH troca só o que está ABAIXO dele. Transporte, preview e barra
            de ação ficam nos dois modos: são a mesma edição vista de dois
            ângulos, não duas telas. -->
+      <!-- RECOLHER, simétrico ao das camadas: as duas metades da coluna
+           disputam a mesma altura, e só uma delas podia ceder. Em tela baixa,
+           recolher a linha do tempo é o que devolve o vídeo ao tamanho útil. -->
+      <button id="tlToggle" class="btn icon caret" type="button"
+              title="Recolher a linha do tempo" aria-expanded="true">⌄</button>
       <div class="viewseg" role="group" aria-label="Modo de edição">
         <button class="vseg on" data-view="tl" type="button" title="Linha do tempo" aria-label="Linha do tempo"></button>
         <button class="vseg" data-view="tx" type="button" title="Transcrição" aria-label="Transcrição"></button>
@@ -131,6 +166,11 @@
 
     <section id="timelinePanel" class="timeline-panel glass">
     <div id="timeline" class="timeline">
+      <!-- Onde as palavras riscadas no texto CAEM na linha do tempo. Só marca:
+           `pointer-events:none`, nada aqui recebe clique. É a ponte entre as
+           duas telas — riscar no texto sem ver onde aquilo mora no tempo deixa
+           o usuário sem noção de quanto está tirando, e de onde. -->
+      <div id="cutOverlay" class="cut-overlay"></div>
       <div class="track ruler-track">
         <div class="track-label"></div>
         <div class="lane ruler-lane"><canvas id="ruler"></canvas></div>
@@ -188,6 +228,19 @@
          Ela só existe quando há o que enviar, e o rótulo diz a CONSEQUÊNCIA:
          refazer o corte não é a mesma coisa que montar a finalização, e o
          segundo leva minutos. -->
+    <!-- APROVAR — a barra de aprovação e a de alterações NUNCA aparecem juntas.
+         Aprovar com correção pendente é contraditório: uma diz "está pronto" e
+         a outra "conserte isto". Enquanto houver alteração não enviada, só a
+         barra de ações aparece; zerada, esta toma o lugar. -->
+    <div id="approveBar" class="actionbar approve glass hidden">
+      <div class="actionbar-what">
+        <b>Fase 1 pronta para aprovação</b>
+        <span>— libera o corte final e as camadas do render</span>
+      </div>
+      <textarea id="approveNote" rows="1" placeholder="Observação (opcional)"></textarea>
+      <button id="btnApprove" class="btn primary">Aprovar corte</button>
+    </div>
+
     <div id="actionBar" class="actionbar glass hidden">
       <div class="actionbar-what">
         <b id="actionCount"></b>

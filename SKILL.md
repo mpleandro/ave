@@ -34,7 +34,7 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
 
 ## Hard Rules (production correctness — non-negotiable)
 
-1. **The phase gate is real.** No Phase-2 work before the cut is approved.
+1. **The phase gate is real, and it is SPOKEN.** A ordem, nesta sequência: **renderize o `preview_proxy.mp4` → MOSTRE → pergunte em palavras ("aprova a Fase 1?") → espere a resposta.** Ninguém aprova o que não viu — o proxy existe exatamente para ser a coisa vista, e é o primeiro artefato da Fase 1, não uma recompensa por aprovar. Só depois do sim vêm as duas consequências: o `preview.mp4` final é encodado (uma vez) e a Fase 2 destranca. Nada dela — estilo, legenda, gráfico, trilha — começa antes disso.
 2. **Per-segment extract → lossless `-c copy` concat**, never a single-pass filtergraph. (Under the default J-cut the picture and the sound of a take are extracted as separate ranges and the audio tracks are summed — that is the one sanctioned mix, and the video path is still per-segment + lossless concat.)
 3. **30ms audio fades at every segment boundary** (encoded in render.py).
 4. **Never cut inside a word** — snap to word boundaries from the transcript.
@@ -47,8 +47,13 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
 11. **PHASE 2 is data-driven.** `edit-data.json` describes the video; the LOOK lives in `assets/styles/` and the NUMBERS in `assets/styles/variants.json` — the same files the editor's Estilo previews are meant to read, so the two can never disagree. Bespoke graphics are the one escape hatch: an HTML of your own under `<projeto>/compositions/<id>.html`, mounted as a sub-composition. Never hand-write a style inside the composer.
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
 13. **Never Read machine data into context**: `transcripts/*.json` (raw), `captions.json`, `track.json`, `segments.json`, matte/track binaries. Read `takes_packed.md` and helper stdout instead.
-14. **UMA transcrição, não duas — e NENHUMA delas é "a boa".** A legenda sai das FONTES deslocadas pelo EDL (`cut_transcript.py` → `cut_mapped.json`), **nunca** de uma segunda transcrição do `cut.mp4`. O motivo não é precisão: duas passadas do mesmo modelo sobre o mesmo áudio erram em lugares DIFERENTES, e nesta série as metades erradas ficaram repartidas — a fonte trocou "trabalhar" por "avaliar", o corte perdeu "sem conhecimento". **Nunca resolva um desacordo escolhendo um lado por preferência** (eu escolhi, escrevi que a fonte era a correta, e queimei a palavra errada no vídeo; o usuário ouviu e desmentiu). Resolva com uma TERCEIRA passada isolada — `transcript_audit.py --recheck` — e grave o resultado em `transcripts/corrections.json` (com `from`, senão a correção pinta as palavras vizinhas). O que o mapeamento entrega é **um único texto corrigido num lugar só**: o que o usuário lê e edita na Fase 1 é LITERALMENTE o que entra no vídeo, senão apagar uma palavra no painel não corta o que ele acha que corta. Use `audio_start_in_output` do `jcut_timeline` — sob J-cut o áudio entra antes da imagem, e legenda segue a voz; somar durações de range atrasa cumulativamente (+1,08s no último trecho, medido).
-15. **RODE O `transcript_audit.py` ANTES DE ESCREVER O EDL.** O transcrito parecer bom não é evidência de que está completo — o Whisper engole gaguejo e repetição sem deixar rastro no texto. Toda janela que ele acusar é fala sem texto ou texto sem fala; leve as reais ao usuário junto com a estratégia de corte. Pular esse passo entrega gaguejo no vídeo final, e o usuário descobre assistindo.
+14. **UMA transcrição, não duas — e NENHUMA delas é "a boa".** A legenda sai das FONTES deslocadas pelo EDL (`cut_transcript.py` → `cut_mapped.json`), **nunca** de uma segunda transcrição do `preview.mp4`. O motivo não é precisão: duas passadas do mesmo modelo sobre o mesmo áudio erram em lugares DIFERENTES, e nesta série as metades erradas ficaram repartidas — a fonte trocou "trabalhar" por "avaliar", o corte perdeu "sem conhecimento". **Nunca resolva um desacordo escolhendo um lado por preferência** (eu escolhi, escrevi que a fonte era a correta, e queimei a palavra errada no vídeo; o usuário ouviu e desmentiu). Resolva com uma TERCEIRA passada isolada — `transcript_audit.py --recheck` — e grave o resultado em `transcripts/corrections.json` (com `from`, senão a correção pinta as palavras vizinhas). O que o mapeamento entrega é **um único texto corrigido num lugar só**: o que o usuário lê e edita na Fase 1 é LITERALMENTE o que entra no vídeo, senão apagar uma palavra no painel não corta o que ele acha que corta. Use `audio_start_in_output` do `jcut_timeline` — sob J-cut o áudio entra antes da imagem, e legenda segue a voz; somar durações de range atrasa cumulativamente (+1,08s no último trecho, medido).
+15. **RODE O `transcript_audit.py --fix-times` ANTES DE ESCREVER O EDL.** O transcrito parecer bom não é evidência de que está certo, e ele mente de três jeitos:
+    - **Engole gaguejo e repetição** sem deixar rastro no texto. Cada janela que o detector de densidade acusa é fala sem texto ou texto sem fala; leve as reais ao usuário junto com a estratégia de corte.
+    - **Troca palavra por palavra** — resolva com `--recheck`, nunca escolhendo um lado por preferência (ver Regra 14).
+    - **Estica o fim da palavra por cima da pausa seguinte.** Medido em C0012 do projeto 29: `"você"` carimbada 63,00–64,52 (1,52s para duas sílabas) com 0,92s de SILÊNCIO dentro do carimbo. Na fonte inteira eram 17 palavras e **7,5s de silêncio atribuído a palavras**. Os outros dois detectores não pegam isso: a pausa é longa o bastante para partir a região de fala em duas, então vira vão ENTRE regiões e a densidade de cada metade continua normal. `--fix-times` apara o fim até a fala medida, guarda o original em `<fonte>.raw.json` e é idempotente. **Importa porque é este carimbo que vira legenda queimada** (Regra 14) — sem o aparo o karaokê segura a palavra na tela por mais de um segundo enquanto ninguém fala.
+    O aparo tem piso POR PALAVRA (~0,055s/caractere): quando o `silencedetect` parte a região dentro da própria palavra, aparar até o fim da região daria 0,09s — a leitura certa é que a região se partiu, não que a palavra esticou, e aí não se mexe. Sem essa guarda a primeira versão aparava `'pessoal'` para 0,09s e `'empreender'` para 0,17s.
+    Pular esse passo entrega gaguejo no vídeo e legenda fora do tempo, e o usuário descobre assistindo.
 16. **Pediu vídeo "transparente"? AVALIE O OVERLAY ANTES DE ESCOLHER.** Toda vez que o usuário quiser um vídeo transparente, ou tirar o fundo de uma gravação de tela, decida entre `mix-blend-mode: screen` (o escuro some de graça — só serve para arte CLARA) e alfa de verdade em VP9 `yuva420p` (a arte tem escuro que importa: texto escuro, sombra, contorno). **Olhe a arte e prove antes de renderizar** — compor `1-(1-a)*(1-b)` sobre um quadro real do corte custa segundos e responde o que uma render responderia em minutos. Screen apaga TODO pixel escuro, não só o fundo. A tabela de decisão, as armadilhas e a receita da matte estão em `references/shortform.md`, seção "Quero o vídeo transparente".
 
 ## Execution medium — ffmpeg pipeline (default) vs Adobe Premiere (MCP)
@@ -60,7 +65,7 @@ cut on silence, phase gate, grade with taste) but the hands change — **read
 `references/premiere-mcp.md`** for the battle-tested Premiere workflow (razor +
 ripple recipe, the V/A-link ripple caveat, `color_correct` LOG-strength lesson,
 voice master, `export_frame` gotcha, tool cheat-sheet). Transcription/`edl.json`
-are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/preview.
+are identical and cached — reuse an approved `edl.json`; skip `preview.mp4`/preview.
 
 ## Directory layout
 
@@ -73,8 +78,8 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
     ├── edl.json                 ← cut decisions (Phase 1)
     ├── transcripts/<name>.json  ← cached word-level transcripts (Groq Whisper / ElevenLabs Scribe)
     ├── clips_graded/            ← per-segment extracts with grade + fades
-    ├── preview.mp4              ← PHASE 1 proxy (720p): o que se ITERA e se aprova
-    ├── cut.mp4                  ← corte final (1080p), encodado UMA vez após a aprovação
+    ├── preview_proxy.mp4        ← PHASE 1 proxy (720p): o que se ITERA e se aprova
+    ├── preview.mp4              ← corte final (1080p), encodado UMA vez APÓS a aprovação
     ├── clips_proxy/             ← extrações do proxy (descartáveis)
     ├── verify/                  ← montages / flagged-boundary views
     ├── captions.srt + chapters.txt   ← longform deliverables
@@ -82,7 +87,7 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
     └── hyperframes/             ← projeto da Fase 2 (montado sozinho) E OS DADOS
         ├── edit-data.json       ← A EDIÇÃO
         ├── captions.json, caption-cues.json, track.json, segments.json
-        ├── cut.mp4              ← link para o corte aprovado
+        ├── preview.mp4              ← link para o corte aprovado
         ├── pexels/ web/ brand/ film/ broll/, trilha.mp3
         ├── index.html           ← A COMPOSIÇÃO — gerada, nunca editada à mão
         ├── styles/              ← cópias de assets/styles/ (o look)
@@ -125,12 +130,12 @@ Phase 1:
 - **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is.
 - **`voice_levels.py <video> [--edit-dir <dir>] [--edl edl.json] [--drop-db 5]`** — the source of truth for speech LEVEL. Learns the noise floor (Ridler-Calvard intermeans, not a percentile) and the speaker's own median from the recording itself, then flags every phrase, sub-phrase run, and EDL range sitting ≥5 dB under that median and sizes a `gain_db` for each. Catches the failure nothing else sees: a whispered aside or a trailing-off sentence where every word is present, the transcript is perfect, `speech_regions` says "speech", `verify_cut` finds no pop and no dead air — and the viewer still hits a passage they cannot hear. **Run it in Phase 1 before writing the EDL.**
 - **`detect_color.py <video> [--json]`** — resolves NORMAL vs LOG from the file instead of asking. Tier 1 metadata (HLG/PQ declare themselves; Apple Log's signature is ProRes 10-bit 4:2:2 + BT.2020 primaries + EMPTY transfer; vendor tags when present), Tier 2 image statistics when the metadata is silent — which is common, since a Sony shooting S-Log3 to H.264 often declares plain bt709 and any transcode drops the tags. Returns the profile, a **confidence**, the evidence, and the `grade` to apply (measured from the footage for non-Apple LOG). Only `confidence: low` should send you back to the user.
-- **`render.py <edl.json> -o preview.mp4 --proxy --no-subtitles [--voice-master] [--keep-resolution] [--jobs N] [--no-jcut] [--jcut-lead N] [--jcut-tail-trim N]`** — per-segment extract (grade + fades, **parallel**) → **J-cut overlap assembly (default)** or lossless concat → optional voice master → loudnorm. Writes `jcut_timeline` into the EDL: the real output positions, which is what everything downstream must index off. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `cut.mp4`.
-- **`verify_cut.py <edl.json> <cut.mp4> [--min-silence 1.2]`** — numeric self-eval: duration, per-junction pop/clipped-word probes, dead air, black frames, clipping, **and range level balance** (each range's RMS vs the median range; `LOW-LEVEL` under −4 dB). ~350 tokens of text instead of N images. The range-balance line is the convergence test for a `gain_db` fix — unlike `voice_levels`' run detector it compares a range against its peers rather than against a threshold it was selected by, so a corrected take actually stops being flagged.
+- **`render.py <edl.json> -o preview_proxy.mp4 --proxy --no-subtitles [--voice-master] [--keep-resolution] [--jobs N] [--no-jcut] [--jcut-lead N] [--jcut-tail-trim N]`** — per-segment extract (grade + fades, **parallel**) → **J-cut overlap assembly (default)** or lossless concat → optional voice master → loudnorm. Writes `jcut_timeline` into the EDL: the real output positions, which is what everything downstream must index off. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `preview.mp4`.
+- **`verify_cut.py <edl.json> <preview.mp4> [--min-silence 1.2]`** — numeric self-eval: duration, per-junction pop/clipped-word probes, dead air, black frames, clipping, **and range level balance** (each range's RMS vs the median range; `LOW-LEVEL` under −4 dB). ~350 tokens of text instead of N images. The range-balance line is the convergence test for a `gain_db` fix — unlike `voice_levels`' run detector it compares a range against its peers rather than against a threshold it was selected by, so a corrected take actually stops being flagged.
 - **`grade.py <in> -o <out>`** — grade presets/raw filters. **`--candidates "a=<filter>;b=<preset>;original=" --frame <t> -o cmp.png`** renders N looks on the SAME frame into one labeled montage.
 - **`timeline_view.py <video> <start> <end>`** — filmstrip+waveform PNG for ONE flagged spot, not a scan tool.
 - **`contact_sheet.py <video> --times t1 t2 … -o sheet.png`** — N frames in one labeled grid; the way to eyeball several moments **you already know**.
-- **`watch_video.py <video> [--mode scene|keyframe|uniform] [--times t1 t2 …] [--start/--end] [--max-frames 24]`** — "what is IN this footage?" when you *don't* know where to look: scene-change detection (auto-fallback to uniform sampling on static/talking-head sources) + perceptual dedup (near-identical frames collapse — a held take becomes a handful of tiles) → labeled contact sheets in `edit/verify/watch_<stem>/`, one Read per sheet. Use for visual inventory of unknown material, eyeballing takes across sources, and surveying `cut.mp4` beyond verify_cut's numbers. `--times` pins transcript-cue frames: deictic moments from `takes_packed.md` ("olha isso", "como você pode ver") are LOW visual change and invisible to scene detection — pin them to decide B-roll/callout/zoom placement in Phase 2.
+- **`watch_video.py <video> [--mode scene|keyframe|uniform] [--times t1 t2 …] [--start/--end] [--max-frames 24]`** — "what is IN this footage?" when you *don't* know where to look: scene-change detection (auto-fallback to uniform sampling on static/talking-head sources) + perceptual dedup (near-identical frames collapse — a held take becomes a handful of tiles) → labeled contact sheets in `edit/verify/watch_<stem>/`, one Read per sheet. Use for visual inventory of unknown material, eyeballing takes across sources, and surveying `preview.mp4` beyond verify_cut's numbers. `--times` pins transcript-cue frames: deictic moments from `takes_packed.md` ("olha isso", "como você pode ver") are LOW visual change and invisible to scene detection — pin them to decide B-roll/callout/zoom placement in Phase 2.
 
 Phase 2/3 (see the track references for usage):
 - **`phase2.py`** (Fase 2 inteira, um comando) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor)
@@ -146,7 +151,7 @@ Every edit session gets the same interactive interface in the user's preview pan
 **Launch (do this when a session starts, even before the first render — the UI shows a waiting state):**
 1. Write `<edit>/state.json`:
    ```json
-   {"project": "Nome — C0000", "phase": 1, "video": "preview.mp4", "edl": "edl.json",
+   {"project": "Nome — C0000", "phase": 1, "video": "preview_proxy.mp4", "edl": "edl.json",
     "captions": "hyperframes/captions.json", "editData": "hyperframes/edit-data.json",
     "finalVideo": "final.mp4", "fps": 24, "message": "Fase 1 — cortando",
     "sourceDurations": {"C0000": 1038.5},
@@ -170,7 +175,7 @@ Every edit session gets the same interactive interface in the user's preview pan
    they think they told you, and you never heard. `ps aux | grep watch_edits`
    is the one-second check when you are unsure.
 
-**Keep state.json fresh** — bump `phase` and `message` at each milestone (cut rendered, cut approved, Phase 2 rendered…). The UI polls and hot-reloads by itself; waveform + filmstrip regenerate automatically when cut.mp4 changes.
+**Keep state.json fresh** — bump `phase` and `message` at each milestone (cut rendered, cut approved, Phase 2 rendered…). The UI polls and hot-reloads by itself; waveform + filmstrip regenerate automatically when preview.mp4 changes.
 
 The timeline shows one track per KIND: markers, captions, video, audio (the mix),
 **A1 / A2** (the J-cut takes), **text** overlays (hook), **images** (inserts + any
@@ -254,7 +259,7 @@ entries exist here.
 **When the user saves timeline edits**, the UI writes `<edit>/preview_edits.json`
 (never touches edl.json) and `watch_edits.py` notifies you automatically. To apply:
 - `notes[]` — free-text correction requests, each with `start`/`end` on the draft
-  timeline plus `renderedStart`/`renderedEnd` on the current `cut.mp4`, and the
+  timeline plus `renderedStart`/`renderedEnd` on the current `preview.mp4`, and the
   `phase` tab the user was on. Use the RENDERED pair to find the moment in the
   existing render. These are instructions in the user's words — read them, then do
   the edit they describe (re-cut, re-grade, swap an insert, fix a caption…).
@@ -269,9 +274,9 @@ Then delete `preview_edits.json` and update `state.json`.
 
 # PHASE 1 — Clean cut + color grade
 
-Goal: best take of every beat, cut on silence, graded image, clean `cut.mp4` for approval. No text, no graphics.
+Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4` for approval. No text, no graphics.
 
-1. **Inventory.** URL source? `ingest_url.py` first (`--section` when only a range of a longform video matters). `ffprobe` every source. `transcribe_batch.py` (or `transcribe.py`) → `pack_transcripts.py` → read `takes_packed.md`. Note dimensions/orientation and whether it looks flat/LOG. Material you can't picture from the transcript → `watch_video.py` for a one-Read visual survey.
+1. **Inventory + PAPEL DE CADA FONTE.** URL source? `ingest_url.py` first (`--section` when only a range of a longform video matters). `ffprobe` every source. `transcribe_batch.py` (or `transcribe.py`) → `pack_transcripts.py` → read `takes_packed.md`. Note dimensions/orientation and whether it looks flat/LOG. Material you can't picture from the transcript → `watch_video.py` for a one-Read visual survey.
 2. **Pre-scan** `takes_packed.md` for verbal slips, mis-speaks, and dead-air-stretched words (Whisper stretches a word's end across silence — verify long "phrases" against `speech_regions.py`/waveform before trusting them). **Then rode DOIS auditores, porque o transcrito é cego de dois jeitos diferentes:**
    - **`transcript_audit.py <edit>`** — o transcrito é cego ao que ELE MESMO não escreveu. Gaguejo e repetição somem sem rastro: o parágrafo lê perfeito e falta uma frase inteira de áudio. Toda janela acusada é uma decisão a tomar ANTES do EDL. `--recheck` resolve as dúvidas transcrevendo só a janela, isolada.
    - **`voice_levels.py` em cada fonte** — o transcrito é cego ao NÍVEL, então um trecho inaudível lê igual a um normal. O que ele acusar: reforce com `gain_db`, ou corte o take.
@@ -291,11 +296,13 @@ Goal: best take of every beat, cut on silence, graded image, clean `cut.mp4` for
    Still show the `--candidates` montage before committing a LOG grade: detection
    picks the curve, the user picks the look.
 5. **Propose the cut strategy** (4–8 sentences: shape, takes, cut direction, grade direction, length estimate). **Wait for confirmation.**
-6. **Execute — no PROXY.** Produce `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times. Render: `render.py edl.json -o preview.mp4 --proxy --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`). **The J-cut runs by default** — see below; you do not ask for it and you do not configure it per project. It applies per junction, only where a breath exists.
-7. **Self-eval (numeric first).** `verify_cut.py edl.json preview.mp4` (longform: `--min-silence 1.2`). Clean → done. Flags → `timeline_view` ONLY the flagged junctions, fix, re-render the proxy. Cap 3 loops, then surface remaining flags to the user.
-8. **Show `preview.mp4` and wait for approval.** The phase gate. **Iterate here, always on the proxy** — every correction round re-renders it, and at 720p/veryfast that is 3.2× cheaper per segment than the final. Say it is a proxy when you show it, so nobody reviews the COMPRESSION instead of the cut.
-9. **Approved → encode the final, once.** `render.py edl.json -o cut.mp4 --no-subtitles` (same flags as step 6, minus `--proxy`). This is the file Phase 2 composes over; `phase2.py` refuses to run on the proxy. Point `state.json.video` at `cut.mp4` and regenerate `segments.json` from the FINAL segments — the proxy's `clips_proxy/` frame counts describe a different render.
-10. **Open the Estilo tab** — `"awaitingStyle": true` in `state.json`, and let the
+6. **Escreva o EDL.** `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times.
+7. **Encurte o ar morto — SEMPRE, antes do primeiro render.** `propose_breaths.py <edit> --apply`. Cortar no silêncio resolve o ar ENTRE tomadas; sobra o de DENTRO — a pausa no meio do próprio raciocínio, que nenhuma escolha de tomada remove porque está no meio da tomada escolhida. Num vídeo curto é o que mais custa retenção. A passada automática é conservadora de propósito (pausa >0,60s cai para 0,30s): tira o indefensável e para aí. O gosto fica para os chips da aba Transcrição, que descem até 0,15s — **o usuário refina o que sobrou, não faz a limpeza inteira à mão.** Diga em uma linha quantos respiros e quantos segundos saíram.
+8. **Render do PROXY.** `render.py edl.json -o preview_proxy.mp4 --proxy --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`). **The J-cut runs by default** — see below; you do not ask for it and you do not configure it per project. It applies per junction, only where a breath exists.
+9. **Self-eval (numeric first).** `verify_cut.py edl.json preview_proxy.mp4` (longform: `--min-silence 1.2`). Clean → done. Flags → `timeline_view` ONLY the flagged junctions, fix, re-render the proxy. Cap 3 loops, then surface remaining flags to the user.
+10. **Mostre o proxy e PEÇA A APROVAÇÃO, com todas as letras.** É o portão, e ele tem de ser dito — *"aprova a Fase 1?"* — não subentendido. **Nada depois disto começa sem um sim**: nem estilo, nem legenda, nem trilha. Itere sempre no proxy: cada rodada de correção o refaz, e a 720p/veryfast isso é 3,2× mais barato por segmento que o final. Diga que é proxy ao mostrar, para ninguém revisar a COMPRESSÃO em vez do corte.
+11. **Aprovado → encode o final, uma vez.** `render.py edl.json -o preview.mp4 --no-subtitles` (mesmas flags do passo 8, menos `--proxy`). É o arquivo sobre o qual a Fase 2 compõe, e o `phase2.py` recusa rodar sobre o proxy. Aponte `state.json.video` para `preview.mp4` — **é isso que destranca as camadas do render na interface** — e regenere o `segments.json` a partir dos segmentos FINAIS: as contagens de frame de `clips_proxy/` descrevem outro render.
+12. **Open the Estilo tab** — `"awaitingStyle": true` in `state.json`, and let the
    user pick the editing style, the caption style and the edit elements in the UI
    (see "The Estilo tab"). Do NOT ask this in chat. Only then read the track
    reference: **`references/shortform.md`** or **`references/longform.md`**.
@@ -390,9 +397,62 @@ composer warns by name.
 
 ### Delivery
 
-Loudness is re-measured on the OUTPUT (−14 LUFS), not inherited from `cut.mp4`:
+Loudness is re-measured on the OUTPUT (−14 LUFS), not inherited from `preview.mp4`:
 Phase 2 adds a soundtrack and effects, so the final mix is a different one.
 
+
+## Papel de cada fonte — e o tempo RESERVADO
+
+Nem toda fonte é fala. Antes de escrever o EDL, decida o que cada arquivo É, porque
+isso muda o que entra na Fase 1 e o que o usuário aprova.
+
+| Papel | O que é | Ocupa tempo? | Onde entra |
+|---|---|---|---|
+| **fala** | a cabeça falante, a espinha do áudio | é o tempo | ranges do EDL |
+| **multicam** | outro ÂNGULO do mesmo momento | não — troca a imagem | range com a mesma janela de áudio, fonte diferente |
+| **insert** | toma a tela por alguns segundos (roleta, animação, gravação de tela) | **SIM** | reservado na Fase 1, montado na Fase 2 |
+| **tela dividida** | arte/vídeo numa faixa, rosto na outra | **SIM** (muda o enquadramento) | reservado na Fase 1 |
+| **B-roll** | corte de apoio sobre a narração | **SIM** | reservado na Fase 1 |
+| **overlay** | cavalga a imagem sem substituí-la (logo, marca d'água) | não | Fase 2 |
+
+**A regra que separa as duas colunas:** *ocupa tempo de tela* vai para a Fase 1 como
+**RESERVADO**; *cavalga o tempo que já existe* espera a Fase 2. Legenda, headline,
+zoom e cor são cosméticos — mudar de karaokê para empilhado não move um frame.
+A roleta, o B-roll e a tela dividida **são a montagem**.
+
+**Como reservar.** Escreva a entrada em `hyperframes/edit-data.json` já na Fase 1,
+com `planned: true` e sem `src`. O editor carrega esse arquivo desde a Fase 1 e
+desenha um chip tracejado — tempo guardado, mídia ausente. Nada é renderizado; o
+portão continua de pé.
+
+```json
+{"inserts": [{"label": "roleta — giro + card 029", "start": 0.0, "end": 5.2, "planned": true}]}
+```
+
+**Por que isto existe.** Sem o reservado o usuário aprova uma montagem com buracos
+que não consegue ver. Aconteceu no #29: a abertura foi escolhida *"para dar tempo de
+tela pro giro da roleta na Fase 2"* — o corte foi construído em volta de um elemento
+invisível, e a aprovação era de 57s de cabeça falante onde os primeiros segundos são
+outra coisa. Se a roleta não coubesse no vão reservado, a descoberta viria depois do
+portão, que é o que o portão existe para evitar.
+
+**Quando o papel não for óbvio, PERGUNTE — e pergunte pelo uso, não pelo formato.**
+Uma gravação de tela pode ser insert, tela dividida ou overlay, e o arquivo não diz
+qual. Junte a evidência primeiro (`ffprobe`: duração, resolução, proporção, tem áudio?
+`watch_video.py`: o que aparece) e faça UMA pergunta concreta, com as opções descritas
+pelo que o espectador vê:
+
+> Peguei três arquivos. Os dois DJI são você falando — o segundo é o refazer, e vou
+> usar ele. O terceiro é uma gravação de tela de 55s com uma roleta girando que para
+> no card 029. Como ela entra?
+>   **(a)** toma a tela inteira por alguns segundos na abertura
+>   **(b)** fica numa faixa em cima, com você embaixo (tela dividida)
+>   **(c)** aparece pequena por cima da imagem, sem tapar você
+>   **(d)** é só referência, não entra no vídeo
+
+Nunca pergunte "qual o papel desta fonte?" nem ofereça os nomes da tabela: eles são
+vocabulário desta skill, não do usuário. E não pergunte o que a evidência responde —
+duração, resolução e se tem áudio se medem.
 
 ## J-cut — the default Phase-1 cleanup
 
@@ -514,7 +574,7 @@ not permission to skip the approval.
 - **Rec.709 is the only color space allowed to leave Phase 1.** `render.py` handles
   this (tonemaps HDR, converts wide-gamut SDR, tags every output bt709/tv) — but
   VERIFY on the rendered cut: `ffprobe -v error -select_streams v:0
-  -show_entries stream=color_space,color_primaries,color_range cut.mp4` must read
+  -show_entries stream=color_space,color_primaries,color_range preview.mp4` must read
   bt709 / bt709 / tv. Anything else means a second interpretation is still alive
   downstream: Chrome (the Phase-2 decoder, now HyperFrames) re-reads those tags and
   silently re-grades the image — typically ~1.2 gamma darker with a hue shift — so
@@ -526,7 +586,7 @@ not permission to skip the approval.
 
 Opt-in: `render.py … --voice-master` or `"voice_master": true` in the EDL. Runs after compositing, before loudnorm. Chain (`VOICE_MASTER_CHAIN` in render.py): highpass 80 → mud cut −2.5dB@200 → compressor (3:1, −20dB, makeup 3) → presence +2.5dB@3.2k → air +3dB@9k shelf → deesser → limiter 0.95.
 
-Tune per voice: brighter → raise treble/3.2k; warmer → back those off, lift ~200Hz; more "radio" → lower threshold / raise ratio; more natural → ratio 2, threshold −24dB. **Verify:** `ffmpeg -i cut.mp4 -af astats -vn -f null -` → Flat factor 0, peak < 0dB; loudnorm summary ≈ −14 LUFS / TP ≤ −1. Then let the user hear it.
+Tune per voice: brighter → raise treble/3.2k; warmer → back those off, lift ~200Hz; more "radio" → lower threshold / raise ratio; more natural → ratio 2, threshold −24dB. **Verify:** `ffmpeg -i preview.mp4 -af astats -vn -f null -` → Flat factor 0, peak < 0dB; loudnorm summary ≈ −14 LUFS / TP ≤ −1. Then let the user hear it.
 
 ## Cut craft
 
@@ -702,7 +762,7 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Fixing an under-level take with a global compressor or `--voice-master` — that pumps the takes that were already fine. Use per-range `gain_db`.
 - Cutting exactly at a word's offset (clips the sibilant) — leave the 50–80ms trail.
 - Committing a grade without the one-frame candidates montage + user pick.
-- Shipping a `cut.mp4` that is not tagged bt709/tv — Phase 2 will re-interpret it and the approved grade drifts.
+- Shipping a `preview.mp4` that is not tagged bt709/tv — Phase 2 will re-interpret it and the approved grade drifts.
 - Re-muxing the delivery audio "to fix drift". That was the OLD engine's workaround and it DISCARDED every baked SFX. Measured on HyperFrames: drift is zero across 780s, so the effects live in the composition and the re-mux must not come back.
 - Judging A/V sync with short correlation windows — speech is quasi-periodic and a 2–3s window happily locks onto the wrong syllable, inventing a drift. Use 15s+ windows, and remember a PARTIAL render cannot show drift that accumulates over the full timeline.
 - Burning captions/overlays with ffmpeg/PIL — Phase 2 is HyperFrames-only.

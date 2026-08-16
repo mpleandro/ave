@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """O transcrito do CORTE, feito por mapeamento — não por transcrever de novo.
 
-Transcrever o `cut.mp4` era o caminho óbvio e é o caminho errado — mas NÃO por
+Transcrever o `preview.mp4` era o caminho óbvio e é o caminho errado — mas NÃO por
 ser menos preciso. São duas passadas independentes do mesmo modelo sobre o mesmo
 áudio, e cada uma erra onde a outra acerta. Medido na série "170 Questões": 95,4%
 de igualdade, 9 divergências, e as duas metades erradas repartidas:
@@ -131,7 +131,7 @@ def build(edit: Path) -> dict:
     return {
         "words": out,
         "language_code": "por",
-        "_source": "mapeado do EDL — NÃO é uma transcrição do cut.mp4",
+        "_source": "mapeado do EDL — NÃO é uma transcrição do preview.mp4",
         "_jcut": bool(tl),
     }
 

@@ -31,7 +31,7 @@ versão deste arquivo e ela achava 0,00s de fala sem texto num trecho onde havia
 uma frase inteira. Por isso a densidade é medida por região acústica, contando
 só os INÍCIOS de palavra.
 
-**RODE NAS FONTES, NÃO NO `cut.mp4`.** O corte passa por `loudnorm`, que nesta
+**RODE NAS FONTES, NÃO NO `preview.mp4`.** O corte passa por `loudnorm`, que nesta
 série levantou +23 dB — o room tone sobe acima do limiar e o detector de fala
 para de separar as pausas. Uma pausa longa no meio de uma frase vira "região
 contínua com poucas palavras" e sai como suspeita. Aconteceu: 1,52s entre
@@ -216,6 +216,98 @@ def recheck(video: Path, start: float, end: float, lang: str | None) -> str:
         return " ".join(w["text"] for w in words_of(out)) or "(nada)"
 
 
+# ------------------------------------------------------- carimbo esticado
+
+# Medido em C0012 do projeto 29: a palavra "você" saiu carimbada 63,00–64,52 —
+# 1,52s para duas sílabas, cercada de palavras de 0,12s. Dentro daquele carimbo
+# havia 0,92s de SILÊNCIO medido. O Whisper não errou a palavra; esticou o fim
+# dela por cima da pausa seguinte.
+#
+# Os outros dois detectores não pegam isso, e vale saber por quê: a pausa é
+# longa o bastante para o `silencedetect` PARTIR a região de fala em duas, então
+# ela vira um vão ENTRE regiões, não uma região rala — a contagem de palavras de
+# cada metade continua normal e a densidade não acusa nada.
+#
+# Custa em dois lugares, ambos silenciosos: a legenda karaokê segura a palavra
+# na tela pelo carimbo (Regra 14 — é este tempo que vira legenda queimada), e
+# qualquer coisa que indexe por fim-de-palavra herda o erro.
+STRETCH_MIN = 0.70      # acima disto, uma palavra é suspeita
+STRETCH_SLACK = 0.25    # e só acusa se o excesso sobre a fala real passar disto
+STRETCH_FLOOR = 0.08    # piso absoluto
+# E um piso POR PALAVRA, que é o que impede o conserto de virar defeito. O
+# `silencedetect` às vezes parte a região DENTRO de uma palavra — numa oclusiva,
+# num "ss" longo — e aí a região que contém o início dela acaba antes de a
+# palavra acabar. Sem esta guarda, a primeira versão aparou 'pessoal' para 0,09s
+# e 'empreender' para 0,17s: durações que nenhuma boca produz, e que na legenda
+# karaokê apareceriam como um piscar. Quando o aparo cairia abaixo do plausível,
+# a leitura é de que foi a REGIÃO que se partiu, não a palavra que esticou — e
+# nesse caso não se mexe.
+STRETCH_MS_PER_CHAR = 0.055
+STRETCH_MIN_WORD = 0.12
+
+
+def plausible_floor(text: str) -> float:
+    """Duração mínima crível para esta palavra, pelo tamanho."""
+    n = sum(1 for c in text if c.isalnum())
+    return max(STRETCH_MIN_WORD, STRETCH_MS_PER_CHAR * n)
+
+
+def stretch_flags(video: Path, words: list[dict],
+                  regions: list[tuple[float, float]] | None = None) -> list[dict]:
+    """Palavras cujo carimbo cobre muito mais que a fala medida dentro dele.
+
+    Devolve, para cada suspeita, o fim VERDADEIRO — o fim da região de fala que
+    contém o início da palavra. Sem região que a contenha não há o que afirmar,
+    e a palavra fica em paz: um palpite aqui viraria legenda.
+    """
+    if regions is None:
+        regions = speech_regions(video, noise_floor_for(video))
+    flags = []
+    for i, w in enumerate(words):
+        s, e = float(w["start"]), float(w.get("end") or w["start"])
+        if e - s < STRETCH_MIN:
+            continue
+        reg = next(((a, b) for a, b in regions if a - 0.05 <= s < b), None)
+        if reg is None:
+            continue
+        real_end = max(s + STRETCH_FLOOR, min(e, reg[1]))
+        excesso = e - real_end
+        if excesso < STRETCH_SLACK:
+            continue
+        if real_end - s < plausible_floor(w["text"]):
+            continue     # a região se partiu dentro da palavra — não é esticada
+        flags.append({
+            "start": s, "end": e, "dur": e - s, "word": w["text"], "i": i,
+            "real_end": round(real_end, 3), "excess": round(excesso, 3),
+            "why": "carimbo esticado",
+        })
+    return flags
+
+
+def fix_times(path: Path, video: Path) -> int:
+    """Apara o fim de cada palavra esticada até a fala medida. Idempotente.
+
+    Escreve no transcrito cacheado, guardando o original em `<nome>.raw.json` na
+    primeira vez. Mexer no cache é o certo aqui: ele é a cópia de trabalho que
+    TODO o resto lê, e um sidecar faria metade do pipeline seguir usando o tempo
+    velho — exatamente o tipo de divergência que a Regra 14 existe para impedir.
+    """
+    data = json.loads(path.read_text())
+    words = [w for w in (data.get("words") or []) if w.get("type") == "word"]
+    fl = stretch_flags(video, words)
+    if not fl:
+        return 0
+    raw = path.with_suffix(".raw.json")
+    if not raw.exists():
+        raw.write_text(json.dumps(data, ensure_ascii=False))
+    by_i = {f["i"]: f["real_end"] for f in fl}
+    for i, w in enumerate(words):
+        if i in by_i:
+            w["end"] = by_i[i]
+    path.write_text(json.dumps(data, ensure_ascii=False))
+    return len(by_i)
+
+
 # --------------------------------------------------------------------- main
 
 def merge(flags: list[dict]) -> list[dict]:
@@ -242,13 +334,16 @@ def main() -> int:
     ap.add_argument("edit", type=Path)
     ap.add_argument("--recheck", action="store_true",
                     help="transcreve de novo cada janela suspeita, isolada")
+    ap.add_argument("--fix-times", action="store_true",
+                    help="apara o fim das palavras esticadas até a fala medida "
+                         "(escreve no transcrito; o original vai para .raw.json)")
     ap.add_argument("--language", default="pt")
     ap.add_argument("-o", "--out", type=Path, help="grava o relatório em JSON")
     args = ap.parse_args()
 
     edit = args.edit.expanduser().resolve()
     edl_path = edit / "edl.json"
-    cut = edit / "cut.mp4"
+    cut = edit / "preview.mp4"
 
     report: list[dict] = []
 
@@ -262,8 +357,23 @@ def main() -> int:
             words = words_of(edit / "transcripts" / f"{src.stem}.json")
             if not src.exists() or not words:
                 continue
+            # uma medição, dois detectores: as regiões acústicas custam uma
+            # passada de ffmpeg e servem à densidade e ao carimbo esticado
+            regs = speech_regions(src, noise_floor_for(src))
             fl = density_flags(src, words)
-            print(f"\n{src.name} — {len(words)} palavras, {len(fl)} janela(s) suspeita(s)")
+            st = stretch_flags(src, words, regs)
+            print(f"\n{src.name} — {len(words)} palavras, {len(fl)} janela(s) "
+                  f"suspeita(s), {len(st)} carimbo(s) esticado(s)")
+            for f in st:
+                print(f"  {f['start']:7.2f} → {f['end']:7.2f}  "
+                      f"{f['word']!r} carimbada em {f['dur']:.2f}s, "
+                      f"fala real até {f['real_end']:.2f} (+{f['excess']:.2f}s de silêncio)")
+                f["file"] = src.name
+                report.append(f)
+            if st and args.fix_times:
+                n = fix_times(edit / "transcripts" / f"{src.stem}.json", src)
+                print(f"      → {n} carimbo(s) aparado(s) "
+                      f"(original em {src.stem}.raw.json)")
             for f in merge(fl):
                 near = " ".join(w["text"] for w in words
                                 if f["start"] - 1.2 <= float(w["start"]) < f["end"] + 1.2)
@@ -292,7 +402,7 @@ def main() -> int:
             print(f"      corte: {f['corte'] or '(nada)'}")
             if args.recheck and cut.exists():
                 print(f"      isolada diz: {recheck(cut, f['start'], f['end'], args.language)}")
-            f["file"] = "cut.mp4"
+            f["file"] = "preview.mp4"
             report.append(f)
 
     if not report:

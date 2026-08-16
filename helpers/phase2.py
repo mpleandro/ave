@@ -27,6 +27,13 @@ import sys
 from pathlib import Path
 
 HELPERS = Path(__file__).resolve().parent
+sys.path.insert(0, str(HELPERS))
+import progress  # noqa: E402
+
+# Para onde reportar falha. Um canal de progresso que só sabe reportar
+# sucesso deixa a tela em "processando…" para sempre quando o processo morre
+# — e morrer é exatamente quando o usuário mais precisa saber.
+_EDIT: Path | None = None
 
 SKILL = Path(__file__).resolve().parent.parent
 HF = ["npx", "--yes", "hyperframes@0.7.109"]
@@ -82,7 +89,10 @@ def run(cmd, cwd=None, quiet=False, allow_fail=False):
     if r.returncode != 0 and not allow_fail:
         if quiet and r.stderr:
             print(r.stderr[-2000:], file=sys.stderr)
-        sys.exit(f"falhou: {' '.join(str(c) for c in cmd[:3])}… (código {r.returncode})")
+        msg = f"falhou: {' '.join(str(c) for c in cmd[:3])}… (código {r.returncode})"
+        if _EDIT:
+            progress.fail(_EDIT, msg)
+        sys.exit(msg)
     return r
 
 
@@ -166,7 +176,7 @@ def scaffold(proj: Path, cut: Path) -> None:
                   "assets": "assets"},
         "media": {"autoProxy": True},
     }, indent=2))
-    link = proj / "cut.mp4"
+    link = proj / "preview.mp4"
     if link.is_symlink() or link.exists():
         link.unlink()
     # symlink: o corte pode ter centenas de MB e é o mesmo arquivo
@@ -176,7 +186,7 @@ def scaffold(proj: Path, cut: Path) -> None:
 def deliver(rendered: Path, final: Path) -> None:
     """Normaliza a loudness da entrega (-14 LUFS / -1 dBTP / LRA 11).
 
-    A Fase 1 já normaliza o cut.mp4, mas a Fase 2 acrescenta trilha e efeitos —
+    A Fase 1 já normaliza o preview.mp4, mas a Fase 2 acrescenta trilha e efeitos —
     a mistura final é outra, então o alvo tem que ser reaferido na saída, não
     herdado da entrada.
     """
@@ -194,17 +204,23 @@ def main() -> None:
     args = ap.parse_args()
 
     edit = args.edit.resolve()
-    cut = edit / "cut.mp4"
+    # `ai=True`: a Fase 2 e o passo que gasta TOKEN, e a interface pinta
+    # esse caso diferente. O usuario pediu para saber quando a IA esta
+    # trabalhando justamente porque e o unico custo dele que nao e tempo.
+    global _EDIT
+    _EDIT = edit
+    progress.begin(edit, "fase2", "Fase 2 — montando e renderizando", ai=True)
+    cut = edit / "preview.mp4"
     if not cut.exists():
         # O proxy existir e o corte não é o caso comum, e merece a mensagem
         # certa: a Fase 1 rodou, só não foi aprovada ainda. Compor a Fase 2 em
         # cima do proxy entregaria 720p sem ninguém notar — o render sai limpo e
         # a perda só aparece no arquivo publicado.
-        if (edit / "preview.mp4").exists():
+        if (edit / "preview_proxy.mp4").exists():
             sys.exit(
-                f"só existe o proxy ({edit / 'preview.mp4'}, 720p) — a Fase 2 tem\n"
-                f"de compor sobre o corte final. Aprove o corte e encode uma vez:\n"
-                f"  render.py edl.json -o {edit / 'cut.mp4'} --no-subtitles"
+                f"só existe o proxy ({edit / 'preview_proxy.mp4'}, 720p) — a Fase 2\n"
+                f"compõe sobre o corte APROVADO. Aprove a Fase 1 e encode uma vez:\n"
+                f"  render.py edl.json -o {edit / 'preview.mp4'} --no-subtitles"
             )
         sys.exit(f"não achei o corte aprovado em {cut} — a Fase 1 precisa ter rodado")
 
@@ -222,13 +238,14 @@ def main() -> None:
         # parar no primeiro passo.
         #
         # A ORIGEM é o transcrito das FONTES, deslocado pelo EDL — não uma
-        # segunda transcrição do cut.mp4. As duas passadas erram em lugares
+        # segunda transcrição do preview.mp4. As duas passadas erram em lugares
         # diferentes, e a segunda é a que vira legenda queimada: nesta série
         # ela trocou "trabalhar" por "avaliar" e a frase continuou gramatical.
         # Mapeando, o texto que o usuário lê e edita na Fase 1 é o MESMO que
         # entra no vídeo — que é a premissa de editar por transcrição.
         print("  legendas ausentes — gerando do corte…")
-        cut = edit / (load(edit / "state.json", {}).get("video") or "cut.mp4")
+        progress.step(edit, detail="montando as legendas a partir do EDL")
+        cut = edit / (load(edit / "state.json", {}).get("video") or "preview.mp4")
         if not cut.exists():
             sys.exit(f"não achei o corte em {cut}")
         tr = edit / "transcripts" / "cut_mapped.json"
@@ -259,6 +276,7 @@ def main() -> None:
     data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
     if picked:
         print("  escolhas da aba Estilo aplicadas")
+        progress.step(edit, detail="escolhas da aba Estilo aplicadas")
 
     scaffold(proj, cut)
 
@@ -278,6 +296,7 @@ def main() -> None:
         track = pub / "track.json"
         if not track.exists():
             print("  rastreando o rosto…")
+            progress.step(edit, detail="rastreando o rosto")
             run([sys.executable, str(SKILL / "helpers" / "face_track.py"),
                  str(cut), "-o", str(track)])
 
@@ -293,6 +312,7 @@ def main() -> None:
             if not transcript.exists():
                 sys.exit(f"o empilhado precisa da transcrição do corte em {transcript}")
             print("  preparando as deixas do empilhado…")
+            progress.step(edit, detail="preparando as deixas do empilhado")
             run([sys.executable, str(SKILL / "helpers" / "caption_style.py"),
                  "--transcript", str(transcript), "-o", str(cues)])
         compose += ["--cues", str(cues)]
@@ -300,6 +320,7 @@ def main() -> None:
         compose += ["--end", str(args.end)]
     run(compose)
 
+    progress.step(edit, detail="conferindo a composição")
     print("  verificando…")
     r = run(HF + ["check"], cwd=proj, quiet=True, allow_fail=True)
     out = r.stdout or ""
@@ -317,6 +338,7 @@ def main() -> None:
         print("  (sobreposição nominal entre as linhas da headline — "
               "conferida no render, sai correta)")
 
+    progress.step(edit, pct=15, detail="renderizando quadro a quadro — é o passo longo")
     print("  renderizando…")
     run(HF + ["render"], cwd=proj)
     renders = sorted((proj / "renders").glob("*.mp4"), key=lambda p: p.stat().st_mtime)
@@ -324,6 +346,7 @@ def main() -> None:
         sys.exit("o render não produziu arquivo")
 
     final = edit / "final.mp4"
+    progress.step(edit, pct=92, detail="normalizando a loudness da entrega")
     deliver(renders[-1], final)
 
     state = load(edit / "state.json", {})
@@ -354,8 +377,16 @@ def main() -> None:
 
     size = final.stat().st_size / 1e6
     print(f"\n  entregue: {final}  ({size:.1f} MB)")
+    progress.done(edit, "Fase 2 pronta — o editor já mostra o resultado")
     print("  o editor já mostra na aba Fase 2")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise                      # já reportado por run()/sys.exit com mensagem
+    except BaseException as exc:   # inclui Ctrl-C: cancelar também é um fim
+        if _EDIT:
+            progress.fail(_EDIT, f"{type(exc).__name__}: {exc}"[:300])
+        raise

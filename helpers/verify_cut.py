@@ -14,8 +14,8 @@ Checks:
   - clipping: astats peak + flat factor on the whole render
 
 Usage:
-    python helpers/verify_cut.py <edit>/edl.json <edit>/cut.mp4
-    python helpers/verify_cut.py edl.json cut.mp4 --min-silence 1.2   # longform
+    python helpers/verify_cut.py <edit>/edl.json <edit>/preview.mp4
+    python helpers/verify_cut.py edl.json preview.mp4 --min-silence 1.2   # longform
 Exit code 0 = clean, 1 = has CHECK flags.
 """
 from __future__ import annotations

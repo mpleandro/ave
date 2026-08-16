@@ -8,9 +8,9 @@ approved. Everything here rides on the **data-driven template** at
 
 - **Frame rate:** render at **30fps when the source is 30fps or higher** (natural
   motion, matches Instagram/TikTok/Shorts capture); only slower sources use 24.
-  `render.py` picks this automatically for `cut.mp4` — then set `edit-data.json`
-  `fps` to the SAME value as `cut.mp4` (ffprobe it) so the Phase-2 render matches.
-- **Base:** 1080×1920 (fps per the rule above), `<OffthreadVideo src=cut.mp4>` with the **dynamic
+  `render.py` picks this automatically for `preview.mp4` — then set `edit-data.json`
+  `fps` to the SAME value as `preview.mp4` (ffprobe it) so the Phase-2 render matches.
+- **Base:** 1080×1920 (fps per the rule above), `<OffthreadVideo src=preview.mp4>` with the **dynamic
   camera**, whose three parts are separate picks on the Estilo tab: hard zoom per
   cut segment (`zoomCuts`, ~1.10–1.22, cycles), slow push-in (`zoomAuto`,
   +0.04/segment), clamped eye-tracking (`tracking`, target upper third, never
@@ -62,17 +62,17 @@ An unchecked box is an explicit NO, not a silence. Copy the picks into
 **`helpers/phase2.py <edit>` faz os passos 1 a 5 sozinho.** O que segue é o que
 ele faz por dentro — leia quando ele parar, não para executar à mão.
 
-1. **Scaffold.** `phase2.py` monta `<edit>/hyperframes/` e linka o `cut.mp4`. Não
+1. **Scaffold.** `phase2.py` monta `<edit>/hyperframes/` e linka o `preview.mp4`. Não
    existe mais template para copiar: a composição é GERADA por
    `compose_shortform.py` a partir dos dados.
 2. **Dados na RAIZ do projeto (`<edit>/hyperframes/`, sem `public/`):**
-   - `transcribe.py cut.mp4 --edit-dir <edit>` → `transcripts/cut.json`
+   - `transcribe.py preview.mp4 --edit-dir <edit>` → `transcripts/cut.json`
      (cut times are already on the output timeline — never map the source EDL)
    - `captions_words.py --transcript transcripts/cut.json -o hyperframes/captions.json`
    - **Caption style** — from the Estilo tab pick. `stacked` ALSO needs
      `caption_style.py --transcript transcripts/cut.json -o hyperframes/caption-cues.json`
      plus `captions.style:"stacked"` (see the "Caption style" section).
-   - `face_track.py cut.mp4 -o public/track.json` — **only when
+   - `face_track.py preview.mp4 -o public/track.json` — **only when
      `elements.tracking` is on.** Off, the frame stays put — but the file must
      still EXIST: the template imports it statically and the bundle fails to
      build without it ("track.json doesn't exist" out of webpack, not a runtime
@@ -105,7 +105,7 @@ ele faz por dentro — leia quando ele parar, não para executar à mão.
      # TWO assertions, because globbing a directory is only as good as the
      # directory. `_v.mp4` first: the J-cut writes video-only segments and a bare
      # glob also matches butt-join leftovers. Then check the COUNT against the EDL
-     # and the SUM against cut.mp4 — a re-render with fewer ranges leaves the old
+     # and the SUM against preview.mp4 — a re-render with fewer ranges leaves the old
      # higher-numbered segments behind, and that gave segments.json 9.23s for a
      # 7.57s video. It renders clean and every overlay lands wrong.
      segs = sorted(glob.glob("clips_graded/seg_*_v.mp4")) or sorted(glob.glob("clips_graded/seg_*.mp4"))
@@ -120,10 +120,10 @@ ele faz por dentro — leia quando ele parar, não para executar à mão.
          t += n; cum.append(t)
      real = int(subprocess.run(["ffprobe","-v","error","-select_streams","v:0",
          "-count_frames","-show_entries","stream=nb_read_frames",
-         "-of","default=nw=1:nk=1","cut.mp4"], capture_output=True, text=True).stdout)
+         "-of","default=nw=1:nk=1","preview.mp4"], capture_output=True, text=True).stdout)
      if t != real:
-         sys.exit(f"segments sum {t}f != cut.mp4 {real}f — do not ship this file")
-     fps = 30  # match cut.mp4
+         sys.exit(f"segments sum {t}f != preview.mp4 {real}f — do not ship this file")
+     fps = 30  # match preview.mp4
      json.dump({"segments": [{"start": round(cum[i]/fps,4),
                               "dur": round((cum[i+1]-cum[i])/fps,4)}
                              for i in range(len(cum)-1)]},
@@ -132,19 +132,19 @@ ele faz por dentro — leia quando ele parar, não para executar à mão.
      ```
    - **VERIFY segments.json against the picture — do not trust it.** `scdet`
      scores every frame by how much it differs from the one before, so a hard
-     cut is a spike. The spike frame in `cut.mp4` must equal
+     cut is a spike. The spike frame in `preview.mp4` must equal
      `round(segments[i].start * fps)`:
      ```bash
-     ffmpeg -v info -i cut.mp4 -vf "select='between(n,344,358)',setpts=N/30/TB,scdet=threshold=0" \
+     ffmpeg -v info -i preview.mp4 -vf "select='between(n,344,358)',setpts=N/30/TB,scdet=threshold=0" \
        -an -f null - 2>&1 | grep scd.score
      ```
      In the RENDER the same cut lands one frame later — that is the
      `OffthreadVideo` lag `VIDEO_LAG` exists for. Both numbers together are the
-     proof: cut spike at frame F in cut.mp4, at F+1 in the render, overlay
+     proof: cut spike at frame F in preview.mp4, at F+1 in the render, overlay
      window opening at F+1.
    - `pexels_search.py "<query>" --out-dir hyperframes/pexels --count 3 --orientation portrait`
 3. **Write `hyperframes/edit-data.json`** — the whole edit in one file:
-   durationSec (exact ffprobe of cut.mp4), camera zooms, hook lines/logo/sign,
+   durationSec (exact ffprobe of preview.mp4), camera zooms, hook lines/logo/sign,
    captions config, inserts[], behind[], soundtrack (leave `enabled:false` until
    Phase 3). Every `src` in it is relative to `hyperframes/`.
 4. **Verify with stills, batched:** one contact sheet, not N images —
@@ -383,7 +383,7 @@ in `assets/shortform/README.md`.
 
 **`focusY` is a SOURCE y that lands at the top of the video window** — a point
 `y_src` renders at `(y_src - focusY) * zoom`. **Measure before trusting the
-numbers:** pull a frame out of `cut.mp4`, read the hair-top and chin y, and set
+numbers:** pull a frame out of `preview.mp4`, read the hair-top and chin y, and set
 `focusY` so the head lands where the user asked. The defaults fit a head ~660px
 tall starting at y 455.
 
@@ -404,7 +404,7 @@ on tight close-ups anchor elements to the TOP (template already does). Needs
 the matting extra: `uv sync --extra matting` (torch).
 
 ```bash
-uv run python helpers/person_matte.py cut.mp4 -o hyperframes/fg_<name>.mov --start <s> --duration <d>
+uv run python helpers/person_matte.py preview.mp4 -o hyperframes/fg_<name>.mov --start <s> --duration <d>
 ```
 
 Then describe each window in `edit-data.json` `behind[]` (kind image/words,
@@ -503,7 +503,7 @@ entre duas linhas de texto) e menor que a menor separação entre dois elementos
 distintos.
 
 **Sincronia:** o gráfico serve a fala, não o contrário. Meça a janela de silêncio
-em `cut.mp4` com `speech_regions.py` e encaixe o gráfico DENTRO dela, terminando
+em `preview.mp4` com `speech_regions.py` e encaixe o gráfico DENTRO dela, terminando
 o movimento pouco antes de a voz voltar. Se a animação da fonte não couber,
 **acelere e corte o estado ocioso** — entra já em movimento. Isso é decisão de
 ofício (Princípio 9): faça e informe.
@@ -556,7 +556,7 @@ for constante, não é drift, é latência fixa e não pede re-mux nenhum.
 **Confira as tags de cor da entrega na PRIMEIRA vez que rodar um projeto novo.**
 Herança medida no renderizador antigo, ainda NÃO reaferida no HyperFrames: a
 saída dele vinha `yuvj420p`, `color_range=pc`, `color_primaries=bt470bg` (PAL!) e
-transfer desconhecido — luma 0–255 onde o `cut.mp4` está em 16–235. Como o
+transfer desconhecido — luma 0–255 onde o `preview.mp4` está em 16–235. Como o
 `deliver()` copia o vídeo (`-c:v copy`), tags erradas na origem passam INTEIRAS
 para a entrega, e o grade que o usuário aprovou na Fase 1 escorrega no último
 passo: um player que respeita as tags desloca o matiz, um que ignora o range

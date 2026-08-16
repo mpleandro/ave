@@ -1,5 +1,5 @@
 {
-  "_readme": "Per-video data — the ONLY file to write in Phase 2. All times are SECONDS on the cut.mp4 output timeline. Set width/height/fps/durationSec to match cut.mp4 exactly. Never edit src/Main.tsx.",
+  "_readme": "Per-video data — the ONLY file to write in Phase 2. All times are SECONDS on the preview.mp4 output timeline. Set width/height/fps/durationSec to match preview.mp4 exactly. Never edit src/Main.tsx.",
   "width": 1920,
   "height": 1080,
   "fps": 30,

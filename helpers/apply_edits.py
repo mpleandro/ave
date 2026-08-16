@@ -185,7 +185,7 @@ def main() -> None:
     if has_edl and not args.no_render:
         print("\nrefazendo o corte…")
         cmd = [sys.executable, str(HELPERS / "render.py"), str(edit / "edl.json"),
-               "-o", str(edit / "cut.mp4")]
+               "-o", str(edit / "preview.mp4")]
         if args.draft:
             cmd.append("--draft")
         r = subprocess.run(cmd)
@@ -193,7 +193,7 @@ def main() -> None:
             sys.exit("o render falhou — o edl novo está salvo, o corte antigo continua no lugar")
         print("\nconferindo…")
         subprocess.run([sys.executable, str(HELPERS / "verify_cut.py"),
-                        str(edit / "edl.json"), str(edit / "cut.mp4")])
+                        str(edit / "edl.json"), str(edit / "preview.mp4")])
 
     state = load(edit / "state.json", {})
     state["message"] = ("Corte atualizado a partir do editor"

@@ -37,7 +37,7 @@ Same helpers (`transcribe` → `pack` → editor sub-agent → `speech_regions` 
    (COLD-OPEN→THESIS→POINTS→COUNTER→CONCLUSION→CTA), vlog
    (COLD-OPEN→ARRIVAL→BEATS→REFLECTION). Tell it to place a cold open and to
    label chapter starts with `"chapter": "Title"` on the opening range.
-5. **Render at source spec:** `render.py edl.json -o cut.mp4 --no-subtitles
+5. **Render at source spec:** `render.py edl.json -o preview.mp4 --no-subtitles
    --keep-resolution` (+ `--voice-master` as usual; −14 LUFS is YouTube's
    target too). Verify with `verify_cut.py … --min-silence 1.2` (longform keeps
    breathing room — don't flag natural beats).
@@ -49,7 +49,7 @@ Same helpers (`transcribe` → `pack` → editor sub-agent → `speech_regions` 
 - `chapters.py <edit>/edl.json -o <edit>/chapters.txt` — YouTube description
   block from the EDL `"chapter"` fields. YouTube rules (validated by the
   helper): first stamp `00:00`, ≥ 3 chapters, each ≥ 10s.
-- `transcribe.py cut.mp4 --edit-dir <edit>` then
+- `transcribe.py preview.mp4 --edit-dir <edit>` then
   `captions_srt.py --transcript <edit>/transcripts/cut.json -o <edit>/captions.srt`
   — broadcast-style cues (≤42 chars/line, ≤2 balanced lines, 1–6s, sentence
   case). Uploaded as CC, never burned.
@@ -61,7 +61,7 @@ faz tudo** — monta `<edit>/hyperframes/`, linka o corte, compõe, roda o `chec
 renderiza e normaliza a entrega. Não há template para copiar.
 
 Write `<edit>/hyperframes/edit-data.json` — width/height/fps/durationSec
-**matching cut.mp4 exactly**, accent color, and the four layers. Todo `src` é
+**matching preview.mp4 exactly**, accent color, and the four layers. Todo `src` é
 relativo à raiz do projeto. Graphics **punctuate, they don't saturate**:
 
 - **broll[]** — full-frame image (Ken-Burns) or muted video cutaways over

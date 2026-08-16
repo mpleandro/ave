@@ -621,6 +621,7 @@ let S = {
   cutWords: new Set(), // índices riscados = PEDIDO de corte, não corte feito
   cutBreaths: new Set(), // respiros marcados: índice da palavra que vem ANTES
   undo: [],         // pilha de instantâneos de S.draft (apagar / redimensionar)
+  approved: false,  // aprovação enviada nesta sessão (some a barra na hora)
   selWords: new Set(),
   processing: false, // a IA está refazendo algo lá fora
   procFrom: 0,
@@ -883,6 +884,25 @@ function refreshActionBar() {
   const has = cuts || ins || notes || style;
   bar.classList.toggle('hidden', !has || S.processing);
   $('procBar').classList.toggle('hidden', !S.processing);
+
+  /* A barra de aprovação divide o mesmo canto e é MUTUAMENTE EXCLUSIVA com a de
+     alterações: aprovar com correção pendente diria "está pronto" e "conserte
+     isto" ao mesmo tempo. Aparece na FASE 1, com vídeo em tela, nada pendente e
+     nada rodando — e some quando a fase vira 2.
+
+     Deliberadamente NÃO exige `onProxy()`. Prender o botão ao nome do arquivo
+     misturava duas perguntas diferentes: QUAL versão está em tela e SE o corte
+     já foi aprovado. Um projeto cujo Fase 1 saiu direto como `preview.mp4`
+     (sem passar pelo proxy) continua precisando de aprovação, e escondia o
+     botão exatamente de quem não tinha outro jeito de aprovar. O proxy segue
+     governando as CAMADAS DO RENDER, que é onde ele importa. */
+  const ap = $('approveBar');
+  if (ap) {
+    ap.classList.toggle('hidden', !(
+      !has && !S.processing && !S.approved
+      && S.videoDuration > 0 && (S.state.phase || 1) === 1));
+  }
+
   if (!has || S.processing) return;
 
   // dirtyCount() conta corte, inserções e marcações — não conta estilo. Sem
@@ -911,6 +931,11 @@ async function poll() {
     const res = await fetch('/api/state');
     const data = await res.json();
     const sig = JSON.stringify([data.state, data.edl, data.mtimes, data.videoDuration]);
+    // FORA da assinatura, de propósito: o progresso muda a cada segundo, e
+    // remontar a timeline a cada tique seria absurdo. Pior — o guarda de
+    // "você tem ajustes não salvos" logo abaixo bloquearia a atualização
+    // justamente enquanto o usuário espera, que é quando ele mais precisa ver.
+    setProgress(data.progress || null);
     checkProcessing();
     if (sig !== S.lastSig) {
       const hadEdits = dirtyCount() > 0;
@@ -968,19 +993,23 @@ async function applyState(data) {
   S.captions = [];
   S.editData = null;
   S.insertsDraft = [];
-  if ((S.state.phase || 1) >= 2) {
-    if (S.state.captions) {
-      try {
-        const caps = await (await fetch(`/media/${S.state.captions}?v=${Date.now()}`)).json();
-        S.captions = groupCaptions(caps);
-      } catch (e) { /* absent yet */ }
-    }
-    if (S.state.editData) {
-      try {
-        S.editData = await (await fetch(`/media/${S.state.editData}?v=${Date.now()}`)).json();
-        buildInsertsDraft();
-      } catch (e) { /* absent yet */ }
-    }
+  // Legenda é da Fase 2 e só existe depois do render — continua atrás do portão.
+  if ((S.state.phase || 1) >= 2 && S.state.captions) {
+    try {
+      const caps = await (await fetch(`/media/${S.state.captions}?v=${Date.now()}`)).json();
+      S.captions = groupCaptions(caps);
+    } catch (e) { /* absent yet */ }
+  }
+  /* O edit-data, NÃO. Ele é lido desde a Fase 1, porque é onde moram os
+     RESERVADOS: os elementos que ocupam tempo de tela e ainda não existem —
+     a roleta, o B-roll, a faixa de tela dividida. Sem eles na linha do tempo o
+     usuário aprova uma montagem com buracos que não consegue ver, e descobre
+     que o buraco não fecha depois de o portão já ter passado. */
+  if (S.state.editData) {
+    try {
+      S.editData = await (await fetch(`/media/${S.state.editData}?v=${Date.now()}`)).json();
+      buildInsertsDraft();
+    } catch (e) { /* absent yet */ }
   }
 
   fitZoom();
@@ -1009,7 +1038,7 @@ function updateVideoSrc() {
     || (mt.video && mt.finalVideo && mt.video > mt.finalVideo)
     || dirtyCount() > 0;
   S.showFinal = !stale;
-  const rel = S.showFinal ? S.state.finalVideo : (S.state.video || 'cut.mp4');
+  const rel = S.showFinal ? S.state.finalVideo : (S.state.video || 'preview.mp4');
   const vsrc = `/media/${rel}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || 0}`;
   if (video.dataset.src === vsrc) return;
   const t = video.currentTime;
@@ -1036,6 +1065,12 @@ function groupCaptions(caps) {
   }));
 }
 
+/* Um elemento é RESERVADO enquanto não tem mídia no disco: `planned: true` no
+   dado, ou simplesmente nenhum `src`/`file`. Ele guarda o tempo e diz o que vai
+   ali. A distinção é do DADO, não da fase — na Fase 2 um insert cuja imagem
+   ainda não baixou também é um buraco, e mostrá-lo como pronto esconderia isso. */
+const isPlanned = (it) => !!it.planned || !(it.src || it.file || it.id);
+
 function buildInsertsDraft() {
   const d = S.editData;
   const list = [];
@@ -1043,15 +1078,16 @@ function buildInsertsDraft() {
     list.push({ kind: 'hook', label: `HOOK — ${(d.hook.lines || []).join(' / ')}`, start: 0, end: d.hook.endSec || 4 });
   }
   (d.inserts || []).forEach((it, i) => {
-    list.push({ kind: 'insert', label: (it.src || '').split('/').pop(), start: +it.start, end: +it.end, ref: i });
+    list.push({ kind: 'insert', label: it.label || (it.src || '').split('/').pop() || '(reservado)',
+                start: +it.start, end: +it.end, ref: i, planned: isPlanned(it) });
   });
   // split-layout images (CustomGraphics reads the same array) — they are images
   // like any other insert, so they belong on the image track, not in code
   (d.splitInserts || []).forEach((it, i) => {
     list.push({
       kind: 'split',
-      label: it.label || (it.src || '').split('/').pop(),
-      start: +it.start, end: +it.end, ref: i,
+      label: it.label || (it.src || '').split('/').pop() || '(reservado)',
+      start: +it.start, end: +it.end, ref: i, planned: isPlanned(it),
     });
   });
   // split-layout VIDEO bands — same seam and geometry as splitInserts, but the
@@ -1061,8 +1097,8 @@ function buildInsertsDraft() {
   (d.splitVideos || []).forEach((it, i) => {
     list.push({
       kind: 'splitvideo',
-      label: it.label || (it.src || '').split('/').pop(),
-      start: +it.start, end: +it.end, ref: i,
+      label: it.label || (it.src || '').split('/').pop() || '(reservado)',
+      start: +it.start, end: +it.end, ref: i, planned: isPlanned(it),
     });
   });
   // bespoke motion graphics drawn in CustomGraphics.tsx — they have no `src`,
@@ -1162,11 +1198,61 @@ function renderAll() {
   renderJcutAudio();
   renderChips();
   renderNotes();
+  renderCutMarks();
   drawRuler();
   drawWave();
   refreshCounts();
   updateScrollRange();
   positionNeedle();
+}
+
+/* ---------- onde o texto riscado cai na linha do tempo ----------
+ *
+ * Marcação, e só. Nada aqui é clicável (`pointer-events:none` no CSS) — o que
+ * também evita mexer no `pointerdown` do painel, que já tem um histórico ruim:
+ * ele captura o ponteiro e retarget a o clique seguinte.
+ *
+ * As palavras são desenhadas pelo tempo de SAÍDA (`outStart` + a duração da
+ * palavra na fonte), que é o mesmo relógio das trilhas. E palavras vizinhas
+ * viram UMA faixa: riscar quatro palavras seguidas tem de ler como um trecho a
+ * sair, não como quatro tracinhos que o olho ainda precisa juntar.
+ *
+ * Respiros marcados ficam DE FORA de propósito. Eles são encurtados, não
+ * removidos — sai o excedente e o piso permanece —, então uma faixa cobrindo o
+ * respiro inteiro afirmaria uma remoção que não vai acontecer. Marca que mente
+ * é pior que marca ausente. */
+const CUTMARK_JOIN = 0.20;   // vão abaixo disto funde duas faixas
+
+function cutSpans() {
+  if (!S.cutWords.size || !S.words.length) return [];
+  const idx = [...S.cutWords].sort((a, b) => a - b);
+  const spans = [];
+  for (const i of idx) {
+    const w = S.words[i];
+    if (!w) continue;
+    const dur = Math.max(0.05, (w.srcEnd || 0) - (w.srcStart || 0));
+    const a = w.outStart, b = w.outStart + dur;
+    const last = spans[spans.length - 1];
+    if (last && a - last.end <= CUTMARK_JOIN) {
+      last.end = Math.max(last.end, b);
+      last.n += 1;
+    } else {
+      spans.push({ start: a, end: b, n: 1 });
+    }
+  }
+  return spans;
+}
+
+function renderCutMarks() {
+  const host = $('cutOverlay');
+  if (!host) return;
+  host.innerHTML = '';
+  for (const s of cutSpans()) {
+    const band = el('div', 'cut-band', host);
+    band.style.left = `${s.start * S.pps}px`;
+    band.style.width = `${Math.max((s.end - s.start) * S.pps, 2)}px`;
+    band.title = `${s.n} palavra(s) marcada(s) para remoção`;
+  }
 }
 
 // ---------- correction markers ----------
@@ -1405,12 +1491,11 @@ let wasShowing = false; // painel estava aberto no render anterior (para o re-fi
  * deixou de ser "que aba" e passou a ser "este trabalho tem estilo a escolher". */
 /* E o portão é ESTRUTURAL, não só de comportamento. `awaitingStyle` depende de
  * alguém do outro lado lembrar de ligá-lo na hora certa; o proxy não depende de
- * ninguém. Enquanto o vídeo em tela for o `preview.mp4` — 720p, a versão que se
- * ITERA — o corte não foi aprovado, e escolher acabamento sobre um corte que
- * ainda vai mudar é trabalho que se joga fora.
- * Projeto antigo (sem proxy) aponta direto para `cut.mp4` e passa igual, então
- * a trava só age onde o fluxo novo a colocou. */
-const onProxy = () => /(^|\/)preview\.mp4$/.test(S.state.video || '');
+ * ninguém. Enquanto o vídeo em tela for o `preview_proxy.mp4` — 720p, a versão
+ * que se ITERA — a Fase 1 não foi aprovada, e escolher acabamento sobre um corte
+ * que ainda vai mudar é trabalho que se joga fora.
+ * Aprovado, o render final vira `preview.mp4` e o painel libera sozinho. */
+const onProxy = () => /(^|\/)preview_proxy\.mp4$/.test(S.state.video || '');
 const setupApplies = () => !!(S.state.awaitingStyle || S.state.style) && !onProxy();
 
 function renderSetup() {
@@ -1419,6 +1504,16 @@ function renderSetup() {
   const hasVideo = S.videoDuration > 0;
   $('stage').classList.toggle('hidden', !hasVideo);
   $('emptyState').classList.toggle('hidden', hasVideo);
+
+  /* O portão precisa APARECER, não só faltar. Escondido, o painel de camadas
+     some sem explicação e o usuário conclui que a interface está incompleta —
+     não que ele tem um passo a cumprir. A tarja diz as duas coisas que faltavam:
+     que existe uma etapa seguinte, e o que a destranca. */
+  const gate = $('gateNote');
+  if (gate) {
+    const trancado = hasVideo && onProxy();
+    gate.classList.toggle('hidden', !trancado);
+  }
 
   if (!show) {
     capAnims = []; // para de animar demos que não estão na tela
@@ -1880,6 +1975,13 @@ function renderChips() {
       chip.textContent = c.label;
       chip.title = c.label;
       chip.dataset.i = i;
+      // RESERVADO tem de PARECER reservado. Um chip igual ao de um elemento
+      // pronto afirma que a mídia existe, e o buraco volta a ficar invisível —
+      // exatamente o problema que o reservado veio resolver.
+      if (c.planned) {
+        chip.classList.add('planned');
+        chip.title = `${c.label} — RESERVADO: guarda o tempo, a mídia ainda não existe`;
+      }
       if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
       el('div', 'handle l', chip).dataset.i = i;
       el('div', 'handle r', chip).dataset.i = i;
@@ -2215,7 +2317,7 @@ function drawWave() {
 
 // Vertical sources get the split layout (player right, editor left) — stacked,
 // a 9:16 clip is tiny above a full-width timeline. Driven off the decoded frame
-// size, so it works for cut.mp4 and the Phase-2 render alike.
+// size, so it works for preview.mp4 and the Phase-2 render alike.
 function applyOrientation() {
   const w = video.videoWidth;
   const h = video.videoHeight;
@@ -2466,8 +2568,54 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+/* APROVAR O CORTE. Arquivo próprio (`preview_approval.json`), não o de
+   marcações: aprovar não pode apagar correções que ainda não foram lidas.
+   `S.approved` esconde a barra no ato — a confirmação de verdade chega quando o
+   agente troca o `video` para o corte final, e esperar por isso deixaria o
+   usuário clicando de novo achando que não pegou. */
+$('btnApprove').addEventListener('click', async () => {
+  const btn = $('btnApprove');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'approve-cut',
+                             note: ($('approveNote').value || '').trim(),
+                             video: S.state.video || null }),
+    });
+    if (!(await r.json()).ok) throw new Error('save');
+    S.approved = true;
+    refreshActionBar();
+    toast('Corte aprovado — renderizando o final e liberando a Fase 2', 4000);
+  } catch (e) {
+    btn.disabled = false;
+    toast('não consegui salvar a aprovação — tente de novo', 3000);
+  }
+});
+
 $('btnUndo').innerHTML = ICON.undo;
 $('btnUndo').addEventListener('click', undoLast);
+
+/* Recolher a linha do tempo. A escolha é lembrada, como a do J-cut: quem
+   trabalha em tela baixa recolhe UMA vez, não a cada recarga. Vale para os dois
+   modos — o switch troca qual painel está visível, e o estado recolhido é do
+   PAINEL, não do modo, senão alternar transcrição/timeline reabriria sozinho. */
+function setTlCollapsed(on) {
+  $('timelinePanel').classList.toggle('collapsed', on);
+  $('txPanel').classList.toggle('collapsed', on);
+  const b = $('tlToggle');
+  b.setAttribute('aria-expanded', String(!on));
+  b.title = on ? 'Expandir a linha do tempo' : 'Recolher a linha do tempo';
+  try { localStorage.setItem('avelin.tlCollapsed', on ? '1' : '0'); } catch (e) { /* privado */ }
+  // a régua e a waveform desenham em canvas dimensionado pelo layout: reabrir
+  // sem remedir deixa os dois com a largura que tinham quando sumiram
+  if (!on) requestAnimationFrame(() => { fitZoom(); renderAll(); });
+}
+$('tlToggle').addEventListener('click', () =>
+  setTlCollapsed(!$('timelinePanel').classList.contains('collapsed')));
+try {
+  if (localStorage.getItem('avelin.tlCollapsed') === '1') setTlCollapsed(true);
+} catch (e) { /* privado */ }
 
 // transport
 $('btnPlay').innerHTML = ICON.play;
@@ -2608,7 +2756,7 @@ async function sendTimeline() {
   }
   if (S.notes.length) {
     // written in the draft timeline the user was actually looking at, plus the
-    // rendered-timeline equivalent so the skill can find the spot in cut.mp4
+    // rendered-timeline equivalent so the skill can find the spot in preview.mp4
     payload.notes = S.notes.map((n) => ({
       start: +n.start.toFixed(3),
       end: +n.end.toFixed(3),
@@ -2902,6 +3050,7 @@ function renderTx() {
     partes.push(`${b} respiro${b === 1 ? '' : 's'} (−${ganho.toFixed(1)}s)`);
   }
   $('txCount').textContent = partes.length ? `${partes.join(' · ')} para remoção` : '';
+  renderCutMarks();   // a marca segue o texto, mesmo com a timeline recolhida
   markNowWord();
 }
 
@@ -3055,3 +3204,72 @@ window.addEventListener('pointerup', () => {
   hideTooltip();
   refreshHeader();   // virou uma alteração a enviar
 });
+
+/* ---------- faixa de progresso: o que está acontecendo AGORA ----------
+ *
+ * Lida do mesmo `/api/state` que o resto, mas desenhada FORA do `applyState`:
+ * o `applyState` só roda quando a assinatura muda, e o progresso muda a cada
+ * segundo. Passar o progresso pela assinatura remontaria a timeline inteira a
+ * cada tique — e pior, o guarda de "você tem ajustes não salvos" bloquearia a
+ * atualização justamente enquanto o usuário espera, que é quando ele mais
+ * precisa ver.
+ *
+ * O relógio anda LOCALMENTE entre os polls (o poll é de 2s; um cronômetro que
+ * pula de 2 em 2 lê como travado, que é o oposto do que esta faixa existe para
+ * dizer).
+ */
+let progLocal = null;      // último progresso recebido, para o relógio local
+let progTick = null;
+
+function fmtElapsed(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
+}
+
+/* Um sucesso não fica na tela para sempre — ele confirma e sai de cena.
+   Um ERRO fica: sumir com a mensagem é como não ter avisado. */
+const DONE_LINGER_S = 6;
+
+function paintProgress() {
+  const el = $('progress');
+  const p = progLocal;
+  if (!el) return;
+  if (!p || !p.state) { el.classList.add('hidden'); return; }
+
+  const elapsed = (p.endedAt || (Date.now() / 1000)) - (p.startedAt || 0);
+  if (p.state === 'done' && (Date.now() / 1000) - (p.endedAt || 0) > DONE_LINGER_S) {
+    el.classList.add('hidden');
+    return;
+  }
+
+  el.classList.remove('hidden');
+  el.classList.toggle('ai', !!p.ai && p.state === 'running');
+  el.classList.toggle('done', p.state === 'done');
+  el.classList.toggle('failed', p.state === 'failed');
+  el.classList.toggle('indet', p.state === 'running' && (p.pct === null || p.pct === undefined));
+
+  $('progAi').classList.toggle('hidden', !p.ai);
+  $('progLabel').textContent = p.label || 'Processando…';
+  // no fim, o tempo vira "levou X" — o número que interessa muda de sentido
+  $('progTime').textContent = p.state === 'running'
+    ? fmtElapsed(elapsed)
+    : (p.state === 'failed' ? 'falhou' : `levou ${fmtElapsed(elapsed)}`);
+  $('progDetail').textContent = p.detail || '';
+  const fill = $('progFill');
+  if (p.state === 'running' && p.pct !== null && p.pct !== undefined) {
+    fill.style.width = `${p.pct}%`;
+  } else if (p.state !== 'running') {
+    fill.style.width = '100%';
+  } else {
+    fill.style.width = '';        // indeterminada: quem manda é a animação
+  }
+}
+
+function setProgress(p) {
+  progLocal = p;
+  paintProgress();
+  if (progTick) clearInterval(progTick);
+  // o relógio só corre enquanto há o que cronometrar
+  if (p && p.state === 'running') progTick = setInterval(paintProgress, 1000);
+}

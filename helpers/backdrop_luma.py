@@ -14,7 +14,7 @@ Uma passada de ffmpeg amostra a FAIXA DA LEGENDA (não o frame inteiro: o fundo
 que importa é o que fica atrás do texto) em thumbnails minúsculas, e cada janela
 recebe a média das amostras que caem dentro dela.
 
-    uv run python helpers/backdrop_luma.py cut.mp4 windows.json -o accents.json
+    uv run python helpers/backdrop_luma.py preview.mp4 windows.json -o accents.json
 
 `windows.json` é uma lista de {"start": s, "end": s} em segundos do corte.
 """

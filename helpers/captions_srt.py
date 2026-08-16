@@ -2,7 +2,7 @@
 YouTube CC (longform). NOT burned into the video: the user uploads it as a
 subtitle track and YouTube shows it as optional closed captions.
 
-Transcribe the final cut first (`transcribe.py cut.mp4`), then feed that
+Transcribe the final cut first (`transcribe.py preview.mp4`), then feed that
 transcript here so the word times are already on the output timeline.
 
 Grouping: word-level times → readable cues.

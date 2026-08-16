@@ -14,11 +14,11 @@ UPPERCASE chunks, Helvetica 18 Bold, MarginV=35).
 
 Usage:
     python helpers/render.py <edl.json> -o preview.mp4 --proxy --no-subtitles
-    python helpers/render.py <edl.json> -o cut.mp4 --no-subtitles
-    python helpers/render.py <edl.json> -o cut.mp4 --build-subtitles
+    python helpers/render.py <edl.json> -o preview.mp4 --no-subtitles
+    python helpers/render.py <edl.json> -o preview.mp4 --build-subtitles
 
 A Fase 1 ITERA no `--proxy` (`preview.mp4`, 720p — 3,2× mais rápido no encode) e
-encoda o `cut.mp4` UMA vez, depois de aprovado. O que se julga na Fase 1 é a
+encoda o `preview.mp4` UMA vez, depois de aprovado. O que se julga na Fase 1 é a
 escolha das tomadas e o ritmo, e 720p responde isso; pagar 1080p em cada versão
 que vai ser descartada é o que fazia a iteração doer.
 """
@@ -151,7 +151,7 @@ def is_hdr_source(video: Path) -> bool:
 
 # Wide-gamut SDR (BT.2020 primaries with an ordinary transfer) is NOT caught by
 # is_hdr_source — phone/mirrorless cameras routinely write bt2020 primaries with
-# color_transfer=unknown. Left unconverted, cut.mp4 inherits the bt2020 tags and
+# color_transfer=unknown. Left unconverted, preview.mp4 inherits the bt2020 tags and
 # every downstream decoder re-interprets them: Chrome (which the Phase-2 renderer composites
 # through) darkens the image by roughly a 1.2 gamma and shifts hue, so the Phase-2
 # render no longer matches the Phase-1 grade the user approved. Convert to Rec.709
@@ -577,7 +577,7 @@ def snap_ranges_to_frames(edl: dict, fps: int) -> int:
     ffmpeg encodes a segment's video as whole frames but keeps its audio at the
     exact requested length, so a range whose duration is not a frame multiple
     produces a clip whose audio is a few ms shorter than its picture. Across a
-    28-cut edit that summed to +0.44s of video over audio here, and cut.mp4 came
+    28-cut edit that summed to +0.44s of video over audio here, and preview.mp4 came
     out with an audio track LONGER than its video. The Phase-2 renderer then stretches that
     audio across the composition and the voice slides progressively out of sync —
     barely visible at the start, half a second adrift by the end.

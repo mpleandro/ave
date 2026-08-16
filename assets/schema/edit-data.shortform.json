@@ -1,5 +1,5 @@
 {
-  "_readme": "Per-video data — the ONLY file to write in Phase 2 (besides public/ assets and, rarely, CustomGraphics.tsx). All times are SECONDS on the cut.mp4 output timeline. Never edit src/Main.tsx.",
+  "_readme": "Per-video data — the ONLY file to write in Phase 2 (besides public/ assets and, rarely, CustomGraphics.tsx). All times are SECONDS on the preview.mp4 output timeline. Never edit src/Main.tsx.",
   "width": 1080,
   "height": 1920,
   "fps": 24,

@@ -127,7 +127,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("edit_data", type=Path)
-    ap.add_argument("--video", default="cut.mp4")
+    ap.add_argument("--video", default="preview.mp4")
     ap.add_argument("-o", "--output", type=Path, required=True)
     ap.add_argument("--end", type=float, default=None)
     args = ap.parse_args()

@@ -4,7 +4,7 @@ The interface app (assets/preview/) is IMMUTABLE and lives in the skill repo;
 per-session it is fed by data only:
   - <edit>/state.json          written by the skill (phase, files, message)
   - <edit>/edl.json            the cut (segments shown/trimmed on the timeline)
-  - <edit>/cut.mp4             current render (played + scrubbed)
+  - <edit>/preview.mp4             current render (played + scrubbed)
   - <edit>/preview_edits.json  WRITTEN BY THE UI when the user saves timeline
                                adjustments — the skill reads, validates, applies
                                and re-renders. The UI never touches edl.json.
@@ -16,7 +16,7 @@ Routes:
   /assets/<file>        app files (css/js/logo)
   /styles/<file>        camada de estilo COMPARTILHADA com o render (assets/styles/)
   /media/<path>         files under --root (the edit dir) — Range supported
-  /gen/waveform.json    min/max audio peaks of cut.mp4 (auto-(re)generated)
+  /gen/waveform.json    min/max audio peaks of preview.mp4 (auto-(re)generated)
   /gen/words.json       transcrito DO CORTE com a folga medida de cada fronteira
   /gen/thumbs/<n>.jpg   timeline filmstrip thumbs (auto-generated, 1 per 2s)
   /api/state    GET     state.json + mtimes (UI polls this to hot-reload)
@@ -39,6 +39,9 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import progress  # noqa: E402
 
 APP_DIR = Path(__file__).resolve().parent.parent / "assets" / "preview"
 # A CAMADA DE ESTILO COMPARTILHADA — as mesmas folhas que o render usa.
@@ -193,7 +196,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _current_video(self) -> Path | None:
         state_p = self.root / "state.json"
-        rel = "cut.mp4"
+        rel = "preview.mp4"
         if state_p.exists():
             try:
                 rel = json.loads(state_p.read_text()).get("video") or rel
@@ -242,7 +245,16 @@ class Handler(BaseHTTPRequestHandler):
         # not a correction, and sharing preview_edits.json would make one save
         # clobber the other (they are written at different moments, by different
         # screens, and the skill consumes+deletes them independently).
-        name = "preview_style.json" if body.get("type") == "style-setup" else "preview_edits.json"
+        # A APROVAÇÃO tem arquivo próprio pela mesma razão: é decisão de FASE,
+        # não correção. Compartilhando o preview_edits.json, aprovar apagaria
+        # marcações ainda não lidas — e uma aprovação que chega no mesmo arquivo
+        # que "conserte isto" é contraditória por construção.
+        if body.get("type") == "approve-cut":
+            name = "preview_approval.json"
+        elif body.get("type") == "style-setup":
+            name = "preview_style.json"
+        else:
+            name = "preview_edits.json"
         out = self.root / name
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2))
@@ -263,6 +275,22 @@ class Handler(BaseHTTPRequestHandler):
         """
         if not getattr(self.server, "auto_apply", False):
             return False
+        # A APROVAÇÃO encadeia duas coisas, e nenhuma delas é a Fase 2.
+        #
+        # Aprovar é instantâneo — o que o usuário decidiu ali é "as tomadas estão
+        # certas", nada mais. Mas duas consequências são mecânicas e não deviam
+        # esperar alguém digitar:
+        #   1. o encode em RESOLUÇÃO PLENA (a Fase 1 itera em proxy 720p);
+        #   2. abrir a aba Estilo, que é onde o usuário determina os elementos.
+        # Os dois em paralelo: escolher estilo não depende do encode terminar, e
+        # o encode leva ~1min que sai de graça enquanto ele escolhe.
+        #
+        # A Fase 2 continua NÃO disparando. Ela consome escolhas que ainda não
+        # existem, e rodá-la aqui gastaria tokens num estilo presumido — foi
+        # exatamente o erro que originou este encadeamento.
+        if name == "preview_approval.json":
+            self._open_style_tab()
+            return self._encode_full_res()
         script = "apply_edits.py" if name == "preview_edits.json" else "phase2.py"
         try:
             subprocess.Popen(
@@ -274,6 +302,59 @@ class Handler(BaseHTTPRequestHandler):
             return True
         except OSError:
             return False
+
+    def _patch_state(self, **kv) -> None:
+        p = self.root / "state.json"
+        try:
+            cur = json.loads(p.read_text()) if p.exists() else {}
+        except json.JSONDecodeError:
+            return
+        cur.update(kv)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2))
+        tmp.replace(p)
+
+    def _open_style_tab(self) -> None:
+        """Aprovou → a aba Estilo passa a pedir as escolhas, na hora.
+
+        É o passo que fecha o fluxo. Sem ele o usuário aprova, não acontece
+        nada visível, e alguém (o agente) acaba PRESUMINDO as escolhas para
+        seguir — que foi o que aconteceu aqui e gastou render à toa.
+        """
+        self._patch_state(phase=1, awaitingStyle=True,
+                          message="Corte aprovado — escolha os elementos na aba Estilo")
+
+    def _encode_full_res(self) -> bool:
+        """Reencoda o corte em resolução plena, em segundo plano, com progresso.
+
+        A Fase 1 itera em proxy 720p porque 1080p em cada versão descartada é o
+        que fazia a iteração doer. Aprovado o corte, o encode pleno é obrigatório
+        e mecânico — não é decisão de ninguém, então não espera ninguém.
+        """
+        edl = self.root / "edl.json"
+        out = self.root / "preview.mp4"
+        if not edl.exists():
+            return False
+
+        def run() -> None:
+            progress.begin(self.root, "encode",
+                           "Encodando o corte em 1080p", ai=False)
+            try:
+                r = subprocess.run(
+                    [sys.executable,
+                     str(Path(__file__).resolve().parent / "render.py"),
+                     str(edl), "-o", str(out), "--no-subtitles"],
+                    capture_output=True, text=True)
+                if r.returncode == 0:
+                    progress.done(self.root, "Corte em 1080p pronto")
+                else:
+                    progress.fail(self.root,
+                                  (r.stderr or "").strip()[-300:] or "o encode falhou")
+            except OSError as exc:
+                progress.fail(self.root, str(exc))
+
+        threading.Thread(target=run, daemon=True).start()
+        return True
 
     # ---- dynamic bits ----
     def _state(self) -> None:
@@ -309,6 +390,11 @@ class Handler(BaseHTTPRequestHandler):
             "mtimes": mtimes,
             "videoDuration": probe_duration(video) if video else 0,
             "hasPendingEdits": edits_p.exists(),
+            # O QUE ESTÁ RODANDO AGORA. Vai no mesmo poll do state para a
+            # interface não precisar de um segundo relógio — dois pollers com
+            # períodos diferentes mostram estados de instantes diferentes, e a
+            # barra fica discordando do texto ao lado dela.
+            "progress": progress.read(self.root),
             "now": time.time(),
         })
 

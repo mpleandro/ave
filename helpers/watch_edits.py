@@ -146,6 +146,25 @@ def notes_digest(p: Path) -> str:
     return "\n".join(out)
 
 
+def approval_digest(p: Path) -> str:
+    """A APROVAÇÃO DO CORTE — o portão de fase, vindo do botão da interface."""
+    try:
+        d = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return f"preview_approval.json ilegível ({e.__class__.__name__})"
+    nota = (d.get("note") or "").strip()
+    out = [f"✅ CORTE APROVADO pelo usuário ({d.get('savedAt', '')}).",
+           "   Agora, nesta ordem:",
+           "   1. encode o corte final UMA vez:  render.py edl.json -o preview.mp4 --no-subtitles",
+           "   2. aponte state.json.video para preview.mp4 (é o que destranca as camadas do render)",
+           "   3. regenere segments.json a partir dos segmentos FINAIS",
+           "   4. só então abra a aba Estilo (awaitingStyle: true)",
+           "   Depois apague o preview_approval.json."]
+    if nota:
+        out.insert(1, f'   com observação: "{nota}"')
+    return "\n".join(out)
+
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").expanduser().resolve()
     watched = {
@@ -159,6 +178,9 @@ def main() -> int:
         # os dois lados acham que a bola está com o outro. Vigiar o arquivo de
         # destino fecha a corrida — quem chegar primeiro, avisa.
         root / "pending_notes.json": notes_digest,
+        # A aprovação: arquivo próprio, para não ser apagada junto com as
+        # marcações quando o apply_edits consome o preview_edits.json.
+        root / "preview_approval.json": approval_digest,
     }
     # a file already sitting there at startup means it is pending — say so once
     last: dict[Path, float | None] = {}
