@@ -104,6 +104,13 @@ def balance_two_lines(text: str) -> list[str]:
     """A headline é SEMPRE duas linhas — a quebra é onde as duas ficam mais
     parecidas em comprimento. Uma linha só deixa a segunda vazia e o bloco
     desequilibrado; três linhas não cabem no espaço que o estilo reserva."""
+    # A BARRA é a quebra EXPLÍCITA. Antes só existia o equilíbrio automático,
+    # que acerta o comprimento e erra o sentido: "Empreender não é pra / qualquer
+    # um" tem duas linhas parelhas e parte a locução no lugar errado. Quem sabe
+    # onde a frase respira é quem a escreveu.
+    if "/" in text:
+        partes = [t.strip() for t in text.split("/") if t.strip()]
+        return (partes + ["", ""])[:2]
     w = text.split()
     if len(w) < 2:
         return [text, ""]

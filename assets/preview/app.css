@@ -1751,3 +1751,13 @@ button.tl-chip:disabled { cursor: default; }
   .btn-export #exportLabel { display: none; }
   .btn-export { padding: 7px 10px; }
 }
+
+/* BOTÃO PRIMÁRIO DESABILITADO — a trava do "nada a enviar".
+   Continua legível de propósito: o `title` explica o que falta para habilitar,
+   e um botão apagado a ponto de sumir esconde justamente a explicação. */
+.btn.primary:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+  filter: grayscale(.55);
+}
+.btn.primary:disabled:hover { transform: none; }

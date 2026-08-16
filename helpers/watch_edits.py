@@ -28,6 +28,13 @@ def digest(p: Path) -> str:
         return f"preview_edits.json ilegível ({e.__class__.__name__}) — peça ao usuário para salvar de novo"
 
     parts: list[str] = []
+    # O PEDIDO ESCRITO vem primeiro. Ele é a única parte que não se deduz do
+    # resto do arquivo: marcações e cortes têm números, um pedido tem só o
+    # texto — e um aviso que diz "ajustes salvos" sem mostrá-lo faz o agente
+    # ir ler o arquivo para descobrir o que foi pedido, ou pior, não ir.
+    req = (d.get("request") or "").strip()
+    if req:
+        parts.append(f'  PEDIDO: "{req}"')
     notes = d.get("notes") or []
     for i, n in enumerate(notes, 1):
         start, end = n.get("start", 0), n.get("end", 0)
@@ -63,6 +70,8 @@ def digest(p: Path) -> str:
                          f'{b.get("dur")}s → {b.get("keep")}s (−{b.get("trim")}s)')
 
     head = []
+    if req:
+        head.append("1 pedido escrito")
     if notes:
         head.append(f"{len(notes)} marcação(ões)")
     if n_ch:

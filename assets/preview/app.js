@@ -901,7 +901,18 @@ function refreshActionBar() {
   const notes = S.notes.length + (wordsDirty() ? 1 : 0);
   const style = styleDirty();
   const has = cuts || ins || notes || style;
-  bar.classList.toggle('hidden', !has || S.processing);
+  /* O PEDIDO EM TEXTO é um canal, não um apêndice das alterações.
+   *
+   * A barra inteira sumia quando não havia nada marcado — e levava a caixa de
+   * texto junto. Resultado: no estado mais comum da tela (nada alterado), o
+   * usuário ficava SEM NENHUMA forma de pedir uma mudança à IA. Ele tinha de
+   * marcar algo que não queria só para o campo aparecer.
+   *
+   * Agora a barra fica sempre que há vídeo e nada rodando. Quem some não é o
+   * canal: é a AÇÃO, pelo botão desabilitado. */
+  const pedido = ($('setupNote') && $('setupNote').value.trim()) || '';
+  const temAlgo = has || !!pedido;
+  bar.classList.toggle('hidden', !(S.videoDuration > 0) || S.processing);
   $('procBar').classList.toggle('hidden', !S.processing);
 
   /* A barra de aprovação divide o mesmo canto e é MUTUAMENTE EXCLUSIVA com a de
@@ -922,7 +933,32 @@ function refreshActionBar() {
       && S.videoDuration > 0 && (S.state.phase || 1) === 1));
   }
 
-  if (!has || S.processing) return;
+  if (!(S.videoDuration > 0) || S.processing) return;
+
+  /* A TRAVA. Sem alteração e sem texto não há o que executar, e um botão vivo
+   * que não faz nada é pior que um apagado: o usuário clica, não acontece
+   * nada, e ele não sabe se falhou ou se não havia o que fazer. */
+  const go = $('setupGo');
+  go.disabled = !temAlgo;
+  $('btnDiscard').classList.toggle('hidden', !has);
+
+  if (!temAlgo) {
+    $('actionCount').textContent = 'Nada a enviar';
+    $('actionWhat').textContent = '— marque algo na linha do tempo, ou escreva o que quer mudar';
+    go.innerHTML = `<span class="btn-ai">${ICON.ai}</span>Enviar`;
+    go.title = 'Escreva um pedido ou faça uma marcação para habilitar';
+    return;
+  }
+
+  /* Só texto, nada marcado: é um PEDIDO, e nomear isso importa. "0 alterações"
+   * ao lado de um botão que vai acionar a IA seria mentira nas duas metades. */
+  if (!has) {
+    $('actionCount').textContent = 'Pedido para a IA';
+    $('actionWhat').textContent = '— vai ler o que você escreveu e decidir o que fazer';
+    go.innerHTML = `<span class="btn-ai">${ICON.ai}</span>Enviar pedido`;
+    go.title = 'Manda o texto para a IA ler; ela decide se precisa renderizar';
+    return;
+  }
 
   // dirtyCount() conta corte, inserções e marcações — não conta estilo. Sem
   // este ajuste, mudar só o estilo mostrava "0 alterações" ao lado de um botão
@@ -940,6 +976,7 @@ function refreshActionBar() {
   if (cuts) vai.push('refazer o corte');
   if (style || ins) vai.push(S.state.finalVideo ? 'refazer a finalização' : 'montar a finalização');
   if (notes) vai.push(wordsDirty() ? 'ler o que foi riscado no texto e as marcações' : 'ler as suas marcações');
+  if (pedido) vai.push('ler o seu pedido');
   $('actionWhat').textContent = onlyUnset
     ? '— escolha os elementos e envie para montar a finalização'
     : (vai.length ? `— vai ${vai.join(' e ')}` : '');
@@ -2734,6 +2771,13 @@ window.addEventListener('resize', () => { fitZoom(); renderAll(); renderSetup();
 // ---------- save / discard ----------
 async function sendTimeline() {
   const payload = { type: 'timeline-edits' };
+  /* O PEDIDO EM TEXTO vai por aqui, e não pelo canal de estilo.
+   *
+   * Este canal é o "leia isto e decida"; o de estilo é "REFAÇA a Fase 2
+   * assim". Um pedido escrito ("deixa a legenda mais alta") não é uma escolha
+   * de estilo e não deve disparar render sozinho — quem decide é quem lê. */
+  const pedido = ($('setupNote') && $('setupNote').value.trim()) || '';
+  if (pedido) payload.request = pedido;
   if (edlDirty()) {
     payload.edl = {
       ranges: S.draft.filter((r) => !r.removed).map((r) => ({
@@ -2850,11 +2894,19 @@ $('setupGo').addEventListener('click', async () => {
     }
   }
 
+  // o aviso de custo é sobre RENDER. Um pedido escrito não renderiza nada
+  // sozinho — cobrar a confirmação de minutos ali seria mentir sobre o preço.
   if (caroAgora && !confirm(
       'O pedido vai para a IA e consome tokens, além de alguns minutos de render.\n\n'
       + 'Tem certeza das alterações?')) return;
 
-  const quer = { style: styleDirty(), tl: edlDirty() || insertsDirty() || S.notes.length > 0 || wordsDirty() };
+  const pedidoTxt = ($('setupNote') && $('setupNote').value.trim()) || '';
+  const quer = {
+    style: styleDirty(),
+    // `pedidoTxt` entra aqui: sem ele, um pedido só de texto saía com os dois
+    // canais falsos, NADA era gravado, e o toast ainda dizia "✓ Enviado".
+    tl: edlDirty() || insertsDirty() || S.notes.length > 0 || wordsDirty() || !!pedidoTxt,
+  };
   const caro = quer.style || edlDirty() || insertsDirty();
   let ok = true;
   if (quer.style) ok = (await sendStyle()) && ok;
@@ -2863,6 +2915,13 @@ $('setupGo').addEventListener('click', async () => {
   renderAll();
   renderSetup();
   refreshHeader();
+  if (ok && $('setupNote')) {
+    // esvaziar é parte do envio: deixar o texto no campo mantém o botão
+    // habilitado com um pedido que já saiu, e reenviar duplica o trabalho
+    $('setupNote').value = '';
+    S.style.note = '';
+  }
+  refreshActionBar();
   toast(ok ? '✓ Enviado — a IA foi avisada' : 'Erro ao enviar — o servidor está de pé?', 5000);
 });
 
@@ -3430,3 +3489,8 @@ async function doExport() {
 }
 
 if ($('exportBtn')) $('exportBtn').addEventListener('click', doExport);
+
+/* O botão segue o que está escrito, tecla a tecla. Recalcular só no poll (2s)
+ * deixaria o usuário terminar a frase olhando para um botão ainda apagado —
+ * e a leitura disso é "quebrado", não "espere". */
+if ($('setupNote')) $('setupNote').addEventListener('input', refreshActionBar);
