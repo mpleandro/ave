@@ -18,7 +18,10 @@
 .ave-stacked {
   --stk-scale: 1;
   --stk-offset-y: 0.156;
-  --stk-orange: #ff5200;
+  --stk-orange: #ff5200;   /* o DESTAQUE (captions.accent) */
+  --stk-color: #fff;       /* o CORPO do texto (captions.color) */
+
+  color: var(--stk-color);
 
   position: absolute;
   left: 0;

@@ -270,14 +270,23 @@ def adaptive_accent(video: Path, brand_accent: str, top: float, height: float,
     contra fundo bem escuro ou bem claro, e entre 0.10 e 0.35 fica em 1.09–2.46.
     Medido numa palavra em destaque sobre fundo quente: 1.05:1.
 
-    A regra é de RESERVA, não de otimização: a laranja canônica sempre, e só
-    escala para outra da paleta quando ela reprova. Escolher sempre a de maior
-    contraste trocaria a cor da marca em todo quadro, que é abandoná-la.
+    A regra é de RESERVA, não de otimização: a cor ESCOLHIDA sempre, e só escala
+    para outra da paleta quando ela reprova o contraste. Escolher sempre a de
+    maior contraste trocaria a cor da marca em todo quadro, que é abandoná-la.
+
+    **A primeira versão dizia isto e fazia o contrário.** Ela chamava
+    `pick_accent` direto e devolvia o que a paleta mandasse — a cor escolhida
+    pelo usuário nunca chegava a ser candidata. Resultado visível: `#ff5200`
+    escolhido na aba Estilo saía como `#FFAD7A` (o `accentSoft`) em toda a
+    headline, e lia como laranja "apagada". O usuário viu antes de mim.
+
+    Agora a cor escolhida é MEDIDA primeiro; a paleta só entra se ela reprovar.
     """
     if not video.exists() or not windows:
         return [brand_accent] * len(windows)
     try:
-        from backdrop_luma import sample_band, pick_accent
+        from backdrop_luma import (sample_band, pick_accent, contrast_ratio,
+                                   relative_luminance, hex_to_rgb, WCAG_MIN)
         palette = json.loads((SKILL_DIR / "brand" / "avelin.json").read_text())["palette"]
         samples = sample_band(video, top, height, 0.06, 0.88)
     except Exception:
@@ -285,13 +294,31 @@ def adaptive_accent(video: Path, brand_accent: str, top: float, height: float,
     if not samples:
         return [brand_accent] * len(windows)
 
+    try:
+        chosen_luma = relative_luminance(*hex_to_rgb(brand_accent))
+    except Exception:
+        return [brand_accent] * len(windows)
+
     out = []
     for a, b in windows:
         inside = [l for t, l in samples if a <= t < b]
         if not inside:
             inside = [min(samples, key=lambda tl: abs(tl[0] - (a + b) / 2))[1]]
-        name, _ = pick_accent(sum(inside) / len(inside), palette)
-        out.append(palette.get(name, brand_accent))
+        bg = sum(inside) / len(inside)
+        # a escolhida passa? então é ela. Sem "otimizar" o que já serve.
+        if contrast_ratio(chosen_luma, bg) >= WCAG_MIN:
+            out.append(brand_accent)
+            continue
+        # Reprovou. Só vale trocar se a substituta PASSAR — trocar a cor da
+        # marca por outra que também reprova é perder a marca sem ganhar
+        # legibilidade. Medido na parede deste projeto (luma 0,28): #ff5200 dá
+        # 1,02:1, o canônico 1,12:1 e o `accentSoft` 1,74:1 — a régua é 3,0, e
+        # a versão anterior trocava para o soft assim mesmo, entregando uma
+        # laranja "apagada" que continuava ilegível pela régua. Quando nada
+        # passa, quem sustenta a leitura é a sombra que o estilo já desenha.
+        name, ratio = pick_accent(bg, palette)
+        out.append(palette.get(name, brand_accent) if ratio >= WCAG_MIN
+                   else brand_accent)
     return out
 
 
@@ -655,6 +682,10 @@ def camera_parts(data, duration):
 
 def render_html(data, timed, st, style_id, video, duration, orphans, penalty) -> str:
     accent = data.get("accent") or "#FF6B1A"
+    # A COR DO TEXTO tambem e escolha, nao constante. Ficava branca fixa no
+    # CSS: o usuario podia escolher o destaque e nao a fonte, o que e metade
+    # de um controle de cor. `captions.color` fecha o par.
+    cap_color = (data.get("captions") or {}).get("color") or "#FFFFFF"
     W, H = data.get("width", 1080), data.get("height", 1920)
     cfg = data.get("captions", {})
     bottom = cfg.get("paddingBottom", VARIANTS["bottom"])
@@ -712,9 +743,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     if style_id == "stacked":
         cap_css = ('<link rel="stylesheet" href="styles/stacked.css">\n'
                    '<script src="styles/stacked.js"></script>')
+        # o DESTAQUE sai do accent escolhido, nao do `orange` da variante: o
+        # controle de cor da aba Estilo nao pode valer para uns estilos e nao
+        # para outros. O CORPO sai de captions.color.
         container = (f'<div class="ave-stacked" style="--stk-scale:1;'
                      f' --stk-offset-y:{cfg.get("stackedOffsetY", st["offsetY"])};'
-                     f' --stk-orange:{st["orange"]}">')
+                     f' --stk-color:{cap_color};'
+                     f' --stk-orange:{accent or st["orange"]}">')
     elif style_id == "scatter":
         cap_css = ('<link rel="stylesheet" href="styles/scatter.css">\n'
                    '<script src="styles/scatter.js"></script>')
@@ -725,10 +760,12 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         cap_css = ('<link rel="stylesheet" href="styles/karaoke.css">\n'
                    '<script src="styles/karaoke.js"></script>')
         container = (f'<div class="ave-cap {style_id}" style="--cap-scale:1;'
+                     f' --cap-color:{cap_color};'
                      f' --cap-size:{size}; --cap-bottom:{bottom}">')
     else:
         cap_css = '<link rel="stylesheet" href="styles/static.css">'
         container = (f'<div class="ave-cap-static {style_id}" style="--cap-scale:1;'
+                     f' --cap-color:{cap_color};'
                      f' --cap-size:{size}; --cap-bottom:{bottom};'
                      f' --cap-family:{st["cssFamily"]}; --cap-weight:{st["weight"]};'
                      f' --cap-track:{st.get("tracking", 0)};'

@@ -126,6 +126,12 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         caps["style"] = pick["captions"]
     if pick.get("accent"):
         data["accent"] = pick["accent"]
+    # DUAS cores, dois papeis: `color` e o corpo do texto, `accent` e o
+    # destaque. O controle da principal ja existia na tela e no salvar, mas
+    # morria aqui — escolher nao mudava nada no render, que e o pior tipo de
+    # controle: o que responde ao clique e nao ao resultado.
+    if pick.get("capColor"):
+        data.setdefault("captions", {})["color"] = pick["capColor"]
     if pick.get("headline"):
         data.setdefault("hook", {})["style"] = pick["headline"]
     # O TEXTO da headline vem da caixa do editor. Sem este ramo o `hook` ficava

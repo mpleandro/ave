@@ -1408,7 +1408,10 @@ function renderColor(hostId, key, fallback, label) {
   // colour behind text that says something else
   hex.addEventListener('blur', () => {
     field.classList.remove('bad');
-    hex.value = (normHex(S.style.accent) || ACCENT_DEFAULT).slice(1).toUpperCase();
+    // `key`/`def`, NAO `accent`/ACCENT_DEFAULT: fixo no accent, digitar algo
+    // invalido no campo da cor PRINCIPAL e sair preenchia ele com o hex do
+    // destaque — o campo passava a mentir sobre a propria cor.
+    hex.value = (normHex(S.style[key]) || def).slice(1).toUpperCase();
   });
   hex.addEventListener('keydown', (e) => { if (e.key === 'Enter') hex.blur(); });
 
@@ -1675,7 +1678,10 @@ function refreshLayerSummaries() {
 $('layersPanel').addEventListener('click', (e) => {
   // the accent controls manage themselves (live, no rebuild) — keep the card
   // handler off them, or a click in the hex field would count as a style pick
-  if (e.target.closest('#optAccent')) return;
+  // os DOIS controles de cor se gerem sozinhos (ao vivo, sem remontar).
+  // Faltando o da principal aqui, um clique no campo hex dela contava como
+  // escolha de estilo e remontava o cartao por baixo do cursor.
+  if (e.target.closest('#optAccent') || e.target.closest('#optCapColor')) return;
 
   // acordeão mestre: recolhe o painel inteiro e devolve a altura para a timeline
   if (e.target.closest('#layersToggle')) {
