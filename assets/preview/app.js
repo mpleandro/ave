@@ -944,9 +944,10 @@ function refreshActionBar() {
 
   if (!temAlgo) {
     $('actionCount').textContent = 'Nada a enviar';
-    $('actionWhat').textContent = '— marque algo na linha do tempo, ou escreva o que quer mudar';
+
     go.innerHTML = `<span class="btn-ai">${ICON.ai}</span>Enviar`;
     go.title = 'Escreva um pedido ou faça uma marcação para habilitar';
+  $('actionWhat').textContent = '';
     return;
   }
 
@@ -954,9 +955,10 @@ function refreshActionBar() {
    * ao lado de um botão que vai acionar a IA seria mentira nas duas metades. */
   if (!has) {
     $('actionCount').textContent = 'Pedido para a IA';
-    $('actionWhat').textContent = '— vai ler o que você escreveu e decidir o que fazer';
+
     go.innerHTML = `<span class="btn-ai">${ICON.ai}</span>Enviar pedido`;
     go.title = 'Manda o texto para a IA ler; ela decide se precisa renderizar';
+    $('actionWhat').textContent = '';
     return;
   }
 
@@ -977,9 +979,10 @@ function refreshActionBar() {
   if (style || ins) vai.push(S.state.finalVideo ? 'refazer a finalização' : 'montar a finalização');
   if (notes) vai.push(wordsDirty() ? 'ler o que foi riscado no texto e as marcações' : 'ler as suas marcações');
   if (pedido) vai.push('ler o seu pedido');
-  $('actionWhat').textContent = onlyUnset
-    ? '— escolha os elementos e envie para montar a finalização'
-    : (vai.length ? `— vai ${vai.join(' e ')}` : '');
+  /* A CONSEQUÊNCIA saiu da barra e virou o `title` do botão.
+   * A frase longa competia com o número — que é a informação que se lê de
+   * relance — e repetia o que o próprio rótulo do botão já diz. */
+  $('actionWhat').textContent = '';
 
   const caro = style || ins || cuts;
   $('setupGo').innerHTML = `<span class="btn-ai">${ICON.ai}</span>`

@@ -375,15 +375,29 @@ def main() -> None:
     # não achava nada, e tudo que só existia no pick — o texto da headline, por
     # exemplo — sumia sem aviso. O state.json é o registro do que está no disco
     # e é de onde o editor relê, então é o lugar certo.
-    pick = load(edit / "preview_style.json")
-    if pick:
-        state["style"] = {
-            "edit": pick.get("edit"), "headline": pick.get("headline"),
-            "headlineText": pick.get("headlineText", ""),
-            "captions": pick.get("captions"), "accent": pick.get("accent"),
-            "capColor": pick.get("capColor"), "capDy": pick.get("capDy", 0),
-            "elements": pick.get("elements") or {},
-        }
+    # E o registro sai do `edit-data.json`, NÃO do pick.
+    #
+    # O pick é opcional: o estilo pode ter vindo direto do edit-data (agente
+    # escrevendo, projeto reaproveitado, correção à mão). Guardando só o pick,
+    # esses casos deixavam `state.style` intocado — e o editor abria a caixa do
+    # TEXTO DA HEADLINE VAZIA com a frase queimada no vídeo, oferecendo apagar
+    # o que ele nem sabia que existia. O edit-data é o que foi renderizado, e é
+    # por isso que ele é a fonte deste registro.
+    pick = load(edit / "preview_style.json") or {}
+    hook = data.get("hook") or {}
+    linhas = [l for l in (hook.get("lines") or []) if str(l).strip()]
+    state["style"] = {
+        "edit": data.get("editStyle") or pick.get("edit"),
+        "headline": hook.get("style") or pick.get("headline"),
+        # reunidas pela BARRA, que é a mesma quebra que o usuário digita —
+        # o texto volta para a caixa exatamente como ele o escreveria
+        "headlineText": " / ".join(linhas) or pick.get("headlineText", ""),
+        "captions": (data.get("captions") or {}).get("style") or pick.get("captions"),
+        "accent": data.get("accent") or pick.get("accent"),
+        "capColor": (data.get("captions") or {}).get("color") or pick.get("capColor"),
+        "capDy": pick.get("capDy", 0),
+        "elements": data.get("elements") or pick.get("elements") or {},
+    }
     state["awaitingStyle"] = False
     (edit / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2))
     (edit / "preview_style.json").unlink(missing_ok=True)
