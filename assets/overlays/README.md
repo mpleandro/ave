@@ -129,8 +129,14 @@ print('canto mais claro:', a[:20,:20].reshape(-1,3).max(0))"
 Acima de ~`[30,30,30]` o `screen` vai clarear a cena toda. Esmague com
 `colorlevels` usando o máximo MEDIDO como piso.
 
-## Seus arquivos não vão para o git
+## Estes arquivos acompanham o repo
 
-`assets/overlays/*` está no `.gitignore` (menos este README). O pacote é seu, e
-binários grandes num fork que acompanha o upstream atrapalham os dois lados —
-mesmo motivo pelo qual `templates/` já ficava de fora.
+A pasta inteira é versionada (~5 MB). Antes ficava de fora do git por ser
+"pacote de cada um", e a consequência era um efeito que a documentação descrevia
+e o repo não entregava: o `edit-data.json` referencia `ig_follow.mov` pelo nome,
+o arquivo não existia na instalação de quem clonava, e o CTA de fim de vídeo
+simplesmente não aparecia — com um aviso discreto no meio do log de compose.
+
+Solte os seus aqui do mesmo jeito. Se um dia a pasta crescer demais (textura 4K,
+pacote de filme inteiro), o corte é por **tamanho, arquivo a arquivo** — voltar a
+ignorar a pasta toda traz o defeito de volta.

@@ -62,6 +62,12 @@ project.md
 # Personal, per-creator templates (never committed — each user builds their own)
 templates/
 
-# Overlays pessoais — o pacote e de cada um, e binario grande atrapalha o fork
-assets/overlays/*
-!assets/overlays/README.md
+# Overlays: ACOMPANHAM o repo (5 MB no total).
+#
+# Ficavam de fora por serem "pacote de cada um", e a consequencia era que o CTA
+# de fim de video simplesmente nao funcionava para quem clonasse: o edit-data
+# referencia `ig_follow.mov` pelo nome e o arquivo nao existia. Um efeito que a
+# documentacao descreve e o repo nao entrega e pior que efeito nenhum.
+#
+# Se um dia entrar aqui algo pesado (textura 4K, pacote de filme inteiro), o
+# corte e por TAMANHO, arquivo a arquivo — nao voltar a ignorar a pasta toda.
