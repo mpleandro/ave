@@ -300,4 +300,16 @@ de skills — o `install.md` documenta esse formato.
 
 ## Licença
 
-Veja [LICENSE](LICENSE).
+O **código** está sob MIT — veja [LICENSE](LICENSE).
+
+**Uma exceção, e ela importa:** `assets/overlays/ig_follow.mov` e
+`ig_follow_profile.mov` reproduzem a interface do Instagram, marca da Meta
+Platforms, Inc. Este projeto não tem relação com a Meta nem é endossado por ela.
+A MIT cobre o código e não pode conceder direito sobre marca de terceiro — esses
+dois arquivos acompanham o pacote para **uso pessoal** (o CTA no fim dos seus
+vídeos, o mesmo uso de quem grava a tela do app). Redistribuir ou empacotar em
+produto seu é outra conversa, e a autorização vem da Meta, não daqui. Os
+detalhes estão em [assets/overlays/README.md](assets/overlays/README.md).
+
+Todo o resto de `assets/` — os 20 efeitos sonoros, as texturas, os estilos —
+segue a MIT como o código.

@@ -140,3 +140,25 @@ simplesmente não aparecia — com um aviso discreto no meio do log de compose.
 Solte os seus aqui do mesmo jeito. Se um dia a pasta crescer demais (textura 4K,
 pacote de filme inteiro), o corte é por **tamanho, arquivo a arquivo** — voltar a
 ignorar a pasta toda traz o defeito de volta.
+
+### ⚠️ Os overlays de marca NÃO estão sob a licença MIT do código
+
+`ig_follow.mov` e `ig_follow_profile.mov` reproduzem a interface do Instagram — o
+botão "Seguir" com a tipografia e o azul da marca. Instagram e o design dessa
+interface são marca e propriedade da Meta Platforms, Inc.; este projeto não tem
+relação com ela nem é endossado por ela.
+
+A licença MIT do repositório cobre o **código**. Ela não pode conceder direito
+sobre marca de terceiro, porque quem publica este repo não detém esse direito.
+Os dois arquivos acompanham o pacote para **uso pessoal** — fazer o seu próprio
+CTA no fim dos seus vídeos, que é o uso nominativo comum e o mesmo que qualquer
+criador faz ao gravar a tela do app.
+
+O que isso quer dizer na prática:
+
+- **usar nos seus vídeos** — é o uso para o qual eles estão aqui;
+- **redistribuir, vender ou empacotar em produto seu** — não se apoie na MIT para
+  isso; a autorização, se precisar, vem da Meta, não daqui.
+
+`Black_Blur_overlay` e `Element_shaddow_overlay` são texturas genéricas, sem
+marca nenhuma, e seguem a MIT como o resto do repositório.
