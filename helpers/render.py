@@ -13,10 +13,14 @@ output-timeline offsets, applies the proven force_style (2-word
 UPPERCASE chunks, Helvetica 18 Bold, MarginV=35).
 
 Usage:
-    python helpers/render.py <edl.json> -o final.mp4
-    python helpers/render.py <edl.json> -o preview.mp4 --preview
-    python helpers/render.py <edl.json> -o final.mp4 --build-subtitles
-    python helpers/render.py <edl.json> -o final.mp4 --no-subtitles
+    python helpers/render.py <edl.json> -o preview.mp4 --proxy --no-subtitles
+    python helpers/render.py <edl.json> -o cut.mp4 --no-subtitles
+    python helpers/render.py <edl.json> -o cut.mp4 --build-subtitles
+
+A Fase 1 ITERA no `--proxy` (`preview.mp4`, 720p — 3,2× mais rápido no encode) e
+encoda o `cut.mp4` UMA vez, depois de aprovado. O que se julga na Fase 1 é a
+escolha das tomadas e o ritmo, e 720p responde isso; pagar 1080p em cada versão
+que vai ser descartada é o que fazia a iteração doer.
 """
 
 from __future__ import annotations
@@ -308,6 +312,7 @@ def extract_segment(
     out_path: Path,
     preview: bool = False,
     draft: bool = False,
+    proxy: bool = False,
     keep_resolution: bool = False,
     gain_db: float = 0.0,
     streams: str = "av",
@@ -324,17 +329,33 @@ def extract_segment(
     `-ss` before `-i` for fast accurate seeking. Scale to 1080p from 4K.
     Portrait sources (height > width) are scaled by height to preserve orientation.
 
-    Quality ladder:
-      - final (default): 1080p libx264 fast CRF 20
-      - preview:         1080p libx264 medium CRF 22 (evaluable for QC)
-      - draft:           720p libx264 ultrafast CRF 28 (cut-point check only)
+    Quality ladder — measured on 30s of 1080p60 with a grade, 4 segments running
+    in parallel (the real pipeline condition), on an 8-core machine:
+
+      - final (default): 1080p libx264 fast CRF 20 ....... 14.3s/segment
+      - proxy:           720p  libx264 veryfast CRF 23 ....  4.4s/segment  ← 3.2×
+      - preview:         1080p libx264 medium CRF 22 ...... SLOWER than final
+      - draft:           720p  libx264 ultrafast CRF 28 ... marginally faster than
+        proxy solo (4.3 vs 5.2s), but nearly DOUBLE the file for visibly worse
+        picture. `proxy` dominates it; keep `draft` only for existing callers.
       - keep_resolution: source resolution + source fps (LONGFORM / 16:9 YouTube).
-        Skips scaling and does not force 24 fps. Draft/preview still down-scale.
+        Skips scaling and does not force 24 fps. Proxy/draft/preview still
+        down-scale — a proxy that keeps 4K is not a proxy.
+
+    Two measurements worth not re-learning:
+
+    - **`preview` is a pessimisation.** `medium` is slower than `fast`, so the
+      tier is slower AND lower quality than shipping the final. It survives only
+      because callers reference it. Never reach for it.
+    - **Encoding is 93% of the time** — decoding the same 30s costs 1.12s. Which
+      also means `--jobs` buys almost nothing on the final tier: x264 already
+      saturates every core, so 4 parallel encodes took 57s against 60s
+      sequentially. The tier is the lever, not the parallelism.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     portrait = is_portrait_source(source)
-    if draft:
+    if draft or proxy:
         scale = "scale=-2:1280" if portrait else "scale=1280:-2"
     elif keep_resolution:
         scale = ""  # keep native resolution (longform)
@@ -380,6 +401,8 @@ def extract_segment(
 
     if draft:
         preset, crf = "ultrafast", "28"
+    elif proxy:
+        preset, crf = "veryfast", "23"
     elif preview:
         preset, crf = "medium", "22"
     else:
@@ -480,6 +503,74 @@ def check_ranges_have_picture(edl: dict, edit_dir: Path) -> None:
     sys.exit(1)
 
 
+# -------- Respiros (silêncio encurtado dentro de um trecho) ------------------
+#
+# O usuário marca um respiro na aba Transcrição e pede para encurtá-lo. Isso é
+# um corte DENTRO de um trecho, e a expansão para dois trechos é mecânica —
+# aritmética de bordas que ninguém deve refazer à mão a cada respiro. O EDL
+# guarda a INTENÇÃO (`breaths: [{at, to, keep}]`, bordas ACÚSTICAS do silêncio) e
+# esta função a materializa antes de qualquer outra coisa olhar os ranges.
+#
+# ELA TAMBÉM FIXA A EMENDA QUE ACABOU DE CRIAR, e esse é o ponto inteiro. Sem
+# isso o J-cut trata a emenda nova como qualquer outra: com 150ms de respiro
+# preservado ele apara 67ms de cauda e sobrepõe 33ms de lead, e sobram 50ms. O
+# piso que o usuário escolheu viraria um terço dele, em silêncio. Vale aqui a
+# mesma regra que o aparo já seguia: borda que a máquina achou, a máquina apara;
+# borda que a pessoa pôs, ninguém encosta — daí os dois overrides em 0.
+BREATH_KEEP_DEFAULT = 0.150
+BREATH_EDGE_PAD = 0.030   # o pad de borda da Regra 5, dos dois lados da emenda
+
+
+def expand_breaths(edl: dict) -> int:
+    """`breaths` num range → dois ranges com a emenda fixada. Devolve quantos."""
+    out: list[dict] = []
+    n = 0
+    for r in edl.get("ranges", []):
+        marks = r.get("breaths") or []
+        if not marks:
+            out.append(r)
+            continue
+        a, b = float(r["start"]), float(r["end"])
+        # `base` preserva source/beat/grade/gain_db E os overrides que o range já
+        # trazia: o lead original vale para o PRIMEIRO pedaço (a emenda de
+        # entrada não mudou) e o aparo original para o ÚLTIMO (a saída também
+        # não). Só as emendas do MEIO — as que este código criou — são fixadas.
+        base = {k: v for k, v in r.items() if k != "breaths"}
+        cur = a
+        depois_de_respiro = False
+        for m in sorted(marks, key=lambda x: float(x["at"])):
+            at, to = float(m["at"]), float(m["to"])
+            keep = float(m.get("keep", BREATH_KEEP_DEFAULT))
+            # Validar em vez de confiar: um respiro fora do trecho, invertido ou
+            # menor que o piso produziria um range de duração negativa, e ffmpeg
+            # aceita isso devolvendo um segmento vazio — o corte encurta e nada
+            # avisa. Falhar pelo nome é a única saída que não some.
+            if not (cur < at < to < b):
+                sys.exit(f"respiro fora do trecho {r.get('beat') or ''} "
+                         f"[{a}–{b}]: at={at} to={to}")
+            if to - at <= keep:
+                print(f"  respiro em {at:.2f}s já tem {(to - at) * 1000:.0f}ms "
+                      f"(piso {keep * 1000:.0f}ms) — ignorado")
+                continue
+            piece = dict(base)
+            piece["start"], piece["end"] = cur, at + max(0.0, keep - BREATH_EDGE_PAD)
+            piece["jcut_tail_frames"] = 0      # a cauda deste pedaço É o respiro
+            if depois_de_respiro:
+                piece["jcut_lead_frames"] = 0
+            out.append(piece)
+            cur = to - BREATH_EDGE_PAD
+            depois_de_respiro = True
+            n += 1
+        tail_piece = dict(base)
+        tail_piece["start"], tail_piece["end"] = cur, b
+        if depois_de_respiro:                  # por RANGE, não global
+            tail_piece["jcut_lead_frames"] = 0  # nada sobrepõe o respiro guardado
+        out.append(tail_piece)
+    if n:
+        edl["ranges"] = out
+    return n
+
+
 def snap_ranges_to_frames(edl: dict, fps: int) -> int:
     """Round every range's DURATION up to a whole number of frames.
 
@@ -516,6 +607,7 @@ def extract_all_segments(
     edit_dir: Path,
     preview: bool,
     draft: bool = False,
+    proxy: bool = False,
     keep_resolution: bool = False,
     jobs: int = 0,
 ) -> list[Path]:
@@ -539,7 +631,8 @@ def extract_all_segments(
     resolved = resolve_grade_filter(edl.get("grade"))
     is_auto = resolved == "__AUTO__"
     clips_dir = edit_dir / (
-        "clips_draft" if draft else ("clips_preview" if preview else "clips_graded")
+        "clips_draft" if draft else ("clips_proxy" if proxy
+        else ("clips_preview" if preview else "clips_graded"))
     )
     clips_dir.mkdir(parents=True, exist_ok=True)
 
@@ -590,7 +683,8 @@ def extract_all_segments(
         print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{grade_note}{gain_note}", flush=True)
         extract_segment(
             src_path, start, duration, seg_filter, out_path,
-            preview=preview, draft=draft, keep_resolution=keep_resolution,
+            preview=preview, draft=draft, proxy=proxy,
+            keep_resolution=keep_resolution,
             gain_db=gain_db, target_fps=fps_lock,
         )
         return out_path
@@ -644,9 +738,26 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
 # The tail trim is MEASURED, never blind. Cutting a fixed 2 frames off every take
 # would eventually decapitate a word on footage whose take ends tight — so the trim
 # is capped by the silence actually present at the end of that range, keeping 10ms.
+#
+# THE LEAD IS MEASURED TOO, and for the same reason. It used to be applied flat at
+# every junction, which is only correct where the outgoing take ENDS in silence.
+# Where two takes butt tight — no breath between them — pulling the next take's
+# audio back 5 frames lands it on top of the outgoing take's last word. Two people
+# talking over each other for 200ms: not a J-cut, just a mistake, and one that
+# reads as slurred rather than as an obvious defect.
+#
+# The overlap consumes the same silence the tail trim consumes, so the two have to
+# be subtracted from one another — trim first, then whatever is LEFT is what the
+# lead may eat. No silence left, no J-cut at that junction: it butt-joins, and the
+# rest of the edit keeps its overlap. The measurement (`trailing_silence`) was
+# already being run for the trim, so gating the lead costs nothing extra.
+#
+# An explicit `jcut_lead_frames` on a range still wins outright — same principle as
+# the tail: a value someone typed is an instruction, not a suggestion to be capped.
 
 JCUT_LEAD_FRAMES = 5
 JCUT_TAIL_TRIM_FRAMES = 2
+JCUT_LEAD_MARGIN = 0.020  # sliver of room tone kept between the two takes
 
 
 def jcut_settings(edl: dict, fps: int) -> dict | None:
@@ -716,20 +827,15 @@ def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
     sources = edl["sources"]
     n = len(ranges)
 
-    def lead_for(i: int) -> float:
-        if i <= 0 or i >= n:      # no incoming seam before the first / after the last
-            return 0.0
-        override = ranges[i].get("jcut_lead_frames")
-        frames = cfg["lead_frames"] if override is None else max(0, int(override))
-        return frames / fps
-
-    plan: list[dict] = []
-    a_off = v_off = 0.0
+    # PASSADA 1 — medir. O aparo e a sobreposição disputam o MESMO silêncio, e o
+    # lead da emenda `i` depende do que sobrou no fim do trecho `i-1`. Resolver
+    # os dois no mesmo laço faria o lead precisar de um número que ainda não foi
+    # calculado, então mede-se tudo antes e monta-se depois.
+    avails: list[float | None] = []
+    tails: list[float] = []
     for i, r in enumerate(ranges):
         src = resolve_path(sources[r["source"]], edit_dir)
         start, end = float(r["start"]), float(r["end"])
-
-        tail = 0.0
         avail = trailing_silence(src, start, end) if i < n - 1 else None
         # `jcut_tail_frames` no range sobrepõe o aparo automático — 0 faz o áudio
         # terminar EXATAMENTE na borda. É o que uma borda posta à mão exige: o
@@ -744,6 +850,38 @@ def plan_jcut(edl: dict, edit_dir: Path, cfg: dict) -> list[dict]:
             budget = max(0.0, avail - 0.010)          # keep 10ms of room tone
             usable_frames = min(cfg["tail_trim_frames"], int(budget * fps))
             tail = usable_frames / fps
+        else:
+            tail = 0.0
+        avails.append(avail)
+        tails.append(tail)
+
+    def lead_for(i: int) -> float:
+        """Sobreposição na emenda que ABRE o trecho `i`, limitada pelo respiro real.
+
+        O orçamento é o silêncio que sobrou no fim do trecho ANTERIOR depois do
+        aparo — é sobre ele que a voz que entra vai cair. Zero respiro, zero
+        sobreposição: aquela emenda vira encosto puro.
+        """
+        if i <= 0 or i >= n:      # no incoming seam before the first / after the last
+            return 0.0
+        override = ranges[i].get("jcut_lead_frames")
+        if override is not None:
+            return max(0, int(override)) / fps        # posto à mão: não se limita
+        want = cfg["lead_frames"]
+        avail = avails[i - 1]
+        if avail is None:
+            return 0.0
+        room = avail - tails[i - 1] - JCUT_LEAD_MARGIN
+        return min(want, max(0, int(room * fps))) / fps
+
+    # PASSADA 2 — montar.
+    plan: list[dict] = []
+    a_off = v_off = 0.0
+    for i, r in enumerate(ranges):
+        src = resolve_path(sources[r["source"]], edit_dir)
+        start, end = float(r["start"]), float(r["end"])
+        tail = tails[i]
+        avail = avails[i]
 
         a_in, a_out = start, end - tail
         v_in = start + lead_for(i)
@@ -813,13 +951,14 @@ def assemble_jcut(plan: list[dict], out_path: Path, edit_dir: Path) -> None:
 
 def extract_and_assemble_jcut(
     edl: dict, edit_dir: Path, cfg: dict, preview: bool, draft: bool,
-    keep_resolution: bool, jobs: int, base_path: Path,
+    keep_resolution: bool, jobs: int, base_path: Path, proxy: bool = False,
 ) -> list[dict]:
     """Extract every take's picture and sound separately, then overlap-assemble."""
     resolved = resolve_grade_filter(edl.get("grade"))
     is_auto = resolved == "__AUTO__"
     clips_dir = edit_dir / (
-        "clips_draft" if draft else ("clips_preview" if preview else "clips_graded"))
+        "clips_draft" if draft else ("clips_proxy" if proxy
+        else ("clips_preview" if preview else "clips_graded")))
     clips_dir.mkdir(parents=True, exist_ok=True)
 
     # Clear EVERY old segment, not just the other mode's. Two ways this folder goes
@@ -845,9 +984,20 @@ def extract_and_assemble_jcut(
         if len({source_fps(s) for s in srcs}) > 1:
             print(f"  fontes com fps diferentes → travando tudo em {fps_lock} fps")
 
+    # O lead virou variável — quem não tem respiro encosta. Dizer só o teto
+    # esconderia justamente a informação nova, então o resumo conta as emendas
+    # que de fato sobrepuseram e as que não.
     lead_ms = round(cfg["lead_frames"] / cfg["fps"] * 1000)
-    print(f"J-cut: áudio entra {cfg['lead_frames']}f ({lead_ms}ms) antes da imagem"
+    seams = [p for p in plan[1:]]
+    jcut_n = sum(1 for p in seams if p["lead_frames"] > 0)
+    butt_n = len(seams) - jcut_n
+    print(f"J-cut: até {cfg['lead_frames']}f ({lead_ms}ms) de antecipação do áudio"
           f"  ({len(plan)} takes, {jobs} paralelos)")
+    if seams:
+        resumo = f"  emendas: {jcut_n} com J-cut"
+        if butt_n:
+            resumo += f", {butt_n} encostada(s) por falta de respiro"
+        print(resumo)
 
     def work(p: dict) -> dict:
         i, r = p["i"], p["range"]
@@ -870,11 +1020,11 @@ def extract_and_assemble_jcut(
         vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
         apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
         extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
-                        vpath, preview=preview, draft=draft,
+                        vpath, preview=preview, draft=draft, proxy=proxy,
                         keep_resolution=keep_resolution, streams="v",
                         target_fps=fps_lock)
         extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
-                        apath, preview=preview, draft=draft,
+                        apath, preview=preview, draft=draft, proxy=proxy,
                         keep_resolution=keep_resolution, gain_db=gain_db,
                         streams="a")
         p["video_path"], p["audio_path"] = vpath, apath
@@ -885,10 +1035,16 @@ def extract_and_assemble_jcut(
                          f" (de {p['silence_avail_ms']}ms de silêncio)")
         elif p["silence_avail_ms"] is not None:
             tail_note = f"  cauda 0f (só {p['silence_avail_ms']}ms de silêncio)"
+        # a emenda que ABRE este take: dizer quando ela NÃO sobrepôs, senão o
+        # encosto passa por J-cut silencioso e ninguém sabe por que soou diferente
+        seam_note = ""
+        if i > 0:
+            seam_note = (f"  ⤶{p['lead_frames']}f" if p["lead_frames"]
+                         else "  ⤶encostada (sem respiro)")
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
         print(f"  [{i:02d}] {r['source']}  v {p['v_in']:7.2f}-{p['v_out']:7.2f}"
               f"  a {p['a_in']:7.2f}-{p['a_out']:7.2f}"
-              f"  {r.get('beat') or ''}{tail_note}{gain_note}", flush=True)
+              f"  {r.get('beat') or ''}{seam_note}{tail_note}{gain_note}", flush=True)
         return p
 
     if jobs == 1 or len(plan) == 1:
@@ -1244,9 +1400,17 @@ def main() -> None:
     ap.add_argument("edl", type=Path, help="Path to edl.json")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output video path")
     ap.add_argument(
+        "--proxy",
+        action="store_true",
+        help="Proxy: 720p, veryfast, CRF 23 — 3.2x faster than final, and the "
+             "right tier for judging the CUT. This is what Phase 1 iterates on; "
+             "encode the final once, after the cut is approved.",
+    )
+    ap.add_argument(
         "--preview",
         action="store_true",
-        help="Preview mode: 1080p, medium, CRF 22 — evaluable for QC, faster than final.",
+        help="DEPRECATED — 1080p medium CRF 22, measured SLOWER than the final "
+             "AND lower quality. Use --proxy.",
     )
     ap.add_argument(
         "--draft",
@@ -1318,6 +1482,14 @@ def main() -> None:
     edit_dir = edl_path.parent
     out_path = args.output.resolve()
 
+    # Respiros ANTES do alinhamento de frame: eles criam ranges novos, e um range
+    # que nasce depois do snap chega à extração com bordas fora do frame — o erro
+    # que o snap existe para evitar, reintroduzido pela porta dos fundos.
+    grown = expand_breaths(edl)
+    if grown:
+        print(f"  {grown} respiro(s) encurtado(s) → "
+              f"{len(edl['ranges'])} trecho(s), emendas fixadas")
+
     # Frame-align every range BEFORE extraction, and persist it: the EDL, the
     # preview timeline and segments.json must all describe the same cut as the
     # rendered file, or anything that has to land on a cut lands beside it.
@@ -1333,6 +1505,8 @@ def main() -> None:
 
     if args.draft:
         base_name = "base_draft.mp4"
+    elif args.proxy:
+        base_name = "base_proxy.mp4"
     elif args.preview:
         base_name = "base_preview.mp4"
     else:
@@ -1350,8 +1524,8 @@ def main() -> None:
         # 1+2. Picture and sound extracted from different ranges, then overlapped.
         plan = extract_and_assemble_jcut(
             edl, edit_dir, jcut, preview=args.preview, draft=args.draft,
-            keep_resolution=args.keep_resolution, jobs=args.jobs,
-            base_path=base_path,
+            proxy=args.proxy, keep_resolution=args.keep_resolution,
+            jobs=args.jobs, base_path=base_path,
         )
         # Persist the real output timeline: everything downstream (preview
         # timeline, segments.json, Phase-2 overlays) indexes off these, and the
@@ -1373,7 +1547,8 @@ def main() -> None:
         # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
         segment_paths = extract_all_segments(
             edl, edit_dir, preview=args.preview, draft=args.draft,
-            keep_resolution=args.keep_resolution, jobs=args.jobs,
+            proxy=args.proxy, keep_resolution=args.keep_resolution,
+            jobs=args.jobs,
         )
         # 2. Concat → base
         concat_segments(segment_paths, base_path, edit_dir)

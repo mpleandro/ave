@@ -196,6 +196,16 @@ def main() -> None:
     edit = args.edit.resolve()
     cut = edit / "cut.mp4"
     if not cut.exists():
+        # O proxy existir e o corte não é o caso comum, e merece a mensagem
+        # certa: a Fase 1 rodou, só não foi aprovada ainda. Compor a Fase 2 em
+        # cima do proxy entregaria 720p sem ninguém notar — o render sai limpo e
+        # a perda só aparece no arquivo publicado.
+        if (edit / "preview.mp4").exists():
+            sys.exit(
+                f"só existe o proxy ({edit / 'preview.mp4'}, 720p) — a Fase 2 tem\n"
+                f"de compor sobre o corte final. Aprove o corte e encode uma vez:\n"
+                f"  render.py edl.json -o {edit / 'cut.mp4'} --no-subtitles"
+            )
         sys.exit(f"não achei o corte aprovado em {cut} — a Fase 1 precisa ter rodado")
 
     proj = edit / "hyperframes"

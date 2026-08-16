@@ -84,6 +84,7 @@ const ICON = {
   zoomIn: '<svg viewBox="0 0 16 16"><path d="M7 1.6a5.4 5.4 0 1 0 3.3 9.7l3.2 3.2a.9.9 0 0 0 1.3-1.3l-3.2-3.2A5.4 5.4 0 0 0 7 1.6zm0 1.8a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2zm-.9 1.5v1.2H4.9v1.8h1.2v1.2h1.8V7.9h1.2V6.1H7.9V4.9H6.1z"/></svg>',
   zoomOut: '<svg viewBox="0 0 16 16"><path d="M7 1.6a5.4 5.4 0 1 0 3.3 9.7l3.2 3.2a.9.9 0 0 0 1.3-1.3l-3.2-3.2A5.4 5.4 0 0 0 7 1.6zm0 1.8a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2zM4.9 6.1v1.8h4.2V6.1H4.9z"/></svg>',
   fit: '<svg viewBox="0 0 16 16"><path d="M2 2h4.2v1.8H3.8v2.4H2V2zm7.8 0H14v4.2h-1.8V3.8H9.8V2zM2 9.8h1.8v2.4h2.4V14H2V9.8zm10.2 0H14V14H9.8v-1.8h2.4V9.8z"/></svg>',
+  undo: '<svg viewBox="0 0 16 16"><path d="M3.4 6.5h6.1a4.2 4.2 0 0 1 0 8.4H7.2v-1.9h2.3a2.3 2.3 0 0 0 0-4.6H3.4l2.4 2.4-1.35 1.35L.6 7.55 4.45 3.7 5.8 5.05 3.4 6.5z"/></svg>',
   flag: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
 };
 
@@ -618,6 +619,8 @@ let S = {
   view: 'tl',       // 'tl' linha do tempo · 'tx' transcrição
   words: [],        // transcrito do corte (/gen/words.json)
   cutWords: new Set(), // índices riscados = PEDIDO de corte, não corte feito
+  cutBreaths: new Set(), // respiros marcados: índice da palavra que vem ANTES
+  undo: [],         // pilha de instantâneos de S.draft (apagar / redimensionar)
   selWords: new Set(),
   processing: false, // a IA está refazendo algo lá fora
   procFrom: 0,
@@ -793,7 +796,47 @@ function renderedToDraft(t) {
 }
 
 // ---------- dirty tracking ----------
-const wordsDirty = () => S.cutWords.size > 0;
+const wordsDirty = () => S.cutWords.size > 0 || S.cutBreaths.size > 0;
+
+/* ---------- DESFAZER ----------
+ * Cobre DUAS ações, de propósito: apagar um take da linha do tempo e
+ * redimensioná-lo. São as únicas destrutivas de verdade — desfazer uma rasura
+ * de palavra ou um respiro já é clicar de novo no mesmo lugar, e empilhar isso
+ * aqui faria ⌘Z desfazer algo diferente do que a pessoa acabou de fazer, que é
+ * pior que não ter undo.
+ *
+ * Instantâneo de `S.draft` inteiro, não uma inversa por ação: um take carrega
+ * start, end, removed, leadF, tailF e `orig`, e restaurar campo a campo é onde
+ * se acaba devolvendo QUASE o estado certo. São ~30 objetos rasos por edição.
+ *
+ * `pushUndo()` é sempre a PRIMEIRA linha de quem muta — chamada depois, salva o
+ * estado já alterado e o desfazer vira um no-op silencioso. */
+const UNDO_MAX = 50;
+
+function pushUndo(label) {
+  S.undo.push({ label, draft: (S.draft || []).map((r) => ({ ...r, orig: { ...r.orig } })) });
+  if (S.undo.length > UNDO_MAX) S.undo.shift();
+  refreshUndo();
+}
+
+function undoLast() {
+  const s = S.undo.pop();
+  if (!s) return;
+  S.draft = s.draft;
+  S.selected = -1;   // o índice selecionado pode ter mudado de dono
+  renderAll();
+  refreshHeader();
+  refreshUndo();
+  toast(`desfeito: ${s.label}`, 1800);
+}
+
+function refreshUndo() {
+  const b = $('btnUndo');
+  if (!b) return;
+  const s = S.undo[S.undo.length - 1];
+  b.disabled = !s;
+  b.title = s ? `Desfazer ${s.label} (⌘Z)` : 'Nada a desfazer';
+}
 const jcutDirty = () => S.draft.some((r) => r.leadF != null || r.tailF != null);
 
 function edlDirty() {
@@ -851,7 +894,7 @@ function refreshActionBar() {
   const vai = [];
   if (cuts) vai.push('refazer o corte');
   if (style || ins) vai.push(S.state.finalVideo ? 'refazer a finalização' : 'montar a finalização');
-  if (notes) vai.push(wordsDirty() ? 'ler as palavras riscadas e as marcações' : 'ler as suas marcações');
+  if (notes) vai.push(wordsDirty() ? 'ler o que foi riscado no texto e as marcações' : 'ler as suas marcações');
   $('actionWhat').textContent = vai.length ? `— vai ${vai.join(' e ')}` : '';
 
   const caro = style || ins || cuts;
@@ -1360,7 +1403,15 @@ let wasShowing = false; // painel estava aberto no render anterior (para o re-fi
 /* Quais camadas o painel oferece. Antes o portão era uma tela cheia com
  * `S.tab === 'style'`; agora ele vive DENTRO da Finalização, então a condição
  * deixou de ser "que aba" e passou a ser "este trabalho tem estilo a escolher". */
-const setupApplies = () => !!(S.state.awaitingStyle || S.state.style);
+/* E o portão é ESTRUTURAL, não só de comportamento. `awaitingStyle` depende de
+ * alguém do outro lado lembrar de ligá-lo na hora certa; o proxy não depende de
+ * ninguém. Enquanto o vídeo em tela for o `preview.mp4` — 720p, a versão que se
+ * ITERA — o corte não foi aprovado, e escolher acabamento sobre um corte que
+ * ainda vai mudar é trabalho que se joga fora.
+ * Projeto antigo (sem proxy) aponta direto para `cut.mp4` e passa igual, então
+ * a trava só age onde o fluxo novo a colocou. */
+const onProxy = () => /(^|\/)preview\.mp4$/.test(S.state.video || '');
+const setupApplies = () => !!(S.state.awaitingStyle || S.state.style) && !onProxy();
 
 function renderSetup() {
   const show = setupApplies();
@@ -2234,6 +2285,9 @@ panel.addEventListener('pointerdown', (e) => {
 
   if (handle && clip) {
     const i = +handle.dataset.i;
+    // no INÍCIO do arrasto, uma vez. Empilhar a cada `pointermove` encheria a
+    // pilha de estados intermediários e ⌘Z andaria um pixel por vez.
+    pushUndo('redimensionar trecho');
     drag = { type: 'trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, r: { ...S.draft[i] } };
     try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
     e.preventDefault();
@@ -2359,6 +2413,7 @@ laneVideo.addEventListener('dblclick', (e) => {
   const clip = e.target.closest('.clip');
   if (!clip) return;
   const r = S.draft[+clip.dataset.i];
+  pushUndo('restaurar bordas');
   r.start = r.orig.start; r.end = r.orig.end; r.removed = false;
   renderAll(); refreshHeader();
 });
@@ -2402,10 +2457,17 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0) {
     const r = S.draft[S.selected];
+    pushUndo(r.removed ? 'restaurar trecho' : 'apagar trecho');
     r.removed = !r.removed;
     renderAll(); refreshHeader();
+  } else if ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+    e.preventDefault();
+    undoLast();
   }
 });
+
+$('btnUndo').innerHTML = ICON.undo;
+$('btnUndo').addEventListener('click', undoLast);
 
 // transport
 $('btnPlay').innerHTML = ICON.play;
@@ -2502,7 +2564,10 @@ async function sendTimeline() {
       })),
     };
   }
-  if (wordsDirty()) {
+  // guarda ESPECÍFICA, não `wordsDirty()`: ele agora também cobre respiros, e
+  // marcar só respiro emitiria um `cutWords: []` — que o outro lado leria como
+  // "nenhuma palavra a cortar" quando o certo é "não pediram palavra nenhuma".
+  if (S.cutWords.size) {
     /* PEDIDO, não corte. Vai com o texto e os tempos DA FONTE para a IA achar a
        borda limpa — mais a folga medida, que é o que diz onde ela vai ter de
        improvisar. Deliberadamente não mando um EDL já recortado: os tempos de
@@ -2513,6 +2578,20 @@ async function sendTimeline() {
       return { text: w.text, source: w.source, range: w.range,
                srcStart: w.srcStart, srcEnd: w.srcEnd, outStart: w.outStart,
                gapBefore: w.gapBefore, gapAfter: w.gapAfter };
+    });
+  }
+  if (breathsDirty()) {
+    /* Também PEDIDO, e com uma diferença que precisa chegar do lado de lá: o
+       respiro não é apagado, é ENCURTADO. `keep` é o piso e `trim` é quanto sai.
+       Mando os dois em vez de só o intervalo, porque um intervalo cru seria lido
+       como "remova isto" e a fala voltaria a soar metralhada. */
+    payload.cutBreaths = [...S.cutBreaths].sort((a, b) => a - b).map((i) => {
+      const w = S.words[i], nx = S.words[i + 1], br = breathAt(i);
+      return { afterWord: w.text, beforeWord: nx ? nx.text : null,
+               source: w.source, range: w.range,
+               srcFrom: w.srcEnd, srcTo: nx ? nx.srcStart : null,
+               outStart: w.outStart,
+               dur: br.dur, keep: br.keep, trim: br.trim };
     });
   }
 
@@ -2548,6 +2627,13 @@ async function sendTimeline() {
   S.draft = S.draft.filter((r) => !r.removed);
   S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
   S.cutWords.clear();
+  S.cutBreaths.clear();
+  // A pilha morre no salvamento, e tem de morrer: o pedido já saiu daqui, e os
+  // takes marcados como removidos acabaram de ser FILTRADOS de S.draft. Um
+  // instantâneo anterior traria de volta trechos que já foram enviados como
+  // apagados — a tela passaria a discordar do que o outro lado recebeu.
+  S.undo.length = 0;
+  refreshUndo();
   renderTx();
   return true;
 }
@@ -2727,6 +2813,36 @@ function txLines() {
   return linhas;
 }
 
+/* RESPIROS — o silêncio ENTRE duas palavras, oferecido como coisa removível.
+ *
+ * Três decisões que definem quais aparecem, e todas têm motivo:
+ *
+ * 1. **Só dentro do mesmo trecho.** O vão entre o fim de um take e o começo do
+ *    próximo NÃO é respiro, é a emenda — quem cuida dela é o J-cut, com o
+ *    silêncio medido. Oferecer a emenda aqui daria dois donos ao mesmo silêncio.
+ * 2. **`gapAfter` é a medida, e 999 é sentinela** (`cut_words.py` devolve isso
+ *    quando não há região seguinte, ou seja, fim do material). Tratar 999 como
+ *    duração ofereceria um respiro de 16 minutos no último trecho.
+ * 3. **Nunca some por inteiro.** Tirar todo o silêncio deixa a fala
+ *    metralhada — o ouvido lê como locução de robô, não como edição ágil. O
+ *    corte reduz ao PISO; o que se remove é só o excedente. É por isso que o
+ *    chip mostra "0,8s → 0,15s" em vez de "remover". */
+const BREATH_MIN = 0.20;   // abaixo disto é articulação, não respiro
+const BREATH_KEEP = 0.15;  // o que SEMPRE fica
+const BREATH_WORTH = 0.08; // excedente menor que isto não paga um corte
+
+function breathAt(i) {
+  const w = S.words[i], nx = S.words[i + 1];
+  if (!w || !nx || nx.range !== w.range) return null;
+  const dur = w.gapAfter;
+  if (!(dur >= BREATH_MIN) || dur > 900) return null;
+  const trim = dur - BREATH_KEEP;
+  if (trim < BREATH_WORTH) return null;
+  return { dur: +dur.toFixed(3), keep: BREATH_KEEP, trim: +trim.toFixed(3) };
+}
+
+const breathsDirty = () => S.cutBreaths.size > 0;
+
 function renderTx() {
   const host = $('txBody');
   if (!host || S.view !== 'tx') return;
@@ -2760,11 +2876,32 @@ function renderTx() {
       if (S.cutWords.has(i)) sp.classList.add('cut');
       if (S.selWords.has(i)) sp.classList.add('sel');
       sp.title = `${fmt(w.outStart)} · folga ${w.gapBefore.toFixed(2)}s / ${w.gapAfter.toFixed(2)}s`;
-      txt.append(' ');
+      // o respiro entra COMO CHIP no lugar do espaço: ele ocupa tempo no vídeo,
+      // então ocupa espaço no texto. Um respiro invisível não se remove.
+      const br = breathAt(i);
+      if (br) {
+        const chip = el('button', 'tw-breath', txt);
+        chip.type = 'button';
+        chip.dataset.breath = i;
+        chip.textContent = `${br.dur.toFixed(1)}s`;
+        chip.title = S.cutBreaths.has(i)
+          ? `respiro de ${br.dur.toFixed(2)}s → fica ${br.keep.toFixed(2)}s (−${br.trim.toFixed(2)}s)`
+          : `respiro de ${br.dur.toFixed(2)}s · clique para encurtar até ${br.keep.toFixed(2)}s`;
+        if (S.cutBreaths.has(i)) chip.classList.add('cut');
+      } else {
+        txt.append(' ');
+      }
     }
   }
   const n = S.cutWords.size;
-  $('txCount').textContent = n ? `${n} palavra${n === 1 ? '' : 's'} marcada${n === 1 ? '' : 's'} para remoção` : '';
+  const b = S.cutBreaths.size;
+  const partes = [];
+  if (n) partes.push(`${n} palavra${n === 1 ? '' : 's'}`);
+  if (b) {
+    const ganho = [...S.cutBreaths].reduce((s, i) => s + (breathAt(i)?.trim || 0), 0);
+    partes.push(`${b} respiro${b === 1 ? '' : 's'} (−${ganho.toFixed(1)}s)`);
+  }
+  $('txCount').textContent = partes.length ? `${partes.join(' · ')} para remoção` : '';
   markNowWord();
 }
 
@@ -2805,6 +2942,17 @@ const txPaint = (a, b) => {
 };
 
 $('txBody').addEventListener('pointerdown', (e) => {
+  // O respiro vem ANTES da palavra no teste: o chip é filho de `.tx-words`, e
+  // um `closest('.tw')` mais abaixo não o pegaria — mas a seleção por arraste
+  // pegaria, e clicar num respiro passaria a pintar palavras.
+  const br = e.target.closest('.tw-breath');
+  if (br) {
+    const i = +br.dataset.breath;
+    S.cutBreaths.has(i) ? S.cutBreaths.delete(i) : S.cutBreaths.add(i);
+    renderTx();
+    e.preventDefault();
+    return;
+  }
   const t = e.target.closest('.tx-t');
   if (t) {
     const idx = t.dataset.line.split(',').map(Number);

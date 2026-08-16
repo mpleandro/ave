@@ -47,7 +47,7 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
 11. **PHASE 2 is data-driven.** `edit-data.json` describes the video; the LOOK lives in `assets/styles/` and the NUMBERS in `assets/styles/variants.json` — the same files the editor's Estilo previews are meant to read, so the two can never disagree. Bespoke graphics are the one escape hatch: an HTML of your own under `<projeto>/compositions/<id>.html`, mounted as a sub-composition. Never hand-write a style inside the composer.
 12. **Verify numerically first.** Run `verify_cut.py` on every rendered cut; open images only for flagged junctions. Batch any multi-frame look into one `contact_sheet.py` / `grade.py --candidates` montage.
 13. **Never Read machine data into context**: `transcripts/*.json` (raw), `captions.json`, `track.json`, `segments.json`, matte/track binaries. Read `takes_packed.md` and helper stdout instead.
-14. **UMA transcrição, não duas.** A legenda sai das FONTES deslocadas pelo EDL (`cut_transcript.py` → `cut_mapped.json`), **nunca** de uma segunda transcrição do `cut.mp4`. Duas passadas do mesmo modelo sobre o mesmo áudio erram em lugares diferentes, e a segunda é a que vira legenda queimada: nesta série trocou "trabalhar" por "avaliar" e a frase continuou gramatical. Mais que precisão, é coerência — **o texto que o usuário lê e edita na Fase 1 tem de ser LITERALMENTE o que entra no vídeo**, senão apagar uma palavra no painel não corta o que ele acha que corta. Transcrever o corte é o caminho de fallback, só quando não há EDL (corte trazido de fora), e diga que está nele.
+14. **UMA transcrição, não duas — e NENHUMA delas é "a boa".** A legenda sai das FONTES deslocadas pelo EDL (`cut_transcript.py` → `cut_mapped.json`), **nunca** de uma segunda transcrição do `cut.mp4`. O motivo não é precisão: duas passadas do mesmo modelo sobre o mesmo áudio erram em lugares DIFERENTES, e nesta série as metades erradas ficaram repartidas — a fonte trocou "trabalhar" por "avaliar", o corte perdeu "sem conhecimento". **Nunca resolva um desacordo escolhendo um lado por preferência** (eu escolhi, escrevi que a fonte era a correta, e queimei a palavra errada no vídeo; o usuário ouviu e desmentiu). Resolva com uma TERCEIRA passada isolada — `transcript_audit.py --recheck` — e grave o resultado em `transcripts/corrections.json` (com `from`, senão a correção pinta as palavras vizinhas). O que o mapeamento entrega é **um único texto corrigido num lugar só**: o que o usuário lê e edita na Fase 1 é LITERALMENTE o que entra no vídeo, senão apagar uma palavra no painel não corta o que ele acha que corta. Use `audio_start_in_output` do `jcut_timeline` — sob J-cut o áudio entra antes da imagem, e legenda segue a voz; somar durações de range atrasa cumulativamente (+1,08s no último trecho, medido).
 15. **RODE O `transcript_audit.py` ANTES DE ESCREVER O EDL.** O transcrito parecer bom não é evidência de que está completo — o Whisper engole gaguejo e repetição sem deixar rastro no texto. Toda janela que ele acusar é fala sem texto ou texto sem fala; leve as reais ao usuário junto com a estratégia de corte. Pular esse passo entrega gaguejo no vídeo final, e o usuário descobre assistindo.
 16. **Pediu vídeo "transparente"? AVALIE O OVERLAY ANTES DE ESCOLHER.** Toda vez que o usuário quiser um vídeo transparente, ou tirar o fundo de uma gravação de tela, decida entre `mix-blend-mode: screen` (o escuro some de graça — só serve para arte CLARA) e alfa de verdade em VP9 `yuva420p` (a arte tem escuro que importa: texto escuro, sombra, contorno). **Olhe a arte e prove antes de renderizar** — compor `1-(1-a)*(1-b)` sobre um quadro real do corte custa segundos e responde o que uma render responderia em minutos. Screen apaga TODO pixel escuro, não só o fundo. A tabela de decisão, as armadilhas e a receita da matte estão em `references/shortform.md`, seção "Quero o vídeo transparente".
 
@@ -73,7 +73,9 @@ are identical and cached — reuse an approved `edl.json`; skip `cut.mp4`/previe
     ├── edl.json                 ← cut decisions (Phase 1)
     ├── transcripts/<name>.json  ← cached word-level transcripts (Groq Whisper / ElevenLabs Scribe)
     ├── clips_graded/            ← per-segment extracts with grade + fades
-    ├── cut.mp4                  ← PHASE 1 output: clean graded cut (approval artifact)
+    ├── preview.mp4              ← PHASE 1 proxy (720p): o que se ITERA e se aprova
+    ├── cut.mp4                  ← corte final (1080p), encodado UMA vez após a aprovação
+    ├── clips_proxy/             ← extrações do proxy (descartáveis)
     ├── verify/                  ← montages / flagged-boundary views
     ├── captions.srt + chapters.txt   ← longform deliverables
     ├── final.mp4                ← delivered render (Phase 2 + 3, loudnorm'd)
@@ -123,7 +125,7 @@ Phase 1:
 - **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is.
 - **`voice_levels.py <video> [--edit-dir <dir>] [--edl edl.json] [--drop-db 5]`** — the source of truth for speech LEVEL. Learns the noise floor (Ridler-Calvard intermeans, not a percentile) and the speaker's own median from the recording itself, then flags every phrase, sub-phrase run, and EDL range sitting ≥5 dB under that median and sizes a `gain_db` for each. Catches the failure nothing else sees: a whispered aside or a trailing-off sentence where every word is present, the transcript is perfect, `speech_regions` says "speech", `verify_cut` finds no pop and no dead air — and the viewer still hits a passage they cannot hear. **Run it in Phase 1 before writing the EDL.**
 - **`detect_color.py <video> [--json]`** — resolves NORMAL vs LOG from the file instead of asking. Tier 1 metadata (HLG/PQ declare themselves; Apple Log's signature is ProRes 10-bit 4:2:2 + BT.2020 primaries + EMPTY transfer; vendor tags when present), Tier 2 image statistics when the metadata is silent — which is common, since a Sony shooting S-Log3 to H.264 often declares plain bt709 and any transcode drops the tags. Returns the profile, a **confidence**, the evidence, and the `grade` to apply (measured from the footage for non-Apple LOG). Only `confidence: low` should send you back to the user.
-- **`render.py <edl.json> -o cut.mp4 --no-subtitles [--voice-master] [--keep-resolution] [--jobs N] [--no-jcut] [--jcut-lead N] [--jcut-tail-trim N]`** — per-segment extract (grade + fades, **parallel**) → **J-cut overlap assembly (default)** or lossless concat → optional voice master → loudnorm. Writes `jcut_timeline` into the EDL: the real output positions, which is what everything downstream must index off. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `cut.mp4`.
+- **`render.py <edl.json> -o preview.mp4 --proxy --no-subtitles [--voice-master] [--keep-resolution] [--jobs N] [--no-jcut] [--jcut-lead N] [--jcut-tail-trim N]`** — per-segment extract (grade + fades, **parallel**) → **J-cut overlap assembly (default)** or lossless concat → optional voice master → loudnorm. Writes `jcut_timeline` into the EDL: the real output positions, which is what everything downstream must index off. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `cut.mp4`.
 - **`verify_cut.py <edl.json> <cut.mp4> [--min-silence 1.2]`** — numeric self-eval: duration, per-junction pop/clipped-word probes, dead air, black frames, clipping, **and range level balance** (each range's RMS vs the median range; `LOW-LEVEL` under −4 dB). ~350 tokens of text instead of N images. The range-balance line is the convergence test for a `gain_db` fix — unlike `voice_levels`' run detector it compares a range against its peers rather than against a threshold it was selected by, so a corrected take actually stops being flagged.
 - **`grade.py <in> -o <out>`** — grade presets/raw filters. **`--candidates "a=<filter>;b=<preset>;original=" --frame <t> -o cmp.png`** renders N looks on the SAME frame into one labeled montage.
 - **`timeline_view.py <video> <start> <end>`** — filmstrip+waveform PNG for ONE flagged spot, not a scan tool.
@@ -144,7 +146,7 @@ Every edit session gets the same interactive interface in the user's preview pan
 **Launch (do this when a session starts, even before the first render — the UI shows a waiting state):**
 1. Write `<edit>/state.json`:
    ```json
-   {"project": "Nome — C0000", "phase": 1, "video": "cut.mp4", "edl": "edl.json",
+   {"project": "Nome — C0000", "phase": 1, "video": "preview.mp4", "edl": "edl.json",
     "captions": "hyperframes/captions.json", "editData": "hyperframes/edit-data.json",
     "finalVideo": "final.mp4", "fps": 24, "message": "Fase 1 — cortando",
     "sourceDurations": {"C0000": 1038.5},
@@ -289,10 +291,11 @@ Goal: best take of every beat, cut on silence, graded image, clean `cut.mp4` for
    Still show the `--candidates` montage before committing a LOG grade: detection
    picks the curve, the user picks the look.
 5. **Propose the cut strategy** (4–8 sentences: shape, takes, cut direction, grade direction, length estimate). **Wait for confirmation.**
-6. **Execute.** Produce `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times. Render: `render.py edl.json -o cut.mp4 --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`). **The J-cut runs by default** — see below; you do not ask for it and you do not configure it per project.
-7. **Self-eval (numeric first).** `verify_cut.py edl.json cut.mp4` (longform: `--min-silence 1.2`). Clean → done. Flags → `timeline_view` ONLY the flagged junctions, fix, re-render. Cap 3 loops, then surface remaining flags to the user.
-8. **Show `cut.mp4` and wait for approval.** The phase gate.
-9. **Open the Estilo tab** — `"awaitingStyle": true` in `state.json`, and let the
+6. **Execute — no PROXY.** Produce `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times. Render: `render.py edl.json -o preview.mp4 --proxy --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`). **The J-cut runs by default** — see below; you do not ask for it and you do not configure it per project. It applies per junction, only where a breath exists.
+7. **Self-eval (numeric first).** `verify_cut.py edl.json preview.mp4` (longform: `--min-silence 1.2`). Clean → done. Flags → `timeline_view` ONLY the flagged junctions, fix, re-render the proxy. Cap 3 loops, then surface remaining flags to the user.
+8. **Show `preview.mp4` and wait for approval.** The phase gate. **Iterate here, always on the proxy** — every correction round re-renders it, and at 720p/veryfast that is 3.2× cheaper per segment than the final. Say it is a proxy when you show it, so nobody reviews the COMPRESSION instead of the cut.
+9. **Approved → encode the final, once.** `render.py edl.json -o cut.mp4 --no-subtitles` (same flags as step 6, minus `--proxy`). This is the file Phase 2 composes over; `phase2.py` refuses to run on the proxy. Point `state.json.video` at `cut.mp4` and regenerate `segments.json` from the FINAL segments — the proxy's `clips_proxy/` frame counts describe a different render.
+10. **Open the Estilo tab** — `"awaitingStyle": true` in `state.json`, and let the
    user pick the editing style, the caption style and the edit elements in the UI
    (see "The Estilo tab"). Do NOT ask this in chat. Only then read the track
    reference: **`references/shortform.md`** or **`references/longform.md`**.
@@ -403,22 +406,48 @@ junction — the outgoing take keeps its trailing pad and the incoming one start
 with its own. Measured on a real 3-take edit: **130ms and 140ms**. Small on paper,
 a clear pause in the room. The J-cut removes it and the takes interlock.
 
-Defaults, in `render.py`: **lead 5 frames**, **tail trim up to 2 frames**.
-Override per project with `"jcut": {"lead_frames": N, "tail_trim_frames": N}`;
-turn it off with `"jcut": false` or `--no-jcut` (single-range EDLs skip it anyway).
+Defaults, in `render.py`: **lead up to 5 frames**, **tail trim up to 2 frames** —
+both are ceilings, not fixed amounts. Override per project with
+`"jcut": {"lead_frames": N, "tail_trim_frames": N}`; turn it off with
+`"jcut": false` or `--no-jcut` (single-range EDLs skip it anyway).
 
-Three things that are not obvious:
+**The J-cut is per-junction, not per-project: it only happens where there IS a
+breath.** The overlap falls on the outgoing take's trailing silence, so that
+silence is the budget. Where two takes butt tight, pulling the incoming audio
+back lands it on top of the outgoing take's last word — two voices over each
+other for ~200ms, which reads as slurred speech rather than as an obvious defect,
+and that is what makes it hard to diagnose. So the lead is capped the same way
+the tail trim always was:
+
+```
+lead(i) = min(lead_frames, trailing_silence(i-1) − tail_trim(i-1) − 20ms)
+```
+
+The trim and the overlap eat the SAME silence, hence the subtraction — trim
+first, and the lead may only use what is left. No breath, no overlap: that one
+junction butt-joins while the rest of the edit keeps its interlock. The
+measurement was already being run for the trim, so this costs nothing.
+`render.py` prints which junctions overlapped and which butt-joined; the
+per-take `⤶` note says the same thing per line.
+
+Four things that are not obvious:
 
 - **Tighten with the TAIL, not the lead.** A bigger lead also pushes the picture
   deeper into the incoming take's speech, which reads as entering mid-word. The
   tail trim tightens the seam and leaves the picture entry alone. Measured: 5f
   lead alone gave 62/46ms of interlock; adding a 2f tail trim doubled it to
   129/112ms with the picture still entering 140ms into the speech.
-- **The tail trim is measured, never blind.** `render.py` reads the silence
-  actually present at the end of each range and trims at most that (keeping 10ms).
-  A fixed 2 frames would eventually decapitate a word on a take that ends tight.
+- **Both trims are measured, never blind.** `render.py` reads the silence
+  actually present at the end of each range. A fixed 2 frames would eventually
+  decapitate a word on a take that ends tight; a fixed 5-frame lead was landing
+  the next voice inside the previous word whenever the takes ran together.
+- **A hand-typed value wins outright.** `jcut_lead_frames` / `jcut_tail_frames`
+  on a range are instructions, not suggestions — they skip the cap. Same
+  principle both ways: the machine trims the edges the machine found; nobody
+  touches an edge a person placed.
 - **Sync is by construction:** `video_in = audio_in + lead` and
   `video_offset = audio_offset + lead`. Break that pairing and the take drifts.
+  It holds per-take, so a variable lead does not disturb it.
 
 `render.py` writes a `jcut_timeline` block into the EDL — the real output
 positions. Everything downstream (preview timeline, `segments.json`, Phase-2
@@ -551,6 +580,7 @@ For a single long source (longform), the main context can pick cuts directly fro
   "ranges": [
     {"source": "C0103", "start": 2.42, "end": 6.85, "beat": "HOOK",
      "quote": "…", "reason": "…", "gain_db": 0,
+     "breaths": [{"at": 4.10, "to": 5.00, "keep": 0.15}],
      "chapter": "Only on longform section openers"}
   ],
   "total_duration_s": 87.4
@@ -560,10 +590,45 @@ For a single long source (longform), the main context can pick cuts directly fro
 `grade`: preset name, raw filter, or `"auto"` — normally whatever `detect_color.py`
 returned. `chapter` fields feed `chapters.py` (longform).
 
-`jcut`: optional. **Omit it and the J-cut runs with the defaults** (lead 5f, tail
-trim up to 2f); `false` butt-joins instead. After a render, `render.py` adds a
+`jcut`: optional. **Omit it and the J-cut runs with the defaults** (lead up to 5f,
+tail trim up to 2f — both capped by the breath measured at each junction, so a
+seam with no silence butt-joins by itself); `false` butt-joins everything
+instead. After a render, `render.py` adds a
 `jcut_timeline` array — the real per-take video/audio offsets in the output. That
 block, not `Σ(end−start)`, is the timeline Phase 2 and the preview must use.
+
+`breaths`: silêncios DENTRO do trecho para encurtar — o que o usuário marcou nos
+chips da aba Transcrição. Cada entrada é `{at, to, keep}` em segundos da FONTE:
+`at`/`to` são as bordas do silêncio e `keep` é o que fica (padrão 0,150s).
+
+**Escreva a intenção, não a aritmética.** `render.py` expande cada respiro em
+dois trechos antes de qualquer outra coisa olhar os ranges, e faz três coisas que
+um recorte à mão erraria:
+
+- **Fixa a emenda que acabou de criar** (`jcut_tail_frames: 0` no pedaço que
+  fecha, `jcut_lead_frames: 0` no que abre). Sem isso o J-cut trata a emenda nova
+  como qualquer outra e come o piso: com 150ms preservados ele apara 67ms de
+  cauda e sobrepõe 33ms de lead — **sobram 50ms**, um terço do que a pessoa
+  escolheu, sem aviso nenhum. O aparo original do range continua valendo para o
+  ÚLTIMO pedaço e o lead original para o PRIMEIRO: só as emendas do meio são
+  fixadas.
+- **Roda ANTES do alinhamento de frame.** Um range que nasce depois do snap chega
+  à extração com bordas fora do frame, que é o erro que o snap existe para
+  evitar.
+- **Valida e morre pelo nome.** Respiro fora do trecho ou invertido produziria um
+  range de duração negativa, e o ffmpeg aceita isso devolvendo segmento vazio: o
+  corte encurta e nada avisa. Respiro que já é menor que o piso é ignorado com
+  uma linha, não aplicado.
+
+**`at`/`to` vêm do detector ACÚSTICO, não do Whisper.** O `preview_edits.json`
+manda `srcFrom`/`srcTo` (tempos de palavra) para você LOCALIZAR o respiro; as
+bordas do corte se tiram do `speech_regions.py`, como toda borda de corte nesta
+skill. O Whisper estica o fim da palavra por cima do silêncio, então cortar no
+carimbo dele encurta o respiro por um valor que ninguém pediu.
+
+Cada respiro soma um trecho — 15 respiros num corte de 20 tomadas dá 35
+segmentos para extrair. No proxy isso é barato; é mais uma razão para os
+respiros serem resolvidos antes do encode final.
 
 `gain_db`: per-range level correction in dB, sized by `voice_levels.py`. Applied at
 extraction, before the edge fades, with a limiter on any boost so a loud syllable
@@ -644,7 +709,7 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Trusting an SFX file without measuring it: two files in the pack are inaudible under speech, and several have >140ms of silence before the attack.
 - Declaring a shadow only in CSS on a style that animates `filter` — the animation replaces the whole value and the shadow vanishes on frame one.
 - Asking "NORMAL ou LOG?" — that is `detect_color.py`'s job now. Ask only on `confidence: low`.
-- Butt-joining the takes. The J-cut is the default; `--no-jcut` is a deliberate exception, not a shortcut.
+- Butt-joining the takes GLOBALLY. The J-cut is the default; `--no-jcut` is a deliberate exception, not a shortcut. A junction that butt-joins on its own because there was no breath is the feature working, not a regression.
 - Tightening a J-cut seam by raising the lead. That buys tightness by shoving the picture deeper into the incoming take's speech. Trim the outgoing TAIL instead.
 - A fixed tail trim. It must be bounded by the silence actually measured at that range's end, or it eventually cuts a word off.
 - `adelay` in milliseconds when placing overlapped audio, or `-shortest` on the mux. `adelay`'s integer-ms rounding leaves the mix a fraction short of the video and `-shortest` then amputates whole FRAMES of picture — and whether it bites depends on which way the numbers round, so it passes by luck until it doesn't. Delay in samples (`=NS`), and pin the length with `-t`.

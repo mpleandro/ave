@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 """O transcrito do CORTE, feito por mapeamento — não por transcrever de novo.
 
-Transcrever o `cut.mp4` era o caminho óbvio e é o caminho errado. São duas
-passadas independentes do mesmo modelo sobre o mesmo áudio, e a segunda erra em
-lugares que a primeira acerta. Medido na série "170 Questões", com 95,4% de
-igualdade e 9 divergências entre elas:
+Transcrever o `cut.mp4` era o caminho óbvio e é o caminho errado — mas NÃO por
+ser menos preciso. São duas passadas independentes do mesmo modelo sobre o mesmo
+áudio, e cada uma erra onde a outra acerta. Medido na série "170 Questões": 95,4%
+de igualdade, 9 divergências, e as duas metades erradas repartidas:
 
-    fonte: "comece a TRABALHAR dentro da sua empresa"
-    corte: "comece a AVALIAR  dentro da sua empresa"     ← foi para a legenda
+    fonte: "comece a TRABALHAR dentro da sua empresa"   ← ERRADA
+    corte: "comece a AVALIAR   dentro da sua empresa"   ← certa
 
-"avaliar" existe em outro ponto do mesmo vídeo; o modelo puxou de lá. A frase
-continua gramatical, a legenda queimou errado, e nada no processo reclamou.
+    fonte: tinha "sem conhecimento"                     ← certa
+    corte: perdeu "sem conhecimento"                    ← ERRADA
 
-Aqui a saída vem das fontes, que a Fase 1 já transcreveu, conferiu e usou para
-decidir o corte — deslocadas para a linha de tempo de saída pelo EDL. Duas
-consequências que valem mais que a precisão:
+**Não existe "a boa" das duas.** Eu preferi a fonte por suposição, escrevi aqui
+que ela era a correta, e queimei "trabalhar" no vídeo — o usuário ouviu e
+desmentiu. Um desacordo se resolve com uma TERCEIRA passada, isolada
+(`transcript_audit.py --recheck`), e o resultado vai para
+`transcripts/corrections.json`.
+
+O motivo de mapear, então, não é precisão: é ter **um único texto**, com as
+correções aplicadas num lugar só. Duas consequências:
 
   1. **Uma verdade só.** O texto que o usuário lê e edita na Fase 1 é
      LITERALMENTE o texto que vira legenda. Num editor por transcrição isso não
@@ -45,6 +50,25 @@ def words_of(path: Path) -> list[dict]:
             if w.get("type") == "word"]
 
 
+def corrections(edit: Path) -> list[dict]:
+    """Palavras corrigidas à mão, em `transcripts/corrections.json`.
+
+    O transcrito da fonte NÃO é verdade por decreto — ele erra trocando palavra
+    por palavra, e o erro é gramatical, então nada denuncia. Neste projeto a
+    fonte escreveu "trabalhar" onde ele diz "avaliar"; eu preferi a fonte por
+    suposição e queimei a palavra errada no vídeo. Quem decide um desacordo é
+    uma TERCEIRA passada isolada (`transcript_audit.py --recheck`), e o
+    resultado mora aqui — nunca editando o cache da API, que é a resposta do
+    provedor e tem de continuar sendo.
+
+        [{"source": "0012", "srcStart": 43.82, "from": "trabalhar", "text": "avaliar"}]
+
+    `srcStart` casa por proximidade (±0.15s), então não precisa ser exato.
+    """
+    p = edit / "transcripts" / "corrections.json"
+    return json.loads(p.read_text()) if p.exists() else []
+
+
 def build(edit: Path) -> dict:
     edl_path = edit / "edl.json"
     if not edl_path.exists():
@@ -59,20 +83,41 @@ def build(edit: Path) -> dict:
     if not any(src.values()):
         sys.exit("nenhum transcrito de fonte em transcripts/ — rode o transcribe antes")
 
+    fixes = corrections(edit)
     out: list[dict] = []
     cursor = 0.0
     for i, r in enumerate(edl.get("ranges", [])):
         a, b = float(r["start"]), float(r["end"])
-        # A posição real do trecho na saída. Sem jcut_timeline o acúmulo de
-        # durações serve, mas erra nas junções — avise em vez de fingir.
-        off = float(tl[i]["start"]) if i < len(tl) and "start" in tl[i] else cursor
+        # `audio_start_in_output`, NÃO `video_start_in_output`.
+        #
+        # Sob J-cut o áudio de um take entra ANTES da imagem dele — é isso que o
+        # J-cut é. Legenda segue a VOZ, então tem de sair do relógio do áudio.
+        # Usar o do vídeo atrasa a legenda pelo lead (167ms com o default de 5
+        # quadros), e somar as durações dos ranges — que era o que este arquivo
+        # fazia por cair num fallback, porque a chave `start` NÃO EXISTE aqui —
+        # atrasa CUMULATIVAMENTE: medido neste projeto, +0,23s no 2º trecho e
+        # +1,08s no último. O sintoma é "a legenda aparece depois da fala", e
+        # piora ao longo do vídeo, que é a assinatura de deriva acumulada.
+        key = "audio_start_in_output"
+        off = float(tl[i][key]) if i < len(tl) and key in tl[i] else cursor
         for w in src.get(r["source"], []):
             s, e = float(w["start"]), float(w["end"])
             if not (a <= s < b):
                 continue
+            text = w["text"]
+            for f in fixes:
+                # o TEMPO sozinho não identifica uma palavra: com fala corrida
+                # cabem três dentro de 0,15s, e a primeira versão disto pintou
+                # o `a` vizinho de "avaliar" junto. `from` é obrigatório e é o
+                # que torna a correção uma correção, e não uma pincelada.
+                if (f.get("source") == r["source"]
+                        and abs(float(f["srcStart"]) - s) <= 0.15
+                        and f["from"].lower().strip(" .,;:!?") == w["text"].lower().strip(" .,;:!?")):
+                    text = f["text"]
+                    break
             out.append({
                 "type": "word",
-                "text": w["text"],
+                "text": text,
                 # grampeado no trecho: o Whisper adianta o início e estica o
                 # fim, e sem o grampo a última palavra de um take vaza para
                 # depois do corte

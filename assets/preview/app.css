@@ -179,6 +179,14 @@ main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding
 .stage { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
 .editor-col { flex: 1 1 0; display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
 .editor-col .transport { align-self: center; }
+/* A LINHA DO TEMPO VEM PRIMEIRO. As camadas do render são a segunda pergunta —
+   o corte é o trabalho, o estilo é o acabamento — e enquanto elas ficavam por
+   cima a hierarquia dizia o contrário de todo o resto da skill, que trata o
+   portão de fase como regra dura.
+   Feito por `order`, não movendo o nó: o painel da linha do tempo depende de o
+   `.track-label` ter um ancestral SEM `overflow:hidden` para a máscara sticky
+   funcionar, e remexer no DOM é justamente onde essa condição se perde. */
+.editor-col > #layersPanel { order: 2; }
 
 /* ---------- portrait layout: tall player right, editor left ----------
    A 9:16 clip is postage-stamp sized when stacked above a full-width timeline.
@@ -1484,6 +1492,26 @@ button.tl-chip:disabled { cursor: default; }
    um aviso que vale para 70% do texto não avisa nada, só suja a leitura. A
    informação importa no instante da DECISÃO, não como decoração de fundo. */
 .tw.sel.tight, .tw.cut.tight { box-shadow: inset 0 -2px 0 rgb(var(--mark-rgb) / 0.7); }
+/* RESPIRO — o silêncio entre duas palavras, no lugar exato onde ele acontece.
+   Ocupa o espaço em branco em vez de somar um enfeite: o respiro É o intervalo,
+   e desenhá-lo em qualquer outro lugar (margem, rodapé, faixa própria) obrigaria
+   o olho a mapear "aquele item ali" de volta para "este vão aqui".
+   Discreto por padrão — num texto corrido há dezenas deles, e um chip vistoso
+   em cada vão competiria com as palavras, que é o que se está lendo. */
+.tw-breath {
+  display: inline-block; margin: 0 2px; padding: 0 4px; vertical-align: baseline;
+  font: inherit; font-size: 9px; line-height: 1.6; letter-spacing: .3px;
+  color: var(--dim); background: rgba(255, 255, 255, .05);
+  border: 1px solid rgba(255, 255, 255, .1); border-radius: 4px;
+  cursor: pointer; user-select: none; opacity: .55;
+}
+.tw-breath:hover { opacity: 1; background: rgba(255, 255, 255, .12); }
+/* Marcado ganha o mesmo laranja que "vai sair" tem em todo o resto da tela, e
+   o risco — a mesma gramática da palavra riscada, porque é o mesmo pedido. */
+.tw-breath.cut {
+  opacity: 1; color: var(--mark); border-color: rgb(var(--mark-rgb) / .55);
+  background: rgb(var(--mark-rgb) / .16); text-decoration: line-through;
+}
 /* quebra de trecho: onde um take acaba e outro começa */
 .tw-cutmark { display: inline-block; width: 100%; height: 0; }
 .tx-line { display: flex; align-items: baseline; gap: 10px; padding: 1px 0; border-radius: 6px; }

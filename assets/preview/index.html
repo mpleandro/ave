@@ -95,6 +95,11 @@
         <button class="vseg on" data-view="tl" type="button" title="Linha do tempo" aria-label="Linha do tempo"></button>
         <button class="vseg" data-view="tx" type="button" title="Transcrição" aria-label="Transcrição"></button>
       </div>
+      <!-- Desfazer vive JUNTO das ações que desfaz — apagar e redimensionar
+           acontecem nas trilhas logo abaixo. Numa barra de topo ele ficaria
+           longe do gesto que se quer voltar. Nasce desabilitado: sem histórico,
+           um botão clicável que não faz nada é pior que um apagado. -->
+      <button id="btnUndo" class="btn icon" type="button" title="Nada a desfazer" disabled></button>
       <button id="btnMark" class="btn mark" title="Marcar Início / Fim (tecla M)">
         <span id="markIcon"></span><span id="markText">Marcar</span>
       </button>

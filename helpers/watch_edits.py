@@ -38,6 +38,29 @@ def digest(p: Path) -> str:
     n_ch = len(edl.get("changes") or [])
     n_rm = len(edl.get("removed") or [])
     ed = d.get("editData") or {}
+    palavras = d.get("cutWords") or []
+    respiros = d.get("cutBreaths") or []
+
+    # As palavras riscadas e os respiros são PEDIDOS, e chegam com a folga já
+    # medida — listá-los é o que impede que virem "o usuário mexeu em algo".
+    if palavras:
+        parts.append(f"  palavras riscadas ({len(palavras)}) — corte na fonte, "
+                     f"não nos tempos do Whisper:")
+        for w in palavras:
+            folga = f"folga {w.get('gapBefore', 0):.2f}s/{w.get('gapAfter', 0):.2f}s"
+            apertado = "  ⚠ SEM FOLGA — a emenda cai dentro da fala" if (
+                not w.get("gapBefore") and not w.get("gapAfter")) else ""
+            parts.append(f'    · "{w.get("text")}" [{w.get("source")} '
+                         f'{w.get("srcStart")}–{w.get("srcEnd")}] {folga}{apertado}')
+    if respiros:
+        ganho = sum(float(b.get("trim") or 0) for b in respiros)
+        parts.append(f"  respiros a ENCURTAR ({len(respiros)}, −{ganho:.1f}s no total).")
+        parts.append("    Encurtar, NÃO remover: cada um mantém o piso `keep`. "
+                     "Zerar o silêncio deixa a fala metralhada.")
+        for b in respiros:
+            parts.append(f'    · entre "{b.get("afterWord")}" e "{b.get("beforeWord")}" '
+                         f'[{b.get("source")} {b.get("srcFrom")}–{b.get("srcTo")}] '
+                         f'{b.get("dur")}s → {b.get("keep")}s (−{b.get("trim")}s)')
 
     head = []
     if notes:
@@ -46,6 +69,10 @@ def digest(p: Path) -> str:
         head.append(f"{n_ch} take(s) reajustado(s)")
     if n_rm:
         head.append(f"{n_rm} take(s) removido(s)")
+    if palavras:
+        head.append(f"{len(palavras)} palavra(s) riscada(s)")
+    if respiros:
+        head.append(f"{len(respiros)} respiro(s) a encurtar")
     if ed:
         head.append("inserts/gancho movidos")
     if not head:
