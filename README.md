@@ -15,16 +15,6 @@ horizontal** (YouTube).
 > camadas de longform. Ainda falta a camada *atrás do sujeito* — a skill recusa
 > pelo nome em vez de substituir por algo parecido.
 
-## Origem e licença
-
-A.V.E. é um fork de [edvid](https://github.com/fillrochaa/edvid) (MIT,
-© 2026 Creator Factory), com o aviso de copyright preservado conforme o MIT
-exige — o `LICENSE` traz os dois: o do projeto original e o deste fork
-(© 2026 Marcos Fonseca). A licença continua MIT: use, altere e redistribua,
-mantendo os dois avisos. O repositório original é rastreado no remote `upstream`,
-e o diff é mantido confinado à Fase 2 para que melhorias no motor de corte
-continuem sendo integráveis.
-
 ---
 
 ## Instalação
@@ -300,7 +290,7 @@ de skills — o `install.md` documenta esse formato.
 
 ## Licença
 
-O **código** está sob MIT — veja [LICENSE](LICENSE).
+O **código** está sob MIT — veja [LICENSE](LICENSE). O motor de corte tem como base o projeto edvid (© 2026 Creator Factory); os avisos de copyright originais estão preservados no arquivo de licença.
 
 **Uma exceção, e ela importa:** `assets/overlays/ig_follow.mov` e
 `ig_follow_profile.mov` reproduzem a interface do Instagram, marca da Meta
