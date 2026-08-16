@@ -218,17 +218,18 @@ const STYLE_CATALOG = {
     {
       id: 'musicAI',
       name: 'Gerar com IA',
-      /* DESLIGADA ATÉ A CHAVE ENTRAR.
-       * Ligada por padrão, ela prometia trilha em todo render e entregava
-       * silêncio — a falha só aparecia assistindo o vídeo pronto, depois de
-       * dois minutos de espera. Uma opção que não pode cumprir precisa dizer
-       * isso ANTES do clique, não depois do render.
-       * Para reabilitar: apague as duas linhas abaixo. */
-      locked: 'Gerar trilha com IA precisa da chave da Treblo.\n\n'
+      /* TRAVADA SÓ SEM A CHAVE — o servidor informa se ela existe.
+       * Ligada sem chave, a opção prometia trilha em todo render e entregava
+       * silêncio, e a falha só aparecia assistindo o vídeo pronto depois de
+       * dois minutos. Com a chave no lugar, é uma opção normal: deduzir do
+       * ambiente é o que faz a trava sumir sozinha quando ela entra, sem
+       * ninguém ter de lembrar de destravar. */
+      needsKey: 'treblo',
+      keyMsg: 'Gerar trilha com IA precisa da chave da Treblo.\n\n'
             + 'Coloque TREBLO_API_KEY no .env da skill e reinicie o servidor '
             + 'de preview. Enquanto isso, use "Aplicar efeitos sonoros", '
             + 'que roda com a biblioteca local.',
-      def: false,
+      def: true,
       icon: '<svg viewBox="0 0 16 16"><path d="M12.6 1.6L6.9 3a.7.7 0 00-.55.68v5.6a2 2 0 101.35 1.9V5.9l4.4-1.05v2.9a2 2 0 101.35 1.9V2.3a.7.7 0 00-.85-.7z"/><path d="M2.4 2.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></svg>',
     },
   ],
@@ -654,6 +655,19 @@ let S = {
   jcutOpen: localStorage.getItem('avelin.jcutOpen') === '1',
 };
 
+/* Falta a chave que esta opção exige? Devolve a explicação; senão, ''.
+ * A resposta vem do servidor (`keys`), não de um campo fixo no catálogo:
+ * assim a trava some sozinha quando a chave entra, sem ninguém ter de lembrar
+ * de destravar nada. */
+function elLocked(e) {
+  if (!e.needsKey) return '';
+  const keys = S.keys || {};
+  // sem resposta do servidor ainda: não trave. Um "false" por ausência de
+  // dado travaria a opção no primeiro segundo de cada carregamento.
+  if (!(e.needsKey in keys)) return '';
+  return keys[e.needsKey] ? '' : (e.keyMsg || 'Falta a chave de API para isto.');
+}
+
 function defaultStyle() {
   const elements = {};
   for (const e of STYLE_CATALOG.elements) elements[e.id] = !!e.def;
@@ -1021,6 +1035,7 @@ async function poll() {
     // remontar a timeline a cada tique seria absurdo. Pior — o guarda de
     // "você tem ajustes não salvos" logo abaixo bloquearia a atualização
     // justamente enquanto o usuário espera, que é quando ele mais precisa ver.
+    if (data.keys) S.keys = data.keys;
     setProgress(data.progress || null);
     // servidor velho servindo app novo: avisa UMA vez, com a instrução, em vez
     // de deixar o usuário descobrir por 404 em cada botão novo
@@ -1673,10 +1688,11 @@ function renderSetup() {
     for (const id of L.elements) {
       const e = STYLE_CATALOG.elements.find((x) => x.id === id);
       if (!e) continue;
-      const on = !!S.style.elements[e.id] && !e.locked;
-      const row = el('div', `chk${on ? ' on' : ''}${e.locked ? ' locked' : ''}`, eh);
+      const trava = elLocked(e);
+      const on = !!S.style.elements[e.id] && !trava;
+      const row = el('div', `chk${on ? ' on' : ''}${trava ? ' locked' : ''}`, eh);
       row.dataset.id = e.id;
-      if (e.locked) row.title = e.locked.split('\n')[0];
+      if (trava) row.title = trava.split('\n')[0];
       el('div', 'chk-box', row);
       el('div', 'chk-ico', row).innerHTML = e.icon || '';
       el('div', 'chk-name', row).textContent = e.name;
@@ -1807,10 +1823,11 @@ $('layersPanel').addEventListener('click', (e) => {
   const chk = e.target.closest('.chk:not(.layer-chip)');
   if (chk) {
     const cat = STYLE_CATALOG.elements.find((x) => x.id === chk.dataset.id);
-    if (cat && cat.locked) {
+    const trava = cat && elLocked(cat);
+    if (trava) {
       // alerta em vez de marcação silenciosa: marcar e não cumprir é o que
       // esta trava existe para impedir
-      alert(cat.locked);
+      alert(trava);
       S.style.elements[chk.dataset.id] = false;
       return;
     }

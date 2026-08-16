@@ -98,6 +98,27 @@ _thumb_lock = threading.Lock()
 _thumb_state: dict[str, float] = {}  # video path -> mtime generated
 
 
+def _has_key(name: str) -> bool:
+    """A chave EXISTE? Só isso — o valor nunca sai daqui.
+
+    O editor precisa saber o que pode oferecer, e não pode saber o segredo:
+    mandar a chave para o navegador a exporia em qualquer aba aberta e em
+    qualquer captura de tela do usuário pedindo ajuda.
+    """
+    import os
+    v = (os.environ.get(name) or "").strip()
+    if v:
+        return True
+    env = Path(__file__).resolve().parent.parent / ".env"
+    if not env.exists():
+        return False
+    for line in env.read_text().splitlines():
+        line = line.strip()
+        if line.startswith(f"{name}=") and line.split("=", 1)[1].strip():
+            return True
+    return False
+
+
 def _stale() -> bool:
     """Algum arquivo do app mudou DEPOIS que este processo subiu?"""
     watched = [Path(__file__).resolve(), APP_DIR / "app.js",
@@ -478,6 +499,10 @@ class Handler(BaseHTTPRequestHandler):
             # o app compara com o que ele mesmo é: servidor mais VELHO que os
             # arquivos servidos = funcionalidade na tela que a rota não atende
             "serverStale": _stale(),
+            # o que a ferramenta PODE oferecer nesta máquina. Presença, não valor.
+            "keys": {"treblo": _has_key("TREBLO_API_KEY"),
+                     "pexels": _has_key("PEXELS_API_KEY"),
+                     "groq": _has_key("GROQ_API_KEY")},
             "now": time.time(),
         })
 
