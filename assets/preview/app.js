@@ -218,7 +218,17 @@ const STYLE_CATALOG = {
     {
       id: 'musicAI',
       name: 'Gerar com IA',
-      def: true,
+      /* DESLIGADA ATÉ A CHAVE ENTRAR.
+       * Ligada por padrão, ela prometia trilha em todo render e entregava
+       * silêncio — a falha só aparecia assistindo o vídeo pronto, depois de
+       * dois minutos de espera. Uma opção que não pode cumprir precisa dizer
+       * isso ANTES do clique, não depois do render.
+       * Para reabilitar: apague as duas linhas abaixo. */
+      locked: 'Gerar trilha com IA precisa da chave da Treblo.\n\n'
+            + 'Coloque TREBLO_API_KEY no .env da skill e reinicie o servidor '
+            + 'de preview. Enquanto isso, use "Aplicar efeitos sonoros", '
+            + 'que roda com a biblioteca local.',
+      def: false,
       icon: '<svg viewBox="0 0 16 16"><path d="M12.6 1.6L6.9 3a.7.7 0 00-.55.68v5.6a2 2 0 101.35 1.9V5.9l4.4-1.05v2.9a2 2 0 101.35 1.9V2.3a.7.7 0 00-.85-.7z"/><path d="M2.4 2.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></svg>',
     },
   ],
@@ -1663,9 +1673,10 @@ function renderSetup() {
     for (const id of L.elements) {
       const e = STYLE_CATALOG.elements.find((x) => x.id === id);
       if (!e) continue;
-      const on = !!S.style.elements[e.id];
-      const row = el('div', `chk${on ? ' on' : ''}`, eh);
+      const on = !!S.style.elements[e.id] && !e.locked;
+      const row = el('div', `chk${on ? ' on' : ''}${e.locked ? ' locked' : ''}`, eh);
       row.dataset.id = e.id;
+      if (e.locked) row.title = e.locked.split('\n')[0];
       el('div', 'chk-box', row);
       el('div', 'chk-ico', row).innerHTML = e.icon || '';
       el('div', 'chk-name', row).textContent = e.name;
@@ -1794,6 +1805,16 @@ $('layersPanel').addEventListener('click', (e) => {
     return;
   }
   const chk = e.target.closest('.chk:not(.layer-chip)');
+  if (chk) {
+    const cat = STYLE_CATALOG.elements.find((x) => x.id === chk.dataset.id);
+    if (cat && cat.locked) {
+      // alerta em vez de marcação silenciosa: marcar e não cumprir é o que
+      // esta trava existe para impedir
+      alert(cat.locked);
+      S.style.elements[chk.dataset.id] = false;
+      return;
+    }
+  }
   if (chk) {
     S.style.elements[chk.dataset.id] = !S.style.elements[chk.dataset.id];
     renderSetup();

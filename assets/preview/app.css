@@ -1761,3 +1761,15 @@ button.tl-chip:disabled { cursor: default; }
   filter: grayscale(.55);
 }
 .btn.primary:disabled:hover { transform: none; }
+
+/* ELEMENTO TRAVADO — existe, e diz por que não dá para marcar agora.
+   Continua legível: escondê-lo faria o usuário procurar uma opção que a
+   ferramenta tem, e apagá-lo demais esconderia a explicação no title. */
+.chk.locked { opacity: .45; cursor: help; }
+.chk.locked .chk-box { border-style: dashed; }
+.chk.locked .chk-name::after {
+  content: '🔒';
+  font-size: 10px;
+  margin-left: 6px;
+  opacity: .8;
+}
