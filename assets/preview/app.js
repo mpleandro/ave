@@ -918,7 +918,21 @@ function styleState() {
     && same('captions', def.captions) && same('accent', def.accent)
     && same('capColor', def.capColor) && same('headlineText', def.headlineText)
     && same('capDy', 0)
-    && same('elements', def.elements);
+    /* `elements` compara CHAVE A CHAVE, não como objeto inteiro.
+     *
+     * O JSON do objeto todo repete, um nível mais fundo, o mesmo defeito que
+     * `same()` corrige na superfície: um projeto salvo ANTES de uma opção
+     * existir não tem a chave dela, o lado local tem o padrão, e o objeto
+     * inteiro sai diferente. Cada opção nova no catálogo marcava como alterado
+     * todo projeto anterior a ela — e salvar não resolvia, porque o próximo
+     * projeto antigo repetia. Foi o que a opção `sfx` acabou de causar. */
+    && Object.keys(def.elements).every((k) => {
+      const d = !!def.elements[k];
+      const a = S.style.elements || {}, b = cur.elements || {};
+      const va = k in a ? !!a[k] : d;
+      const vb = k in b ? !!b[k] : d;
+      return va === vb;
+    });
   return ok ? '' : 'changed';
 }
 const styleDirty = () => styleState() !== '';
