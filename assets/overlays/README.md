@@ -11,8 +11,36 @@ filme, vinheta, halação. Solte os arquivos aqui e referencie pelo NOME em
 ]
 ```
 
-`.png` e `.jpg` entram como imagem parada; `.mp4` e `.webm` entram como vídeo em
-laço. `start`/`end` são segundos na linha de tempo do CORTE.
+`.png` e `.jpg` entram como imagem parada; `.mp4`, `.webm` e `.mov` entram como
+vídeo em laço. `start`/`end` são segundos na linha de tempo do CORTE.
+
+## Textura cobre o quadro; peça de interface, não
+
+Duas coisas diferentes moram nesta pasta, e a diferença é de TAMANHO:
+
+- **textura** (grão, vazamento de luz, poeira, vinheta) vem do tamanho do quadro
+  e cobre tudo — `inset:0` com `object-fit:cover`;
+- **peça de interface** (o `ig_follow`, 544×272) tem tamanho próprio e um lugar
+  no quadro.
+
+O composer decide pelo arquivo: **abaixo de 70% da largura do quadro, entra no
+tamanho nativo, centrado**, e avisa numa linha. Acima disso, cobre o quadro como
+sempre. Isto existe porque o padrão de cobrir tudo inflava o `ig_follow` para
+1080×1920, e ele virava uma tarja azul com "Seguir" gigante sobre o rosto.
+
+Para mandar você mesmo — e declarar `width` sempre vence a decisão automática:
+
+```json
+{"file": "ig_follow.mov", "start": 55.4, "end": 57.2,
+ "width": 60, "left": 50, "top": 70}
+```
+
+`width` em % da largura do quadro; `left` é o CENTRO da peça, em % da largura;
+`top` é a borda de cima, em % da altura. A proporção vem do arquivo.
+
+**Colisão se confere no render, não no papel.** A legenda ocupa uma faixa fixa e
+não sai da frente sozinha: no #29 o botão a 58% caiu em cima dela e a 74% ficou
+folgado — a legenda estava em 63,2%–68,2%, medido no quadro.
 
 ## Onde a camada fica
 

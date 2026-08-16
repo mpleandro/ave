@@ -535,6 +535,21 @@ canvas { display: block; }
   pointer-events: none;
   letter-spacing: 0.3px;
 }
+/* Efeito sonoro: leitura, nunca arrasto — são derivados na composição. Azul
+   para não competir com o laranja da trilha, que é a outra coisa sonora da
+   linha do tempo. O chip pode ser mais estreito que o próprio rótulo (um
+   clique dura 96ms), então o texto é cortado em vez de vazar sobre o vizinho. */
+.chip.sfx {
+  background: rgb(var(--blue-mid-rgb) / 0.22);
+  border: 1px solid rgb(var(--blue-rgb) / 0.55);
+  color: var(--blue);
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  letter-spacing: 0.2px;
+}
 .chip .handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
 .chip .handle.l { left: 0; }
 .chip .handle.r { right: 0; }

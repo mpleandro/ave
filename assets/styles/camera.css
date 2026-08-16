@@ -22,7 +22,15 @@
     rgba(255, 255, 255, 0) 100%
   );
   filter: blur(calc(var(--flash-blur) * var(--flash-scale) * 1px));
-  transform: rotate(-12deg) translateX(-40vw);
+  /* Só a INCLINAÇÃO mora aqui. O `translateX(-40vw)` que havia junto era o
+     motivo de o feixe nunca ter aparecido em projeto nenhum: a 1080 de
+     largura ele desloca −432px, e a animação movia `xPercent`, que é
+     percentual da largura DO PRÓPRIO elemento (150px) — ±180px. O feixe
+     passeava de −612px a −252px e a borda direita dele parava em −102px,
+     sempre fora da tela. Quem atravessa o quadro agora é `x`, em pixels
+     calculados da largura da composição, e a posição de partida vai no
+     `fromTo` — não na base. */
+  transform: rotate(-12deg);
   opacity: 0;
   mix-blend-mode: screen;
   z-index: 5;

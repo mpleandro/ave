@@ -33,9 +33,16 @@
     EXIT_FRAMES: 7,
     EXIT_UP: 55,     // quanto a deixa sobe na saída blur_up
     EXIT_BLUR: 14,
+    // O RISCO: entra 2 quadros DEPOIS da palavra e leva 10 se desenhando.
+    // A ordem importa e é o efeito inteiro — riscar algo que ainda não está na
+    // tela não é riscar. Os dois números vêm do edvid.
+    OUTLINE_DELAY_FRAMES: 2,
+    OUTLINE_DRAW_FRAMES: 10,
   };
   TIMING.ENTER = TIMING.ENTER_FRAMES / TIMING.FPS_REF;
   TIMING.EXIT = TIMING.EXIT_FRAMES / TIMING.FPS_REF;
+  TIMING.OUTLINE_DELAY = TIMING.OUTLINE_DELAY_FRAMES / TIMING.FPS_REF;
+  TIMING.OUTLINE_DRAW = TIMING.OUTLINE_DRAW_FRAMES / TIMING.FPS_REF;
 
   function buildTimeline(rootEl, gsap, tl, scale) {
     scale = scale || 1;
@@ -65,6 +72,24 @@
           { opacity: 1, y: 0, filter: 'blur(0px)' + sh,
             duration: enter, ease: 'expo.out' },
           at);
+      }
+
+      /* O risco se desenha: `stroke-dashoffset` de 1 a 0 sobre um `pathLength`
+         de 1, então a conta independe do comprimento real do traço. Ancorado na
+         PRIMEIRA palavra da deixa, não no início dela: sob J-cut a deixa pode
+         abrir antes da voz, e o risco sairia sozinho na tela. */
+      var risco = cue.querySelector('.stk-ellipse path');
+      if (risco && spans.length) {
+        var at0 = parseFloat(spans[0].getAttribute('data-at'));
+        if (isNaN(at0) || at0 < start) at0 = start;
+        var riscoAt = at0 + TIMING.OUTLINE_DELAY;
+        // encolhe se a deixa for curta, mas nunca some: um risco de um quadro
+        // aparece pronto, que é o mesmo que não ter gesto nenhum
+        var riscoDur = Math.max(3 / TIMING.FPS_REF,
+                                Math.min(TIMING.OUTLINE_DRAW, exitAt - riscoAt));
+        tl.fromTo(risco, { strokeDashoffset: 1 },
+          { strokeDashoffset: 0, duration: riscoDur, ease: 'power2.inOut' },
+          Math.min(riscoAt, Math.max(start, exitAt - riscoDur)));
       }
 
       if (blurUp) {

@@ -53,6 +53,22 @@ TRACK = {
     "audio": 11,
 }
 
+# Camadas de efeito. Com um índice só os efeitos eram obrigados a NUNCA se
+# tocar, e o `check` barra a composição inteira quando dois se encavalam —
+# derrubando o render por desenho de som legítimo (o riser do gancho correndo
+# por baixo do whoosh de entrada). A voz mora na 11, então as camadas extras
+# pulam para 12+.
+SFX_LAYERS = [TRACK["sfx"], 12, 13, 14]
+
+# O RISCO do empilhado — a volta a lápis que envolve a palavra, portada do
+# edvid (`assets/shortform/src/PencilOutline.tsx`). Laço frouxo e ondulado com
+# um rabo de sobra no fim: é o desenho à mão que faz o gesto ler como marcação
+# de caneta, e não como forma geométrica. Uma elipse limpa no lugar dele lê como
+# selo de software — foi o que esta fork tinha, e estava errado.
+PENCIL_D = ("M 30 78 C 26 40, 120 20, 190 24 C 262 28, 300 52, 288 82 "
+            "C 276 114, 150 132, 78 122 C 28 114, 8 92, 34 66 "
+            "C 50 50, 96 40, 150 42")
+
 
 
 
@@ -176,15 +192,24 @@ def stacked_markup(cues: list[dict], st: dict, duration: float,
         if solo:
             w = c["lines"][0][0]
             size = fit_font(w["text"], st["soloBase"], st["maxW"], st["soloFitFactor"])
-            circle = ('<svg class="stk-ellipse" viewBox="0 0 200 100" fill="none">'
-                      f'<ellipse cx="100" cy="50" rx="94" ry="42" stroke="{accent}" '
-                      'stroke-width="5" stroke-linecap="round" '
-                      'stroke-dasharray="300 40" transform="rotate(-3 100 50)"/></svg>'
+            # O risco começa APAGADO (`stroke-dashoffset: 1` sobre um
+            # `pathLength` de 1) e o stacked.js o desenha. O gesto é metade do
+            # efeito: um traço que já está lá quando a palavra chega não lê
+            # como alguém riscando, lê como moldura.
+            circle = ('<svg class="stk-ellipse" viewBox="0 0 312 150" fill="none" '
+                      'preserveAspectRatio="none">'
+                      f'<path d="{PENCIL_D}" fill="none" stroke="{accent}" '
+                      'stroke-linecap="round" stroke-linejoin="round" '
+                      'vector-effect="non-scaling-stroke" pathLength="1" '
+                      'stroke-dasharray="1" stroke-dashoffset="1"/></svg>'
                       if c["preset"] == "SOLO_OUTLINE" else "")
+            # O invólucro é uma DIV, não um span: `.stk-line span` zera a
+            # opacidade (é a animação que a devolve, palavra a palavra), e um
+            # span aqui herdaria isso e sumiria com a elipse dentro.
             rows.append(
-                f'<div class="stk-line" style="position:relative">{circle}'
+                f'<div class="stk-line"><div class="stk-solo-wrap">{circle}'
                 f'<span class="stk-solo s0" data-at="{w["fromMs"] / 1000:.3f}" '
-                f'style="font-size:{size}px">{esc(w["text"])}</span></div>')
+                f'style="font-size:{size}px">{esc(w["text"])}</span></div></div>')
         else:
             for li, line in enumerate(c["lines"]):
                 styles = c.get("lineStyles") or []
@@ -326,9 +351,10 @@ def adaptive_accent(video: Path, brand_accent: str, top: float, height: float,
     return out
 
 
-def sfx_blocks(events: list[tuple[float, str]], proj: Path, duration: float,
-               track: int = TRACK["sfx"]) -> tuple[list[str], list[str]]:
-    """Elementos de áudio dos efeitos. Retorna (blocos, avisos).
+def sfx_blocks(events: list[tuple[float, str]], proj: Path,
+               duration: float) -> tuple[list[str], list[str]]:
+    """Elementos de áudio dos efeitos, distribuídos em camadas. Retorna
+    (blocos, avisos).
 
     Duas coisas que a referência documenta como já vividas e que só aparecem
     OUVINDO — a mixagem parece certa e não se escuta nada:
@@ -347,8 +373,8 @@ def sfx_blocks(events: list[tuple[float, str]], proj: Path, duration: float,
     """
     from sfx import probe
 
-    blocks, warns, seen = [], [], set()
-    for i, (at, kind) in enumerate(events):
+    warns, seen, planned = [], set(), []
+    for at, kind in events:
         spec = VARIANTS["sfx"].get(kind)
         if not spec:
             continue
@@ -363,15 +389,61 @@ def sfx_blocks(events: list[tuple[float, str]], proj: Path, duration: float,
             warns.append(f"  aviso: {spec['file']} tem pico de {info['peak']:.1f} dB "
                          f"— vai sumir sob a fala")
             seen.add(spec["file"])
-        start = max(0.0, at - info["lead"])
-        dur = min(info["duration"], duration - start)
+        # Arredondado AQUI, não na hora de imprimir: a decisão de camada abaixo
+        # compara os mesmos números que vão para o atributo, senão um valor que
+        # arredonda para baixo cria no HTML uma sobreposição de menos de 1ms que
+        # o check enxerga e esta função não.
+        start = round(max(0.0, at - info["lead"]), 3)
+        dur = round(min(info["duration"], duration - start), 3)
         if dur <= 0:
             continue
+        planned.append((start, dur, spec))
+
+    # Cada efeito na PRIMEIRA camada livre no seu instante. Ordenar por início é
+    # o que torna a escolha gulosa correta — os eventos chegam fora de ordem
+    # (a entrada do gráfico sob medida é acrescentada depois das transições).
+    planned.sort(key=lambda p: p[0])
+    free = [0.0] * len(SFX_LAYERS)      # quando cada camada volta a vagar
+    blocks, eventos = [], []
+    for i, (start, dur, spec) in enumerate(planned):
+        lane = next((j for j, end in enumerate(free) if start >= end), None)
+        if lane is None:
+            warns.append(f"  aviso: '{spec['file']}' em {start:.2f}s não coube — "
+                         f"as {len(SFX_LAYERS)} camadas de efeito já estão "
+                         f"ocupadas nesse instante; foi descartado")
+            continue
+        free[lane] = start + dur
         blocks.append(
             f'  <audio id="sfx{i}" src="sfx/{spec["file"]}" data-start="{start:.3f}" '
-            f'data-duration="{dur:.3f}" data-track-index="{track}" '
+            f'data-duration="{dur:.3f}" data-track-index="{SFX_LAYERS[lane]}" '
             f'data-volume="{spec["volume"]}"></audio>')
+        eventos.append({"file": spec["file"], "start": round(start, 3),
+                        "dur": round(dur, 3), "volume": spec["volume"],
+                        "layer": lane, "track": SFX_LAYERS[lane]})
+    # Publica os eventos como DADO. O editor não tem como saber quais efeitos
+    # entraram — eles não estão no edit-data, nascem aqui, dos eventos visuais.
+    # Sem este arquivo a linha do tempo mostra tudo menos o som, e o usuário não
+    # tem onde conferir se o efeito caiu onde ele queria.
+    (proj / "sfx-events.json").write_text(
+        json.dumps(eventos, ensure_ascii=False, indent=1))
     return blocks, warns
+
+
+def midia_largura(path: Path) -> int | None:
+    """Largura NATIVA do arquivo, em pixels. `None` se não der para medir.
+
+    Serve ao overlay para distinguir textura (cobre o quadro) de peça de
+    interface (entra no tamanho dela). Vale para imagem e vídeo — o ffprobe lê
+    PNG igual lê ProRes.
+    """
+    try:
+        r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                            "-show_entries", "stream=width", "-of",
+                            "default=nw=1:nk=1", str(path)],
+                           capture_output=True, text=True, check=True)
+        return int(r.stdout.strip().splitlines()[0])
+    except (subprocess.CalledProcessError, ValueError, IndexError, OSError):
+        return None
 
 
 def video_duration(path: Path) -> float:
@@ -665,6 +737,7 @@ def camera_parts(data, duration):
               + json.dumps(opts) + ");")
 
     fps = data.get("fps", 30)
+    W = data.get("width", 1080)
     fl = VARIANTS["flash"]
     for k, tr in enumerate(data.get("transitions") or []):
         at = float(tr.get("at", 0))
@@ -678,9 +751,28 @@ def camera_parts(data, duration):
             f'style="--flash-intensity:{tr.get("intensity", fl["intensity"])}; '
             f'--flash-blur:{fl["blur"]}"></div>'
         )
-        js += (f"\n  tl.fromTo('#flash{k}', {{opacity:0, xPercent:-120}}, "
-               f"{{opacity:1, xPercent:120, duration:{dur:.3f}, ease:'power1.inOut'}}, "
+        # A varredura em PIXELS da composição, não em `xPercent`: o percentual
+        # é da largura do elemento (150px) e nunca daria a travessia. Sai de
+        # fora da borda esquerda e termina fora da direita, com folga para o
+        # desfoque não entregar a borda dura do retângulo.
+        folga = 220
+        js += (f"\n  tl.fromTo('#flash{k}', {{x:{-folga}}}, "
+               f"{{x:{W + folga}, duration:{dur:.3f}, ease:'power1.inOut'}}, "
                f"{start:.3f});")
+        # O brilho SOBE e DESCE. Antes ia de 0 a 1 ao longo de toda a
+        # travessia: o feixe ficava mais forte justamente ao sair de cena e
+        # então era cortado no pico, quando o clipe acabava — o contrário de
+        # um flash, que estoura no meio e se apaga.
+        js += (f"\n  tl.to('#flash{k}', {{opacity:1, duration:{dur / 2:.3f}, "
+               f"ease:'power2.out'}}, {start:.3f});")
+        js += (f"\n  tl.to('#flash{k}', {{opacity:0, duration:{dur / 2:.3f}, "
+               f"ease:'power2.in'}}, {start + dur / 2:.3f});")
+        # Trava dura no fim. O render não toca a linha do tempo, ele BUSCA
+        # quadro a quadro — e uma busca que caia depois do fade pode não ter
+        # passado por ele, deixando o feixe aceso preso na tela. O `check`
+        # barra por isso quando a saída termina em borda de clipe, que é
+        # exatamente onde um flash de transição sempre termina.
+        js += (f"\n  tl.set('#flash{k}', {{opacity:0}}, {start + dur:.3f});")
     return js, style, blocks
 
 
@@ -704,6 +796,19 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
             events.append((at, "flash"))
     for c in (data.get("_soloCues") or []):
         events.append(c)
+    # Deixas escritas à mão — o único canal para um som que NÃO nasce de um
+    # evento visual. Todos os outros são consequência de algo que aparece
+    # (o cartão entrou, o corte piscou, a palavra saltou), e há efeitos que
+    # existem justamente onde nada aparece: o riser que resolve na virada do
+    # gancho, a trava da roleta. No empilhado nem dava para contrabandear pelo
+    # `_soloCues` — a legenda o REESCREVE, então uma deixa posta lá some sem
+    # aviso no próximo compose. Aditivo: sem a chave, nada muda.
+    # `at` é o instante do ATAQUE, como no resto — a compensação do silêncio
+    # inicial do arquivo continua sendo medida em sfx_blocks.
+    for c in (data.get("sfxCues") or []):
+        at = float(c.get("at", 0))
+        if at < duration and c.get("kind"):
+            events.append((at, c["kind"]))
 
     # Perseguição do olhar: quando ligada, ela ABSORVE o zoom — o caminho já
     # traz a escala de cada instante. Deixar a câmera também animando `scale`
@@ -862,10 +967,41 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
                 css += f" filter:brightness({amt:.3f});"
         elif amt < 1:
             css += f" opacity:{amt:.3f};"
+        # Peça posicionada: `width` em % da largura do quadro liga o modo, e aí
+        # `object-fit` deixa de fazer sentido (o elemento passa a ter a
+        # proporção do arquivo). `left` é o CENTRO — é como se pensa a posição
+        # de uma peça, e centralizar é o caso comum.
+        larg = o.get("width")
+        # Sem `width` declarado, o TAMANHO DO ARQUIVO decide. Textura (grão,
+        # vazamento de luz) vem grande, do tamanho do quadro, e cobre tudo —
+        # que é o padrão histórico. Peça de interface vem pequena: o
+        # `ig_follow` tem 544×272 num quadro de 1080, e no padrão de cobrir
+        # tudo ele inflava para 1080×1920, virando tarja azul sobre o rosto.
+        # O README promete que ele "entra sem preparo nenhum"; isto é o que
+        # torna a promessa verdadeira. Declarar `width` no dado sempre vence.
+        if larg is None:
+            nativa = midia_largura(src)
+            if nativa and nativa <= 0.7 * data.get("width", 1080):
+                larg = round(100 * nativa / data.get("width", 1080), 2)
+                print(f"  overlay '{f}' é menor que o quadro ({nativa}px) — entrando "
+                      f"no tamanho nativo ({larg}%), centrado; use width/top/left "
+                      f"para posicionar", file=sys.stderr)
+        classe = "ave-overlay clip"
+        if larg is not None:
+            classe += " posicionado"
+            css = (f"--ov-width:{float(larg):.2f}%;"
+                   f" --ov-left:{float(o.get('left', 50)):.2f}%;"
+                   f" --ov-top:{float(o.get('top', 50)):.2f}%;")
+            if blend:
+                css += f" mix-blend-mode:{blend};"
+                if amt < 1:
+                    css += f" filter:brightness({amt:.3f});"
+            elif amt < 1:
+                css += f" opacity:{amt:.3f};"
         tag = "video" if src.suffix.lower() in (".mp4", ".webm", ".mov") else "img"
         attrs = ('muted playsinline loop' if tag == "video" else 'alt=""')
         ov_blocks.append(
-            f'  <{tag} id="ov{i}" class="ave-overlay clip" src="overlays/{f}" {attrs} '
+            f'  <{tag} id="ov{i}" class="{classe}" src="overlays/{f}" {attrs} '
             f'data-start="{st_:.3f}" data-duration="{en - st_:.3f}" '
             f'data-track-index="{TRACK["overlay"]}" style="{css}"'
             + (f'></{tag}>' if tag == "video" else '>'))
@@ -902,6 +1038,9 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         sfx_list, sfx_warns = sfx_blocks(events, proj, duration)
     else:
         sfx_list, sfx_warns = [], []
+        # Desligado também é informação: sem zerar o arquivo, a linha do tempo
+        # do editor continuaria mostrando os efeitos da rodada anterior.
+        (proj / "sfx-events.json").write_text("[]")
     for w in sfx_warns:
         print(w, file=sys.stderr)
     sfx_html = "\n".join(sfx_list)
@@ -924,9 +1063,18 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         needs_tl = True
     bg_html = "\n".join(bg_blocks)
     ov_html = "\n".join(ov_blocks)
-    # as camadas cobrem o quadro inteiro; o resto vem do dado, por elemento
+    # O PADRÃO é quadro inteiro, porque a biblioteca nasceu de textura (grão,
+    # vazamento de luz, poeira) e textura cobre tudo. Mas nem todo overlay é
+    # textura: o `ig_follow` é um elemento de interface de 544×272, e no padrão
+    # o `object-fit:cover` o inflou para 1080×1920 — saiu uma tarja azul
+    # cobrindo o rosto, com "Seguir" em letra gigante. Quem passar `width`
+    # (em % da largura do quadro) ganha `top`/`left` e o elemento vira peça
+    # posicionada; quem não passar continua cobrindo o quadro como antes.
     ov_css = ("<style>.ave-overlay{position:absolute;inset:0;"
-              "width:100%;height:100%;pointer-events:none}</style>"
+              "width:100%;height:100%;pointer-events:none}"
+              ".ave-overlay.posicionado{inset:auto;height:auto;"
+              "left:var(--ov-left);top:var(--ov-top);width:var(--ov-width);"
+              "transform:translateX(-50%)}</style>"
               if ov_blocks else "")
     insert_css = '<link rel="stylesheet" href="styles/insert.css">' if insert_blocks else ""
     insert_tag = '<script src="styles/insert.js"></script>' if insert_blocks else ""

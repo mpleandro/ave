@@ -1132,6 +1132,17 @@ async function applyState(data) {
       buildInsertsDraft();
     } catch (e) { /* absent yet */ }
   }
+  /* Efeitos sonoros. Vêm do sfx-events.json que o composer publica, e não do
+     edit-data: eles são DERIVADOS (entrada de cartão, corte, deixa em
+     destaque), então o edit-data não os conhece. Como só existem depois de
+     compor, ficam atrás do mesmo portão da legenda. */
+  S.sfx = [];
+  if ((S.state.phase || 1) >= 2) {
+    const alvo = S.state.sfxEvents || 'hyperframes/sfx-events.json';
+    try {
+      S.sfx = await (await fetch(`/media/${alvo}?v=${Date.now()}`)).json();
+    } catch (e) { /* ainda não compôs */ }
+  }
 
   fitZoom();
   renderAll();
@@ -1317,6 +1328,7 @@ function renderAll() {
   timelineEl.style.width = `${contentWidth()}px`;
   renderClips();
   renderJcutAudio();
+  renderSfx();
   renderChips();
   renderNotes();
   renderCutMarks();
@@ -1977,6 +1989,44 @@ function renderClips() {
  * reads in Premiere. The overlap itself gets a marker on the incoming block, so
  * the user can see how many frames of voice arrive before the picture.
  */
+/* ---------- efeitos sonoros ----------
+ *
+ * Pista de leitura, abaixo do áudio: os efeitos são derivados na composição,
+ * então não há o que arrastar aqui — o que importa é PODER CONFERIR se o efeito
+ * caiu onde devia, que antes só se sabia ouvindo o render pronto.
+ *
+ * Um chip por efeito, no instante REAL em que ele soa (o composer já desconta o
+ * silêncio inicial do arquivo, então `start` é onde o som começa, não onde o
+ * evento aconteceu). Efeitos que se sobrepõem vão para camadas diferentes na
+ * composição; aqui eles dividem a mesma faixa e se distinguem pelo rótulo —
+ * empilhar faixas por causa de 300ms de encavalamento custaria mais tela do que
+ * informa.
+ */
+function renderSfx() {
+  const trk = $('trkSfx'), lane = $('laneSfx');
+  if (!trk || !lane) return;
+  lane.innerHTML = '';
+  const evs = S.sfx || [];
+  trk.classList.toggle('hidden', !evs.length);
+  const cnt = $('cntSfx');
+  if (cnt) cnt.textContent = evs.length ? `${evs.length} efeito${evs.length === 1 ? '' : 's'}` : '—';
+  if (!evs.length) return;
+
+  for (const e of evs) {
+    const chip = el('div', 'chip sfx', lane);
+    chip.style.left = `${(+e.start || 0) * S.pps}px`;
+    // Piso de largura: um clique de 96ms daria 3px e viraria um risco sem
+    // rótulo. O chip mente um pouco na largura para não sumir — o tempo certo
+    // fica no title.
+    chip.style.width = `${Math.max((+e.dur || 0) * S.pps, 14)}px`;
+    const nome = String(e.file || '').replace(/\.[^.]+$/, '');
+    chip.textContent = nome;
+    chip.title = `${nome}  ·  ${(+e.start).toFixed(3)}s  ·  ${(+e.dur).toFixed(3)}s`
+      + `  ·  vol ${e.volume}`
+      + (e.layer ? `  ·  camada ${e.layer + 1}` : '');
+  }
+}
+
 function renderJcutAudio() {
   const t1 = $('trkAudioA1'), t2 = $('trkAudioA2');
   const l1 = $('laneAudioA1'), l2 = $('laneAudioA2');
@@ -3448,6 +3498,10 @@ function setProgress(p) {
  *      do navegador e normalmente joga em Downloads sem perguntar.
  *   2. `<a download>` — a reserva, que funciona em qualquer lugar.
  *
+ * A ORDEM entre perguntar e baixar não é detalhe: o seletor exige ativação do
+ * usuário e baixar primeiro queima essa janela. Está explicado no `doExport`,
+ * onde o defeito morava.
+ *
  * O nome do arquivo vem do servidor (do `project` do state), não daqui: baixar
  * `final.mp4` é inútil na pasta de quem edita cinco vídeos por semana.
  */
@@ -3478,6 +3532,33 @@ async function doExport() {
   const nome = exportName();
   const lab = $('exportLabel');
   const textoOriginal = lab.textContent;
+
+  /* O SELETOR DE DESTINO VEM PRIMEIRO, e a ordem é o conserto.
+   *
+   * Antes o arquivo era baixado inteiro e só então se perguntava onde salvar.
+   * `showSaveFilePicker` exige ativação do usuário — a janela de ~5s aberta
+   * pelo clique — e baixar 80MB para a memória consome essa janela. O seletor
+   * então falhava com SecurityError, o `catch` o tratava como "sem seletor" e
+   * o código caía CALADO no `<a download>`, que salva na pasta de downloads do
+   * navegador. O usuário escolhia um destino e o arquivo aparecia em outro,
+   * com um aviso dizendo "Exportado" — medido: a exportação foi parar em
+   * ~/Documents.
+   *
+   * Perguntando antes, o clique ainda está valendo. E o download passa a ir
+   * direto para o disco, sem os 80MB de blob na memória. */
+  let handle = null;
+  if (window.showSaveFilePicker) {
+    try {
+      handle = await window.showSaveFilePicker({
+        suggestedName: nome,
+        types: [{ description: 'Vídeo MP4', accept: { 'video/mp4': ['.mp4'] } }],
+      });
+    } catch (e) {
+      // cancelar o diálogo é uma escolha, não um erro: sair calado.
+      if (e && e.name === 'AbortError') return;
+      handle = null;   // sem seletor neste navegador — cai na pasta de downloads
+    }
+  }
   b.classList.add('busy');
 
   try {
@@ -3500,40 +3581,49 @@ async function doExport() {
     // em outros lugares.
     const total = +(res.headers.get('Content-Length') || 0);
     const reader = res.body && res.body.getReader ? res.body.getReader() : null;
+    const progresso = (lidos) => {
+      lab.textContent = total
+        ? `${Math.round(lidos / total * 100)}%`
+        : `${(lidos / 1048576).toFixed(0)} MB`;
+    };
+
+    // Com destino escolhido, os bytes vão direto para o arquivo. Um `write`
+    // por pedaço, sem juntar o vídeo inteiro na memória antes.
+    if (handle) {
+      const w = await handle.createWritable();
+      try {
+        if (reader) {
+          let lidos = 0;
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            await w.write(value); lidos += value.length; progresso(lidos);
+          }
+        } else {
+          await w.write(await res.blob());
+        }
+        await w.close();
+      } catch (e) {
+        // um writable deixado aberto tranca o arquivo e deixa meio vídeo no
+        // disco parecendo exportação boa
+        try { await w.abort(); } catch (_) {}
+        throw e;
+      }
+      toast(`Exportado para ${handle.name}`, 3000);
+      return;
+    }
+
     let blob;
     if (reader) {
       const partes = []; let lidos = 0;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        partes.push(value); lidos += value.length;
-        lab.textContent = total
-          ? `${Math.round(lidos / total * 100)}%`
-          : `${(lidos / 1048576).toFixed(0)} MB`;
+        partes.push(value); lidos += value.length; progresso(lidos);
       }
       blob = new Blob(partes, { type: 'video/mp4' });
     } else {
       blob = await res.blob();
-    }
-
-    if (window.showSaveFilePicker) {
-      let handle;
-      try {
-        handle = await window.showSaveFilePicker({
-          suggestedName: nome,
-          types: [{ description: 'Vídeo MP4', accept: { 'video/mp4': ['.mp4'] } }],
-        });
-      } catch (e) {
-        // cancelar o diálogo é uma escolha, não um erro: sair calado.
-        if (e && e.name === 'AbortError') return;
-        handle = null;
-      }
-      if (handle) {
-        const w = await handle.createWritable();
-        await w.write(blob); await w.close();
-        toast('Exportado', 2500);
-        return;
-      }
     }
 
     const url = URL.createObjectURL(blob);

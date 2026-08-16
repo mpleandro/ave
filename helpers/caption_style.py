@@ -244,7 +244,15 @@ def line_styles(lines: list[list[dict]], offset: int):
     return styles, boost, emph
 
 
-def build_cues(words: list[dict]) -> list[dict]:
+def build_cues(words: list[dict], always_outline: bool = False) -> list[dict]:
+    """`always_outline`: toda palavra sozinha leva o RISCO.
+
+    O padrão alterna SOLO_BIG e SOLO_OUTLINE — a palavra sozinha ora só cresce,
+    ora cresce e é riscada. Alternar existe para o risco não virar tique, mas
+    numa peça curta com duas ou três solo a alternância vira loteria: a palavra
+    que o usuário queria marcada cai no lado sem risco, e ele vê a palavra
+    estourar na tela sem gesto nenhum. Ligado, todas levam o risco.
+    """
     groups = group_cues(words)
     out: list[dict] = []
     solo_alt = 0
@@ -252,7 +260,7 @@ def build_cues(words: list[dict]) -> list[dict]:
         start = cw[0]["startMs"]
         end = cw[-1]["endMs"]
         if len(cw) == 1:
-            if norm(cw[0]["text"]) in EMPH:
+            if always_outline or norm(cw[0]["text"]) in EMPH:
                 preset = "SOLO_OUTLINE"
             else:
                 preset = "SOLO_BIG" if solo_alt % 2 == 0 else "SOLO_OUTLINE"
@@ -288,10 +296,12 @@ def main() -> None:
     ap.add_argument("--transcript", type=Path, required=True, help="Transcript of the final preview.mp4")
     ap.add_argument("-o", "--output", type=Path, required=True, help="Output caption-cues.json path")
     ap.add_argument("--lang", default="pt", help="Language hint for accent/negation lists (default pt)")
+    ap.add_argument("--always-outline", action="store_true",
+                    help="toda palavra sozinha leva o risco (sem alternar com SOLO_BIG)")
     args = ap.parse_args()
 
     words = load_words(args.transcript.resolve())
-    cues = build_cues(words)
+    cues = build_cues(words, always_outline=args.always_outline)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(cues, ensure_ascii=False), encoding="utf-8")
     solos = sum(1 for c in cues if c["preset"] != "STACK_MIXED")

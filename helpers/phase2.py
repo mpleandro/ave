@@ -326,8 +326,12 @@ def main() -> None:
                 sys.exit(f"o empilhado precisa da transcrição do corte em {transcript}")
             print("  preparando as deixas do empilhado…")
             progress.step(edit, detail="preparando as deixas do empilhado")
-            run([sys.executable, str(SKILL / "helpers" / "caption_style.py"),
-                 "--transcript", str(transcript), "-o", str(cues)])
+            cmd = [sys.executable, str(SKILL / "helpers" / "caption_style.py"),
+                   "--transcript", str(transcript), "-o", str(cues)]
+            # A escolha mora no DADO (Regra 11), não numa decisão aqui dentro.
+            if (data.get("captions") or {}).get("alwaysOutline"):
+                cmd.append("--always-outline")
+            run(cmd)
         compose += ["--cues", str(cues)]
     if args.end:
         compose += ["--end", str(args.end)]

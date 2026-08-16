@@ -214,6 +214,14 @@
         <div class="track-label cont"><span class="tl-chip soft ghost" data-icon="audio" title="A2"></span><span class="tl-text"><span class="tl-name">A2</span></span></div>
         <div class="lane jcut-lane" id="laneAudioA2"></div>
       </div>
+      <!-- Efeitos sonoros: pista própria, ABAIXO do áudio e das faixas do
+           J-cut, porque é som e não imagem. Preenchida por JS a partir do
+           sfx-events.json que o composer publica — os efeitos não estão no
+           edit-data, nascem dos eventos visuais na hora de compor. -->
+      <div class="track hidden" id="trkSfx">
+        <div class="track-label"><span class="tl-chip soft" data-icon="audio" title="Efeitos sonoros"></span><span class="tl-text"><span class="tl-name">Efeitos</span><br><span class="tl-count" id="cntSfx">—</span></span></div>
+        <div class="lane" id="laneSfx"></div>
+      </div>
       <div id="insertTracks" class="hidden"></div>
       <div id="gutterLine" class="gutter-line"></div>
       <div id="needle" class="needle"><div class="needle-head"></div></div>

@@ -97,9 +97,37 @@
   padding: 0 0.14em;
 }
 
-/* a versão circulada leva uma elipse desenhada à mão em volta */
+/* O RISCO — a volta a lápis que envolve a palavra.
+ *
+ * Geometria portada do edvid, e ela é medida, não estimada: a caixa do risco é
+ * 120% da largura e 150% da ALTURA da palavra, deslocada −10%/−22%. A altura
+ * maior que a largura relativa não é engano — a caixa da palavra inclui a
+ * entrelinha, e o laço precisa sobrar por fora dela para parecer contorno.
+ *
+ * O invólucro existe só para dar em que se medir: sem ele o risco se media pela
+ * LINHA inteira e saía um anel grande demais, com a palavra sentada embaixo. */
+.ave-stacked .stk-solo-wrap {
+  position: relative;
+  display: inline-block;
+}
+
 .ave-stacked .stk-ellipse {
   position: absolute;
-  inset: -18% -12%;
+  left: -10%;
+  top: -22%;
+  width: 120%;
+  height: 150%;
+  overflow: visible;
   pointer-events: none;
+}
+
+/* A espessura no CSS, e não no atributo: com `preserveAspectRatio="none"` a
+   caixa estica sem manter proporção, e um traço em unidades do viewBox
+   esticaria junto — grosso nas laterais, fino em cima. O `non-scaling-stroke`
+   segura a espessura e aqui ela acompanha a escala da legenda. A sombra é a
+   mesma das palavras: sobre parede clara, traço laranja sem sombra some. */
+.ave-stacked .stk-ellipse path {
+  stroke-width: calc(9px * var(--stk-scale));
+  filter: drop-shadow(0 calc(3px * var(--stk-scale)) calc(8px * var(--stk-scale))
+          rgba(0, 0, 0, 0.45));
 }

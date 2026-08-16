@@ -59,14 +59,14 @@ And one thing must be true about the current agent:
 # macOS / Linux
 mkdir -p "$HOME/.claude/skills"
 test -d "$HOME/.claude/skills/ave" || \
-  git clone <REPO> "$HOME/.claude/skills/ave"
+  git clone https://github.com/mpleandro/ave "$HOME/.claude/skills/ave"
 ```
 
 ```powershell
 # Windows (PowerShell)
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills" | Out-Null
 if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ave")) {
-  git clone <REPO> "$env:USERPROFILE\.claude\skills\ave"
+  git clone https://github.com/mpleandro/ave "$env:USERPROFILE\.claude\skills\ave"
 }
 ```
 
