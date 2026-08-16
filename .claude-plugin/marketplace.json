@@ -1,0 +1,11 @@
+{
+  "name": "ave",
+  "owner": { "name": "Marcos Fonseca", "url": "https://github.com/mpleandro" },
+  "plugins": [
+    {
+      "name": "ave",
+      "source": "./",
+      "description": "Editor de vídeo por conversa: transcreve, escolhe as tomadas, corta no silêncio, corrige a cor, e — depois da sua aprovação — monta legendas, gráficos e trilha."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "ave",
+  "description": "Avelin Video Edit — edita vídeo por conversa, em fases: corte limpo e correção de cor primeiro, aprovação, depois legendas, gráficos e trilha. Short-form vertical e longform horizontal.",
+  "version": "0.1.0",
+  "author": { "name": "Marcos Fonseca" },
+  "homepage": "https://github.com/mpleandro/ave",
+  "repository": "https://github.com/mpleandro/ave",
+  "license": "MIT",
+  "keywords": ["video", "edicao", "shorts", "reels", "legendas", "ffmpeg", "hyperframes"]
+}
