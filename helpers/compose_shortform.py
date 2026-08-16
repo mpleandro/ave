@@ -40,13 +40,17 @@ TRACK = {
     "split": 1,      # arte + costura
     "insert": 2,
     "bespoke": 3,
-    "caption": 4,
-    "wordaccent": 5,
-    "hook": 6,       # acima da legenda: os dois disputam a costura
-    "flash": 7,      # por cima de tudo que é imagem
-    "soundtrack": 8,
-    "sfx": 9,
-    "audio": 10,
+    # Grão, vazamento de luz, poeira: cobre a IMAGEM inteira (vídeo, inserções
+    # e gráficos sob medida) e para ANTES da legenda. Sujar o texto é sujar a
+    # única coisa da tela que não pode ficar suja.
+    "overlay": 4,
+    "caption": 5,
+    "wordaccent": 6,
+    "hook": 7,       # acima da legenda: os dois disputam a costura
+    "flash": 8,      # por cima de tudo que é imagem
+    "soundtrack": 9,
+    "sfx": 10,
+    "audio": 11,
 }
 
 
@@ -825,6 +829,50 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     # próprio montado como sub-composição — mecanismo nativo do HyperFrames.
     # Sem arquivo, o gráfico não aparece; avisar é obrigatório, porque a
     # composição renderiza sem erro e a falta só se vê assistindo.
+    # Camadas de textura, da biblioteca em assets/overlays/. Copiadas para o
+    # projeto como os efeitos sonoros já são: a composição resolve mídia a
+    # partir da própria raiz, e um caminho apontando para dentro da skill
+    # quebraria assim que o projeto fosse aberto em outra máquina.
+    ov_blocks, ov_missing = [], []
+    ovdir = SKILL_DIR / "assets" / "overlays"
+    for i, o in enumerate(data.get("overlays") or []):
+        f = str(o.get("file") or "").strip()
+        st_, en = float(o.get("start", 0)), min(float(o.get("end", duration)), duration)
+        if not f or st_ >= duration or en <= st_:
+            continue
+        src = ovdir / f
+        if not src.exists():
+            ov_missing.append(f)
+            continue
+        dest = Path(data.get("_proj", ".")) / "overlays" / f
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime:
+            shutil.copy2(src, dest)
+        blend = (o.get("blend") or "").strip()
+        amt = float(o.get("opacity", 1))
+        # COM blend, a intensidade vai por `brightness`, NUNCA por `opacity`:
+        # opacidade < 1 cria contexto de empilhamento e mata a mistura — a
+        # camada volta como chapa opaca no quadro em que deveria suavizar.
+        # No `screen` o brightness faz o mesmo trabalho (fonte mais escura
+        # contribui menos) sem quebrar nada.
+        css = f"object-fit:{o.get('fit', 'cover')};"
+        if blend:
+            css += f" mix-blend-mode:{blend};"
+            if amt < 1:
+                css += f" filter:brightness({amt:.3f});"
+        elif amt < 1:
+            css += f" opacity:{amt:.3f};"
+        tag = "video" if src.suffix.lower() in (".mp4", ".webm", ".mov") else "img"
+        attrs = ('muted playsinline loop' if tag == "video" else 'alt=""')
+        ov_blocks.append(
+            f'  <{tag} id="ov{i}" class="ave-overlay clip" src="overlays/{f}" {attrs} '
+            f'data-start="{st_:.3f}" data-duration="{en - st_:.3f}" '
+            f'data-track-index="{TRACK["overlay"]}" style="{css}"'
+            + (f'></{tag}>' if tag == "video" else '>'))
+    for f in ov_missing:
+        print(f"  aviso: overlay '{f}' não existe em assets/overlays/ — "
+              f"não vai aparecer", file=sys.stderr)
+
     bg_blocks, bg_missing = [], []
     for i, g in enumerate(data.get("brollGraphics") or []):
         st_, en = float(g.get("start", 0)), min(float(g.get("end", 0)), duration)
@@ -869,6 +917,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         parts.append("  AVE_WORDACCENT.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
         needs_tl = True
     bg_html = "\n".join(bg_blocks)
+    ov_html = "\n".join(ov_blocks)
+    # as camadas cobrem o quadro inteiro; o resto vem do dado, por elemento
+    ov_css = ("<style>.ave-overlay{position:absolute;inset:0;"
+              "width:100%;height:100%;pointer-events:none}</style>"
+              if ov_blocks else "")
     insert_css = '<link rel="stylesheet" href="styles/insert.css">' if insert_blocks else ""
     insert_tag = '<script src="styles/insert.js"></script>' if insert_blocks else ""
     if insert_blocks:
@@ -915,6 +968,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {extra_css}
 {split_css}
 {insert_css}
+{ov_css}
 {wa_css}
 <style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
@@ -943,6 +997,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {insert_html}
 {wa_html}
 {bg_html}
+{ov_html}
 {track_block}
 {sfx_html}
 

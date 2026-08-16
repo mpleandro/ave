@@ -61,3 +61,7 @@ project.md
 
 # Personal, per-creator templates (never committed — each user builds their own)
 templates/
+
+# Overlays pessoais — o pacote e de cada um, e binario grande atrapalha o fork
+assets/overlays/*
+!assets/overlays/README.md
