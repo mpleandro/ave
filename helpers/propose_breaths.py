@@ -45,11 +45,30 @@ EDGE = 0.02          # tolerância ao casar borda de região com borda de trecho
 
 
 def speech_regions(video: Path, start: float, end: float) -> list[tuple[float, float]]:
-    """Regiões de fala acústica dentro de [start, end], via o helper que existe."""
+    """Regiões de fala acústica dentro de [start, end], via o helper que existe.
+
+    **`--min-speech 0` não é detalhe: é o que impede este helper de comer
+    palavra.** O `speech_regions.py` descarta região de fala mais curta que o
+    piso — uma limpeza que faz sentido para quem LÊ o inventário e é veneno
+    para quem procura SILÊNCIO. Numa rajada ("Como que você", "tá? Então,
+    sim,") as palavras têm 0,10–0,14s e as pausas 0,13s: com o piso de 0,15s
+    as palavras somem da lista, as pausas em volta se juntam, e o que sobra é
+    um "silêncio" de 0,6s que nunca existiu. Encurtá-lo para 0,3s apaga a
+    rajada inteira do render — palavras e tudo.
+
+    Medido: numa rajada de 1,21s (fala 0,30 · 0,13 · 0,12 · 0,13 · 0,10 · 0,13
+    · 0,30), o piso padrão devolvia duas regiões e um vão de 0,61s; com o piso
+    zerado devolve as quatro regiões e vãos de 0,13s — abaixo do limiar, nada a
+    encurtar. Foi esse vão fantasma que comeu 11 dos 24 respiros de um take.
+
+    A assimetria manda no valor: uma região de fala a mais só impede um
+    encurtamento (ar sobrando, dois cliques para resolver); uma região a menos
+    apaga fala (refazer o corte). Na dúvida, qualquer som conta como fala.
+    """
     r = subprocess.run(
         [sys.executable, str(HELPERS / "speech_regions.py"), str(video),
          "--start", str(max(0.0, start)), "--end", str(end),
-         "--min-silence", "0.12"],
+         "--min-silence", "0.12", "--min-speech", "0"],
         capture_output=True, text=True,
     )
     out: list[tuple[float, float]] = []

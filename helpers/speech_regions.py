@@ -9,6 +9,18 @@ Snap each segment's START to a speech onset (a region start) and its END to a
 speech offset (a region end), with a tiny lead (~30ms) and a decay-preserving
 trail (~60ms) so the last letter/sibilant is never clipped.
 
+**`--min-speech` is a trap for cut points — keep it near zero when the answer
+feeds a CUT.** It drops speech regions shorter than the floor, which reads as
+tidying and behaves as deletion: a plosive burst ("Go-" in "Gostei") or a
+one-syllable word in a fast burst ("que", "de", "te") is 0.08–0.14s long. Drop
+it and two things break at once — a start snapped to the "next" region begins
+*after* the word, and the silence between the surviving regions swallows the
+words in between, so a caller looking for dead air measures a 0.6s pause that
+never existed. That second failure ate 11 of 24 breaths in one take. The floor
+exists for READING an inventory, where a stray 40ms blip is noise; the default
+is deliberately low so that using it wrong costs a row on screen, not a word in
+the render.
+
 Usage:
     python helpers/speech_regions.py <video>
     python helpers/speech_regions.py <video> --noise -33dB --min-silence 0.10
@@ -46,7 +58,7 @@ def detect_silences(video: Path, noise: str, min_silence: float) -> list[tuple[f
 
 
 def speech_regions(video: Path, noise: str, min_silence: float,
-                   min_speech: float = 0.15) -> list[tuple[float, float]]:
+                   min_speech: float = 0.05) -> list[tuple[float, float]]:
     # total duration
     dur = float(subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -72,7 +84,10 @@ def main() -> None:
     ap.add_argument("video", type=Path)
     ap.add_argument("--noise", default="-33dB", help="silence threshold (default -33dB)")
     ap.add_argument("--min-silence", type=float, default=0.10, help="min silence seconds (default 0.10)")
-    ap.add_argument("--min-speech", type=float, default=0.15, help="drop speech regions shorter than this")
+    # 0.05 e não 0.15: ver o aviso no topo. Uma plosiva ou uma palavra de uma
+    # sílaba tem 0,08–0,14s, e o piso antigo as descartava — o que fazia esta
+    # ferramenta MENTIR justamente sobre os pontos onde ela é usada para cortar.
+    ap.add_argument("--min-speech", type=float, default=0.05, help="drop speech regions shorter than this")
     ap.add_argument("--start", type=float, default=0.0, help="only show regions overlapping [start,end]")
     ap.add_argument("--end", type=float, default=None)
     args = ap.parse_args()
