@@ -1,0 +1,95 @@
+/* Estilo de legenda: POP — o estouro medido do CapCut.
+ *
+ * Fonte ÚNICA, lida pela prévia do editor e pela composição HyperFrames, como
+ * o karaokê. Autorado em referência de 1080px e multiplicado por `--cap-scale`.
+ *
+ * DE ONDE VÊM OS NÚMEROS: extraídos dos pacotes de animação do CapCut
+ * instalado (`helpers/capcut_captions.py`), do keyframe `ADBE_Scale_0_1`:
+ *   0 → 215ms   escala   0% → 120%   cubic-bezier(0.1667, 0.1667, 0.6667, 1)
+ *   215 → 403ms escala 120% → 100%   cubic-bezier(0.0507, 0.3113, 0.6667, 1)
+ * São os PARÂMETROS, medidos de um arquivo na máquina do usuário — o desenho é
+ * nosso, em CSS. Nenhuma fonte proprietária nem código de terceiro entrou aqui.
+ *
+ * TRÊS NOMES, UMA CURVA. "Multiline Combo", "Multi-Line" e "Bounce Out" têm
+ * keyframes idênticos byte a byte; foi verificado. O que os separa é o
+ * AGRUPAMENTO — o que estoura junto: cada palavra, cada linha, ou o bloco
+ * inteiro. Por isso um só arquivo com `--pop-group` em vez de três cópias.
+ */
+
+.ave-pop {
+  --cap-color: #fff;
+  --cap-accent: #ff5200;
+  --cap-scale: 1;
+  --cap-size: 76;
+  --cap-gap: 18;
+  --cap-bottom: 430;
+  --cap-lh: 1.08;
+  /* a inclinação que todos os modelos de legenda do CapCut trazem, e que é o
+     que dá a leitura de "legenda de Reels" — medida em sete estilos deles */
+  --cap-skew: 10;
+  /* a família escolhida na aba Estilo; o padrão é o de fábrica do estilo */
+  --cap-family: 'Poppins', sans-serif;
+
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ave-pop .ave-cap-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--cap-bottom) * var(--cap-scale) * 1px);
+
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+
+  font-family: var(--cap-family);
+  font-weight: 900;
+  color: var(--cap-color);
+  line-height: var(--cap-lh);
+  letter-spacing: calc(-1px * var(--cap-scale));
+  font-size: calc(var(--cap-size) * var(--cap-scale) * 1px);
+  text-transform: uppercase;
+
+  /* Contorno grafite grosso, não preto puro: medido em #1A1A1A nos modelos do
+     CapCut. Preto puro sobre imagem escura vira um buraco; o grafite mantém a
+     letra descolada sem virar borda dura. */
+  -webkit-text-stroke: calc(9px * var(--cap-scale)) #1a1a1a;
+  paint-order: stroke fill;
+  text-shadow: 0 calc(4px * var(--cap-scale)) calc(18px * var(--cap-scale))
+    rgba(0, 0, 0, 0.5);
+}
+
+.ave-pop .ave-cap-line span {
+  display: inline-block;
+  margin-right: calc(var(--cap-gap) * var(--cap-scale) * 1px);
+  /* O ESTOURO PRECISA DE ORIGEM. Sem `transform-origin: center`, a escala 120%
+     empurra a palavra para a direita em vez de inflá-la no lugar, e a linha
+     inteira treme a cada entrada. */
+  transform-origin: 50% 60%;
+  transform: skewX(calc(var(--cap-skew) * -0.1deg));
+  will-change: transform, opacity;
+}
+
+.ave-pop .ave-cap-line span:last-child { margin-right: 0; }
+
+/* A palavra em destaque. O CapCut chama de keyword e vários modelos dele a
+   pintam; aqui ela usa o mesmo accent do resto da identidade. */
+.ave-pop .ave-cap-line span.hi { color: var(--cap-accent); }
+
+/* Agrupamento por LINHA ou por BLOCO: o que estoura é o contêiner, e as
+   palavras andam juntas. Declarado por classe e não por variável porque muda
+   QUEM tem a origem da transformação, não só um número. */
+.ave-pop.grupo-linha .ave-cap-line,
+.ave-pop.grupo-bloco .ave-cap-line {
+  transform-origin: 50% 60%;
+  will-change: transform, opacity;
+}
+
+.ave-pop.grupo-linha .ave-cap-line span,
+.ave-pop.grupo-bloco .ave-cap-line span {
+  transform: skewX(calc(var(--cap-skew) * -0.1deg));
+}

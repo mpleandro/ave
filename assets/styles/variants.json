@@ -126,9 +126,81 @@
       "minSoloMs": 340,
       "orange": "#ff5200",
       "needsCues": true
+    },
+    "pop": {
+      "animated": true,
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@900",
+      "weight": 900,
+      "size": 76,
+      "maxWords": 4,
+      "lines": 1,
+      "sx": 1,
+      "sy": 1,
+      "tracking": -1,
+      "maxW": 880,
+      "_note": "Bounce Out — cada PALAVRA estoura na vez dela.",
+      "css": "pop",
+      "js": "pop",
+      "grupo": "palavra"
+    },
+    "popLinha": {
+      "animated": true,
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@900",
+      "weight": 900,
+      "size": 76,
+      "maxWords": 5,
+      "lines": 1,
+      "sx": 1,
+      "sy": 1,
+      "tracking": -1,
+      "maxW": 880,
+      "_note": "Multi-Line — a LINHA inteira estoura junto.",
+      "css": "pop",
+      "js": "pop",
+      "grupo": "linha"
+    },
+    "popBloco": {
+      "animated": true,
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@900",
+      "weight": 900,
+      "size": 76,
+      "maxWords": 6,
+      "lines": 2,
+      "sx": 1,
+      "sy": 1,
+      "tracking": -1,
+      "maxW": 880,
+      "_note": "Multiline Combo — o BLOCO todo estoura junto.",
+      "css": "pop",
+      "js": "pop",
+      "grupo": "bloco"
+    },
+    "revelar": {
+      "animated": true,
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@900",
+      "weight": 900,
+      "size": 72,
+      "maxWords": 6,
+      "lines": 2,
+      "sx": 1,
+      "sy": 1,
+      "tracking": -1,
+      "maxW": 880,
+      "_note": "Multiline — varredura progressiva, 1733ms.",
+      "css": "revelar",
+      "js": "revelar",
+      "grupo": "varredura"
     }
   },
-  "_headlines_readme": "Geometria das headlines. `weights` é [linha1, linha2]; `cap` é TETO de corpo, não corpo fixo — a headline é sempre duas linhas ajustadas a `safeW` medindo o texto real. `upper` diz se o estilo escreve em caixa alta.",
+  "_headlines_readme": "Números de CADA layout de headline, lidos pela prévia do editor E pelo compositor. `paint` diz quem recebe a cor PRINCIPAL e quem recebe o DESTAQUE — por linha, por palavra ou no fundo. `gradient` é regra do MODELO, não escolha do usuário: quando existe, a cor escolhida vira a parada de cima e a de baixo é DERIVADA dela (escurecendo ou clareando por `amount`), para o usuário escolher uma cor e receber um degradê coerente em vez de ter de casar duas pontas na mão. `sizes` por linha (multiplicadores do corpo ajustado) é o que permite layouts com uma linha herói — sem ele toda headline é um bloco de linhas do mesmo tamanho.",
   "headlines": {
     "outline": {
       "weights": [
@@ -141,7 +213,12 @@
       "top": 330,
       "upper": false,
       "stroke": 12,
-      "usesAccent": false
+      "usesAccent": false,
+      "paint": {
+        "lines": "main"
+      },
+      "gradient": null,
+      "align": "center"
     },
     "card": {
       "weights": [
@@ -154,7 +231,13 @@
       "top": 210,
       "upper": true,
       "stroke": 0,
-      "usesAccent": false
+      "usesAccent": false,
+      "paint": {
+        "lines": "main",
+        "box": "card"
+      },
+      "gradient": null,
+      "align": "center"
     },
     "realce": {
       "weights": [
@@ -167,7 +250,13 @@
       "top": 230,
       "upper": false,
       "stroke": 0,
-      "usesAccent": true
+      "usesAccent": true,
+      "paint": {
+        "lines": "main",
+        "lineBox": "accent"
+      },
+      "gradient": null,
+      "align": "center"
     },
     "misto": {
       "weights": [
@@ -180,7 +269,208 @@
       "top": 230,
       "upper": false,
       "stroke": 0,
-      "usesAccent": true
+      "usesAccent": true,
+      "paint": {
+        "lines": [
+          "main",
+          "accent"
+        ]
+      },
+      "gradient": null,
+      "align": "center"
+    },
+    "bloco": {
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 136,
+      "safeW": 960,
+      "lh": 0.84,
+      "top": 190,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "align": "center",
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "_note": "Linhas alternando principal/destaque com entrelinha esmagada — o bloco de texto vira uma massa só. Entrelinha 0.84 faz as CAIXAS das linhas se tocarem sem os glifos se tocarem; é o mesmo content_overlap tolerado do misto, e pela mesma razão.",
+      "paint": {
+        "lines": [
+          "main",
+          "accent"
+        ],
+        "cycle": true
+      },
+      "upperLines": null
+    },
+    "etiqueta": {
+      "weights": [
+        800,
+        900
+      ],
+      "cap": 120,
+      "safeW": 930,
+      "lh": 0.92,
+      "top": 200,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "align": "center",
+      "gradient": null,
+      "sizes": [
+        0.34,
+        1.0
+      ],
+      "fontRole": null,
+      "_note": "Uma etiqueta pequena em caixa alta sobre a frase grande. A etiqueta é a PRIMEIRA linha do texto — quem escreve decide o que é rótulo pondo a primeira quebra ali.",
+      "paint": {
+        "lines": "main",
+        "tagBox": "accent",
+        "tag": 0
+      },
+      "upperLines": null
+    },
+    "manuscrito": {
+      "weights": [
+        400,
+        900
+      ],
+      "cap": 130,
+      "safeW": 940,
+      "lh": 1.0,
+      "top": 200,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "align": "center",
+      "gradient": null,
+      "sizes": [
+        0.78,
+        1.0
+      ],
+      "fontRole": [
+        "accent",
+        "main"
+      ],
+      "_note": "Manuscrita pequena por cima, caixa alta pesada embaixo. É o layout dos dois exemplos de referência ('Isso é um GANCHO', 'Youtube SHORTS') e o ÚNICO que usa as duas famílias ao mesmo tempo — a primeira linha na fonte de DESTAQUE, a segunda na PRINCIPAL. É o que justifica o seletor de fonte ser um par.",
+      "paint": {
+        "lines": [
+          "accent",
+          "main"
+        ],
+        "upperLines": [
+          1
+        ]
+      },
+      "upperLines": "rest"
+    },
+    "gigante": {
+      "weights": [
+        700,
+        900
+      ],
+      "cap": 170,
+      "safeW": 1000,
+      "lh": 0.9,
+      "top": 210,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "align": "center",
+      "gradient": null,
+      "sizes": [
+        0.38,
+        1.0
+      ],
+      "fontRole": null,
+      "_note": "A última linha é UMA palavra ocupando a largura inteira; o que vem antes fica pequeno em cima. O corpo da linha herói não sai do ajuste comum — ela é medida sozinha contra a largura segura, senão a palavra curta fica pequena e a longa estoura.",
+      "heroLast": true,
+      "paint": {
+        "lines": [
+          "main",
+          "accent"
+        ]
+      },
+      "upperLines": "last"
+    },
+    "relevo": {
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 140,
+      "safeW": 950,
+      "lh": 1.12,
+      "top": 200,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "align": "center",
+      "gradient": {
+        "to": "dark",
+        "amount": 0.34
+      },
+      "sizes": null,
+      "fontRole": null,
+      "_note": "Caixa alta pesada com extrusão dura no destaque — profundidade sólida, não sombra borrada. A extrusão é desenhada por text-shadow empilhado, porque um pseudo-elemento duplicado perderia o degradê do preenchimento.",
+      "paint": {
+        "lines": "main",
+        "extrude": "accent"
+      },
+      "upperLines": null
+    },
+    "grifo": {
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 104,
+      "safeW": 900,
+      "lh": 1.16,
+      "top": 220,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "align": "center",
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "_note": "Cada PALAVRA com sua própria tarja, não a linha inteira como o realce. A diferença aparece em linha de larguras desiguais: o realce vira dois retângulos, o grifo acompanha o texto palavra a palavra.",
+      "paint": {
+        "lines": "main",
+        "wordBox": "accent"
+      },
+      "upperLines": null
+    },
+    "contorno_duplo": {
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 124,
+      "safeW": 930,
+      "lh": 0.92,
+      "top": 200,
+      "upper": true,
+      "stroke": 9,
+      "usesAccent": true,
+      "align": "center",
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "_note": "Duas linhas com pesos opostos: a de cima vazada (só contorno) e a de baixo cheia. O vazado deixa a imagem passar, que é o que impede a headline de virar uma placa em cima do rosto.",
+      "paint": {
+        "lines": [
+          "main",
+          "accent"
+        ],
+        "hollowLines": [
+          0
+        ]
+      },
+      "upperLines": null
     }
   },
   "headlineFamily": "Poppins",
@@ -310,5 +600,261 @@
     "w": 780,
     "h": 500,
     "top": 90
-  }
+  },
+  "headlineAccentFamily": "Caveat",
+  "_fonts_readme": "As duas famílias da headline. A PRINCIPAL desenha a frase; a de DESTAQUE só aparece nos layouts que declaram `fontRole` (hoje só o manuscrito). Ambas são escolhidas pelo usuário na aba Estilo a partir do catálogo do Google Fonts, e o `gfont` é MONTADO a partir delas — nunca fixo, senão trocar a fonte no editor renderiza com a fonte antiga sem erro nenhum.",
+  "_upper_readme": "QUEM PÕE EM CAIXA ALTA É O CÓDIGO, NUNCA O CSS. `text-transform` aplica DEPOIS da medição: a prévia e o compositor mediriam a minúscula e o navegador desenharia a maiúscula, que é mais larga — e o texto estoura o quadro sem erro nenhum. Foi exatamente o que aconteceu com o manuscrito e o gigante na primeira montagem. `upper` vale para o bloco todo; `upperLines` aceita 'last' ou 'rest' para os layouts com uma linha herói.",
+  "_gfonts_readme": "Catálogo CURADO do Google Fonts — não a API inteira, por duas razões e a segunda é a que obriga: mil e quinhentas famílias não se escolhem numa lista, e a API v2 responde ERRO (sem CSS nenhum) quando se pede um peso que a família não tem. Uma fonte de peso único como a Anton pedida em 900 derrubaria o carregamento e a headline sairia na fonte de sistema, com a largura toda errada. Por isso `w` traz os pesos que EXISTEM, e o peso pedido pelo layout é grudado no mais próximo deles.",
+  "gfonts": [
+    {
+      "n": "Poppins",
+      "w": [
+        400,
+        500,
+        600,
+        700,
+        800,
+        900
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Montserrat",
+      "w": [
+        400,
+        500,
+        600,
+        700,
+        800,
+        900
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Inter",
+      "w": [
+        400,
+        500,
+        600,
+        700,
+        800,
+        900
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Rubik",
+      "w": [
+        400,
+        500,
+        600,
+        700,
+        800,
+        900
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Oswald",
+      "w": [
+        400,
+        500,
+        600,
+        700
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Barlow Condensed",
+      "w": [
+        400,
+        500,
+        600,
+        700,
+        800,
+        900
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Teko",
+      "w": [
+        400,
+        500,
+        600,
+        700
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Anton",
+      "w": [
+        400
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Archivo Black",
+      "w": [
+        400
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Bebas Neue",
+      "w": [
+        400
+      ],
+      "k": "display",
+      "file": "bebas-neue-400-normal.ttf"
+    },
+    {
+      "n": "Fjalla One",
+      "w": [
+        400
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Titan One",
+      "w": [
+        400
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Passion One",
+      "w": [
+        400,
+        700,
+        900
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Alfa Slab One",
+      "w": [
+        400
+      ],
+      "k": "display"
+    },
+    {
+      "n": "Playfair Display",
+      "w": [
+        400,
+        500,
+        600,
+        700,
+        800,
+        900
+      ],
+      "k": "serif"
+    },
+    {
+      "n": "Libre Baskerville",
+      "w": [
+        400,
+        700
+      ],
+      "k": "serif"
+    },
+    {
+      "n": "Lora",
+      "w": [
+        400,
+        500,
+        600,
+        700
+      ],
+      "k": "serif"
+    },
+    {
+      "n": "Merriweather",
+      "w": [
+        300,
+        400,
+        700,
+        900
+      ],
+      "k": "serif"
+    },
+    {
+      "n": "Bitter",
+      "w": [
+        400,
+        500,
+        600,
+        700,
+        800,
+        900
+      ],
+      "k": "serif"
+    },
+    {
+      "n": "Caveat",
+      "w": [
+        400,
+        500,
+        600,
+        700
+      ],
+      "k": "manuscrita"
+    },
+    {
+      "n": "Dancing Script",
+      "w": [
+        400,
+        500,
+        600,
+        700
+      ],
+      "k": "manuscrita"
+    },
+    {
+      "n": "Permanent Marker",
+      "w": [
+        400
+      ],
+      "k": "manuscrita"
+    },
+    {
+      "n": "Shadows Into Light",
+      "w": [
+        400
+      ],
+      "k": "manuscrita"
+    },
+    {
+      "n": "Kalam",
+      "w": [
+        300,
+        400,
+        700
+      ],
+      "k": "manuscrita"
+    },
+    {
+      "n": "Satisfy",
+      "w": [
+        400
+      ],
+      "k": "manuscrita"
+    },
+    {
+      "n": "Pacifico",
+      "w": [
+        400
+      ],
+      "k": "manuscrita"
+    },
+    {
+      "n": "Gloria Hallelujah",
+      "w": [
+        400
+      ],
+      "k": "manuscrita"
+    }
+  ],
+  "_bundled_readme": "Família com `file` NÃO vem do Google: o arquivo viaja em assets/styles/fonts/ e a composição emite um @font-face apontando para styles/fonts/<file>. Existe porque nem toda família do catálogo do Google é servida pelo caminho que o cache do HyperFrames usa, e a falha aparecia só na composição — a prévia funcionava, porque o navegador carrega direto do Google.",
+  "_capcut_readme": "Estilos MEDIDOS dos pacotes do CapCut instalado (helpers/capcut_captions.py). Os NÚMEROS são leitura de arquivo, não escolha: o estouro é 0→120%→100% em 403ms com dois beziers, e a varredura é 0→100% em 1733ms com um. TRÊS NOMES DO CAPCUT, UMA CURVA: 'Multiline Combo', 'Multi-Line' e 'Bounce Out' têm keyframes idênticos byte a byte — verificado por diff. O que os separa é o AGRUPAMENTO (`grupo`), ou seja o que estoura junto. Por isso três entradas compartilham pop.css/pop.js em vez de existirem três cópias."
 }

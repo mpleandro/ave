@@ -158,17 +158,117 @@ Never hand-edit `hyperframes/index.html` — it is generated on every compose an
 your edit is gone at the next run. Bespoke graphics go in
 `<projeto>/compositions/<id>.html`, mounted as sub-compositions.
 
-## Headline styles — always two lines
+## Headline layouts — N linhas, corpo ajustado
 
-Four looks via `hook.style`, picked by the user on the Estilo tab: **`outline`**
-(default, white + thick black stroke), **`card`** (dark rounded card, UPPERCASE,
-optional logo row), **`realce`** (each line on a solid accent marker block),
-**`misto`** (line 1 light white, line 2 heavy accent).
+Onze looks via `hook.style`, escolhidos na aba Estilo. Os quatro originais:
+**`outline`** (branco + traço preto grosso), **`card`** (cartão escuro
+arredondado, CAIXA ALTA), **`realce`** (cada linha numa tarja sólida de
+destaque), **`misto`** (linha 1 leve, linha 2 pesada no destaque). Os sete
+novos:
+
+| id | o que é |
+|---|---|
+| `bloco` | linhas em caixa alta ALTERNANDO principal/destaque, entrelinha esmagada — o texto vira massa sólida |
+| `etiqueta` | uma tarja pequena de rótulo (a PRIMEIRA linha) sobre a frase grande |
+| `manuscrito` | manuscrita por cima encaixando na caixa alta pesada. **O único que usa as DUAS famílias** — é ele que justifica o par |
+| `gigante` | a última linha é uma palavra ocupando a largura inteira; o resto pequeno em cima |
+| `relevo` | caixa alta com extrusão DURA no destaque; preenchimento em degradê |
+| `grifo` | cada PALAVRA com sua tarja (o `realce` faz por linha) |
+| `contorno_duplo` | linha vazada em cima, cheia embaixo — o vazado deixa a imagem passar |
+
+### A quebra: o `/` manda
+
+**" / " no `hook.text` quebra a linha ali**, e define quantas linhas existem.
+Sem barra, a divisão em DUAS é equilibrada pela largura MEDIDA. Foi o que
+destravou os layouts de três linhas e os de linha herói: `sizes` dá o corpo por
+linha, e `heroLast` faz a última ser medida sozinha contra a largura inteira —
+no ajuste conjunto uma palavra curta ficaria pequena e uma longa puxaria todas
+as outras para baixo com ela.
+
+**Caixa alta é do CÓDIGO (`upper`/`upperLines`), nunca do CSS.**
+`text-transform` aplica depois da medição: mede-se a minúscula e desenha-se a
+maiúscula, que é mais larga. O `manuscrito` e o `gigante` estouraram o quadro
+exatamente assim, sem erro nenhum, antes de a regra existir.
+
+### As duas fontes (`hook.fontMain` / `hook.fontAccent`)
+
+Catálogo curado do Google Fonts em `variants.json` → `gfonts`, com os pesos que
+cada família TEM. Duas armadilhas, ambas silenciosas:
+
+- **Peso inexistente derruba a folha inteira.** A API v2 devolve erro em vez de
+  CSS; a headline sai na fonte de sistema com a largura toda diferente da
+  medida. O peso pedido pelo layout é grudado no mais próximo que existe.
+- **Família EMPACOTADA** (`gfonts[].file` — hoje a Bebas Neue, que o cache do
+  HyperFrames não serve) fica FORA da consulta ao Google e entra por
+  `@font-face` apontando para `styles/fonts/<file>`. Sem isso o render
+  dependeria de a fonte estar instalada na máquina de quem renderiza.
+
+- **Família LOCAL** (`k == "local"`) é uma fonte instalada na máquina, indexada
+  por `local_fonts.py`. É o caminho para a tipografia da marca do usuário. Fica
+  fora da consulta ao Google pelo mesmo motivo da empacotada, e o render a
+  resolve pelo nome. **Um projeto com fonte local não sai igual em outra
+  máquina** — o arquivo não viaja no `edit-data.json`. Para algo que precise
+  sobreviver à troca de computador: catálogo do Google, ou empacote o arquivo.
+
+Só os layouts com `fontRole` desenham a segunda família.
+
+### As duas cores (`hook.color` + `hook.accent`)
+
+`color` é a principal, `accent` o destaque; cada layout declara em `paint` quem
+recebe qual. **O degradê é regra do MODELO, não escolha do usuário**: onde
+existe (`gradient`), a cor escolhida é a parada de cima e a de baixo é DERIVADA
+dela por `amount`. Pedir as duas pontas devolveria degradê sujo com o dobro de
+perguntas.
+
+A marca do usuário vive em `~/.avelin/brand.json`, fora do projeto — escreva ali
+quando descobrir cor/fonte da pessoa por outro caminho.
+
+## Estilos de legenda MEDIDOS do CapCut
+
+Quatro estilos cujos números não foram escolhidos: foram extraídos dos pacotes
+do CapCut instalado por `helpers/capcut_captions.py`.
+
+| id | efeito de origem | curva |
+|---|---|---|
+| `popBloco` | Multiline Combo | escala 0→120%→100% em 403 ms |
+| `popLinha` | Multi-Line | *a mesma* |
+| `pop` | Bounce Out | *a mesma* |
+| `revelar` | Multiline | varredura 0→100% em 1733 ms |
+
+**Os três primeiros têm keyframes IDÊNTICOS byte a byte** — verificado por diff
+dos pacotes. A diferença não está neles: está no AGRUPAMENTO, ou seja no que
+estoura junto (palavra, linha, bloco). Por isso um `pop.css`/`pop.js` só, com o
+grupo como classe (`grupo-palavra` etc.), e não três cópias.
+
+Dois defeitos que só apareceram no render, e que voltam se alguém reescrever:
+
+- **`Text_Percent_Start` é porcentagem de CARACTERES em ordem de leitura**, não
+  posição na tela. Uma máscara única sobre o bloco corta as duas linhas no
+  mesmo x, e meia palavra da linha de baixo aparece antes de a de cima
+  terminar. A máscara é por palavra, com deslocamento em caracteres.
+- **A pena do degradê vem ATRÁS da frente da varredura.** Adiante dela, em 0%
+  sobra um fio da palavra ainda oculta — e como traço e sombra transbordam a
+  caixa, o fio vira um risco solto ao lado do texto.
+
+**Três lugares por estilo, e esquecer um é silencioso:**
+
+| onde | o quê | sintoma se faltar |
+|---|---|---|
+| `STYLE_CATALOG.captions` + `PORTED` (app.js) | o cartão | aparece como "EM BREVE" |
+| `CAP_BUILDERS` (app.js) | a prévia animada do cartão | cartão vazio |
+| **`CAP_CSS` + um ramo em `renderLive`** | a legenda AO VIVO sobre o vídeo | **texto cru, branco, no topo** |
+| `compose_shortform.py` | o render | escolhe e não sai no vídeo |
+
+O terceiro é o que mais escapa, porque não dá erro nenhum: `liveCss(undefined)`
+sai calado e o estilo cai no ramo genérico de legenda estática.
+
+Não portado: **Zoom Switch**. É o único num formato diferente (binário do Lynx
+Studio, `.lsanim`, com aberração cromática e desfoque gaussiano). Aproximar é
+possível; entregar a aproximação com o nome do original, não.
 
 ### The accent colour (`accent` in preview_style.json)
 
-`realce`, `misto` and the `stacked` caption are the only things that paint an
-accent; the default is `#ff5200`. The user picks it on the Estilo tab and it
+O accent é o mesmo da headline e da legenda; o padrão é `#ff5200`. The user picks it on the Estilo tab and it
 arrives as a hex — set it on **`hook.accent`** and **`captions.accent`** in
 edit-data.json so headline and caption stay the same colour. `preview_style.json`
 also carries `accentUsed`: when it is `false`, the picked styles have no accent
@@ -178,10 +278,10 @@ Hardcoding `#ff5200` anywhere in the template re-breaks this — the preview wil
 show the user's colour and the render will show orange, which is worse than not
 offering the choice.
 
-**Author `hook.text` as one plain sentence.** Whatever you write — `text`, or a
-hand-broken `lines[]` — is joined and re-broken into exactly TWO lines balanced by
-MEASURED width, then the size is fitted to the widest one. A third line shrinks
-the type and costs the glance the headline exists to win.
+**Escreva `hook.text` como UMA frase, e use " / " onde quiser a quebra.** Sem
+barra, o texto é redividido em duas linhas equilibradas pela largura MEDIDA e o
+corpo é ajustado à mais larga. Três linhas encolhem o tipo — o que é uma escolha
+legítima em `bloco` e `grifo`, e um erro nos layouts de duas.
 
 - The break is measured, not counted: "É assim que vai" (4 words) and "ficar a sua
   headline" (3 words) are nearly the same width. Counting words breaks it wrong.

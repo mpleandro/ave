@@ -18,6 +18,23 @@
        que vai sair no render. -->
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Poppins:ital,wght@0,400;0,600;0,700;0,800;0,900;1,900&family=Playfair+Display:ital,wght@1,900&family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css">
+<!-- A FOLHA DO RENDER, servida de /styles/ — a MESMA que o compositor usa.
+     As prévias de headline emitem `.ave-hook` exatamente como a composição, e
+     sem esta linha elas saem sem folha nenhuma: onze layouts renderizaram
+     brancos e idênticos, sem traço, sem cartão, sem tarja, e o grifo colou as
+     palavras umas nas outras. O editor tinha uma CÓPIA do visual em app.css
+     (.hl-demo/.hl-outline/…) e era ela que podia divergir do render na
+     primeira correção feita de um lado só — que é o defeito que carregar a
+     folha de verdade elimina. -->
+<link rel="stylesheet" href="/styles/headline.css">
+<!-- Os estilos de legenda MEDIDOS do CapCut. Mesma razão do headline.css: a
+     prévia desenha com a folha do render, não com uma cópia. Os `.js` trazem os
+     TEMPOS (beziers e durações extraídos dos pacotes), para a prévia animar
+     exatamente o que a composição vai animar. -->
+<link rel="stylesheet" href="/styles/pop.css">
+<link rel="stylesheet" href="/styles/revelar.css">
+<script src="/styles/pop.js"></script>
+<script src="/styles/revelar.js"></script>
 </head>
 <body>
 
@@ -27,6 +44,9 @@
     <div id="projectName" class="project-name">—</div>
   </div>
   <div class="head-actions">
+    <!-- A VOLTA. Sem ela o projeto aberto vira um beco: dava para escolher um,
+         nunca para largá-lo, e trocar de trabalho exigia matar o servidor. -->
+    <button id="homeBtn" class="btn ghost icon hidden" title="Trocar de projeto">⌂</button>
     <span id="savedPill" class="pill saved hidden">✓ enviado ao Claude</span>
     <!-- Exportar não passa pela IA: o arquivo já existe no disco, e pedir a um
          agente para copiá-lo seria gastar uma conversa inteira num download. -->
@@ -55,6 +75,67 @@
 </div>
 
 <main>
+  <!-- A TELA SEM PROJETO.
+       O editor abre aqui, sempre. Antes ele abria dentro da pasta que quem
+       subiu o processo tivesse passado na linha de comando — o que, na
+       prática, era o último projeto de alguém: um vídeo ENTREGUE aparecendo
+       como se fosse o trabalho da vez, sem nenhum jeito de fechá-lo.
+
+       A dropzone é a entrada principal e não um enfeite: soltar o vídeo é
+       como um editor começa. O navegador não entrega o CAMINHO do arquivo
+       solto (é fronteira de segurança, não falta de API), então o servidor
+       procura o par nome+tamanho no disco e usa o arquivo onde ele está — e
+       só sobe os bytes quando não acha. -->
+  <section id="home" class="home hidden">
+    <div class="home-inner">
+      <!-- Sem logo aqui: o cabeçalho já traz um, cem pixels acima. Dois logos
+           empilhados na mesma tela leem como erro de montagem. -->
+      <div id="dropzone" class="dropzone" tabindex="0" role="button"
+           aria-label="Solte um vídeo ou escolha uma pasta">
+        <div class="dz-icon">↓</div>
+        <div class="dz-title">Solte seu vídeo aqui</div>
+        <div class="dz-sub">ou <button id="pickFile" class="linkish">escolha um arquivo</button>
+          · <button id="pickFolder" class="linkish">selecione uma pasta</button></div>
+        <input id="fileInput" type="file" accept="video/*" hidden>
+        <!-- A barra só aparece quando o arquivo precisou MESMO subir. Numa
+             transferência por loopback de 400 MB ela dura segundos, e sem ela
+             esses segundos são indistinguíveis de travamento. -->
+        <div id="dzProg" class="dz-prog hidden"><div id="dzProgFill" class="dz-prog-fill"></div></div>
+        <div id="dzMsg" class="dz-msg"></div>
+      </div>
+
+      <div id="homeLists" class="home-lists">
+        <section class="home-col">
+          <h3>Recentes</h3>
+          <div id="recentList" class="proj-list"></div>
+        </section>
+        <section class="home-col">
+          <h3>Encontrados no disco</h3>
+          <div id="foundList" class="proj-list"></div>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- Navegador de pastas. Existe porque `<input webkitdirectory>` entrega os
+       nomes dos arquivos e ESCONDE onde eles estão — e o caminho absoluto é
+       exatamente o que o servidor precisa. Então quem lista o disco é o lado
+       de lá. -->
+  <div id="browser" class="modal hidden">
+    <div class="modal-card glass">
+      <header class="mod-head">
+        <button id="brUp" class="btn ghost icon" title="Subir um nível">↑</button>
+        <div id="brPath" class="br-path"></div>
+        <button id="brClose" class="btn ghost icon" title="Fechar">✕</button>
+      </header>
+      <div id="brList" class="br-list"></div>
+      <footer class="mod-foot">
+        <span id="brHint" class="br-hint"></span>
+        <button id="brOpen" class="btn primary">Abrir esta pasta</button>
+      </footer>
+    </div>
+  </div>
+
   <section id="emptyState" class="empty glass hidden">
     <div class="empty-inner">
       <div class="empty-icon">🎬</div>

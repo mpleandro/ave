@@ -1,0 +1,101 @@
+/* Estilo de legenda: REVELAR — a varredura progressiva medida do CapCut.
+ *
+ * Fonte ÚNICA, lida pela prévia do editor e pela composição, como o karaokê.
+ * Autorado em referência de 1080px e multiplicado por `--cap-scale`.
+ *
+ * DE ONDE VÊM OS NÚMEROS: keyframe `ADBE_Text_Percent_Start_0_0` do pacote de
+ * animação do CapCut instalado (`helpers/capcut_captions.py`):
+ *   0 → 67ms      0%   (espera)
+ *   67 → 1800ms   0% → 100%   cubic-bezier(0.0619, 0, 0.2194, 0.8172)
+ *   1800 → 2200ms 100% (sustenta)
+ * A curva chega a 82% do valor em 22% do tempo: arranca rápido e alonga a
+ * cauda. É isso que faz a leitura acompanhar o locutor em vez de correr na
+ * frente dele — trocar por um ease-out genérico perde exatamente esse efeito.
+ *
+ * COMO A VARREDURA É FEITA: uma máscara em degradê sobre o texto, e não uma
+ * segunda cópia por cima. Duas cópias sobrepostas desalinham em qualquer
+ * reflow (e a legenda RE-QUEBRA conforme a largura), deixando uma franja
+ * fantasma na borda; a máscara acompanha o texto porque É o texto.
+ */
+
+.ave-rev {
+  --cap-color: #fff;
+  --cap-accent: #ff5200;
+  --cap-scale: 1;
+  --cap-size: 76;
+  --cap-bottom: 430;
+  --cap-lh: 1.12;
+  --cap-skew: 10;
+  /* a família escolhida na aba Estilo; o padrão é o de fábrica do estilo */
+  --cap-family: 'Poppins', sans-serif;
+  /* 0 → 1: quanto do texto já foi revelado. O JS escreve; o CSS obedece. */
+  --rev: 0;
+  /* a borda macia da varredura, em fração da largura — sem ela o corte é uma
+     guilhotina e lê como falha de render, não como revelação */
+  --rev-feather: 0.06;
+
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ave-rev .ave-cap-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--cap-bottom) * var(--cap-scale) * 1px);
+
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+
+  font-family: var(--cap-family);
+  font-weight: 900;
+  color: var(--cap-color);
+  line-height: var(--cap-lh);
+  letter-spacing: calc(-1px * var(--cap-scale));
+  font-size: calc(var(--cap-size) * var(--cap-scale) * 1px);
+  text-transform: uppercase;
+
+  -webkit-text-stroke: calc(8px * var(--cap-scale)) #1a1a1a;
+  paint-order: stroke fill;
+  text-shadow: 0 calc(4px * var(--cap-scale)) calc(18px * var(--cap-scale))
+    rgba(0, 0, 0, 0.5);
+}
+
+.ave-rev .ave-cap-line span {
+  display: inline-block;
+  margin-right: calc(18px * var(--cap-scale));
+  transform: skewX(calc(var(--cap-skew) * -0.1deg));
+}
+
+.ave-rev .ave-cap-line span:last-child { margin-right: 0; }
+
+/* A MÁSCARA É POR PALAVRA, não sobre o bloco.
+   `Text_Percent_Start` é porcentagem de CARACTERES em ordem de leitura, e uma
+   máscara única sobre o bloco revela por POSIÇÃO NA TELA: numa legenda de duas
+   linhas ela cortava as duas no mesmo x, deixando meia palavra visível na
+   linha de baixo antes de a de cima terminar. Cada palavra recebe a fração que
+   lhe cabe (`--rev-w`), e a ordem volta a ser a da leitura. */
+.ave-rev .ave-cap-line span {
+  --rev-w: 0;
+  /* A PENA VEM ATRÁS DA FRENTE DA VARREDURA, não à frente dela.
+     Com a pena adiante (`rev` → `rev + pena`), em `--rev-w: 0` a faixa opaca
+     começava exatamente em 0% e a transparência só chegava aos 6% — sobrava um
+     fio da palavra ainda não revelada, e como o traço e a sombra transbordam a
+     caixa, o fio aparecia como um risco solto ao lado do texto. Terminando a
+     opacidade ANTES de `rev`, o zero é zero de verdade. */
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 calc((var(--rev-w) - var(--rev-feather)) * 100%),
+    transparent calc(var(--rev-w) * 100%)
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 calc((var(--rev-w) - var(--rev-feather)) * 100%),
+    transparent calc(var(--rev-w) * 100%)
+  );
+}
+
+.ave-rev .ave-cap-line span.hi { color: var(--cap-accent); }

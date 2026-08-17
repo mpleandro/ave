@@ -13,6 +13,7 @@ prévia/render que o SKILL.md registra como anti-padrão.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import math
 import re
@@ -537,48 +538,201 @@ def esc(s: str) -> str:
     return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
-def hl_width(text: str, size: float, weight: int) -> float:
+@functools.lru_cache(maxsize=1)
+def _local_catalog() -> tuple:
+    """As fontes instaladas nesta máquina. Ver `helpers/local_fonts.py`."""
+    try:
+        import local_fonts
+        return tuple(local_fonts.catalog())
+    except Exception:
+        return ()
+
+
+def _gf(name: str) -> dict:
+    """A família no catálogo de fontes — do Google OU da máquina.
+
+    Os pesos DISPONÍVEIS andam junto porque a API do Google devolve ERRO (sem
+    CSS nenhum) quando se pede um peso que a família não tem: uma fonte de peso
+    único pedida em 900 derrubaria o carregamento inteiro e a headline sairia
+    na fonte de sistema, com a largura toda errada. O mesmo vale para a fonte
+    local, por outro motivo — pedir um corte que ela não tem faz a MEDIÇÃO
+    escolher o vizinho e o navegador falsear o negrito, e aí os dois discordam.
+    """
+    for f in VARIANTS["gfonts"]:
+        if f["n"] == name:
+            return f
+    for f in _local_catalog():
+        if f["n"] == name:
+            return f
+    return VARIANTS["gfonts"][0]
+
+
+def hl_weight_for(family: str, w: int) -> int:
+    """O peso pedido grudado no que a família TEM — senão o navegador falseia o
+    negrito, que suja o glifo e mede diferente do que desenha."""
+    ws = _gf(family)["w"]
+    return min(ws, key=lambda x: abs(x - w))
+
+
+def hl_css_family(name: str) -> str:
+    k = _gf(name)["k"]
+    tail = "cursive" if k == "manuscrita" else "serif" if k == "serif" else "sans-serif"
+    return f"'{name}', {tail}"
+
+
+def hl_gfont_query(fams: list[str]) -> str:
+    """O trecho de `family=` da folha do Google para as famílias usadas.
+
+    Famílias EMPACOTADAS (com `file`) e LOCAIS (`k == "local"`) ficam de fora:
+    elas não existem por esse caminho, e pedi-las devolve erro na folha
+    INTEIRA — derrubando junto a família que existe. Medido: pedir a Gotham
+    junto da Caveat matava também a Caveat, e a headline saía na fonte de
+    sistema com a largura toda diferente da medida."""
+    out = []
+    for n in dict.fromkeys([f for f in fams if f]):
+        f = _gf(n)
+        if f.get("file") or f.get("k") == "local":
+            continue
+        ws = ";".join(str(x) for x in f["w"]) if len(f["w"]) > 1 else ""
+        out.append(f"family={n.replace(' ', '+')}" + (f":wght@{ws}" if ws else ""))
+    return "&".join(out)
+
+
+def hl_fontface_css(fams: list[str]) -> str:
+    """`@font-face` das famílias empacotadas.
+
+    Sem isto o render dependeria de a fonte estar INSTALADA na máquina de quem
+    renderiza — funcionaria aqui e falharia em qualquer outra, silenciosamente,
+    caindo numa genérica com a largura toda diferente da que foi medida."""
+    regras = []
+    for n in dict.fromkeys([f for f in fams if f]):
+        f = _gf(n)
+        if not f.get("file"):
+            continue
+        regras.append(
+            f"@font-face{{font-family:'{n}';src:url('styles/fonts/{f['file']}');"
+            f"font-weight:{f['w'][0]};font-style:normal;font-display:block}}")
+    return f"<style>{''.join(regras)}</style>" if regras else ""
+
+
+def hl_shade(hex_color: str, amount: float, to_dark: bool) -> str:
+    """A SEGUNDA parada do degradê, derivada da primeira.
+
+    O degradê é regra do MODELO, não escolha do usuário: ele escolhe uma cor e o
+    layout decide se o caminho é para o escuro ou para o claro. Pedir as duas
+    pontas devolveria degradê sujo com o dobro de perguntas."""
+    h = (hex_color or "#FFFFFF").lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    f = (lambda c: round(c * (1 - amount))) if to_dark else (lambda c: round(c + (255 - c) * amount))
+    return "#" + "".join(f"{f(c):02x}" for c in (r, g, b))
+
+
+def hl_width(text: str, size: float, weight: int, family: str | None = None) -> float:
     if not text:
         return 0.0
-    fam = VARIANTS["headlineFamily"]
+    fam = family or VARIANTS["headlineFamily"]
     return measure(text, fam, size, weight) - 1.0 * len(text)  # letter-spacing -1px
 
 
-def hl_two_lines(text: str, weights: list[int]) -> list[str]:
-    """Divide em DUAS linhas equilibrando a largura medida.
+def hl_lines(text: str, h: dict) -> list[str]:
+    """A QUEBRA. O "/" MANDA; sem ele, equilibra por LARGURA medida.
 
-    Só entra em ação quando o dado traz a headline como uma frase só. Em
-    produção `hook.lines` já vem com as duas linhas escritas por quem redigiu —
-    e aí a divisão é dele, não nossa.
+    A barra é o controle de quem escreve: ela decide onde a frase respira E
+    quantas linhas existem, que é o que destrava os layouts de três linhas e os
+    de linha herói. Sem barra, o equilíbrio de duas linhas continua — por
+    largura e não por contagem de palavras, porque "É assim que vai" e "ficar a
+    sua headline" têm 4 e 3 palavras e quase a mesma largura.
     """
-    words = text.split()
+    t = (text or "").strip()
+    if "/" in t:
+        parts = [x.strip() for x in t.split("/") if x.strip()]
+        if parts:
+            return parts
+    words = t.split()
     if len(words) < 2:
-        return [words[0] if words else "", ""]
+        return [words[0] if words else ""]
     best, best_diff = [words[0], " ".join(words[1:])], float("inf")
     for i in range(1, len(words)):
         a, b = " ".join(words[:i]), " ".join(words[i:])
-        d = abs(hl_width(a, 100, weights[0]) - hl_width(b, 100, weights[1]))
+        d = abs(hl_width(a, 100, h["weights"][0]) - hl_width(b, 100, h["weights"][1]))
         if d < best_diff:
             best, best_diff = [a, b], d
     return best
 
 
-def hl_fit(lines: list[str], h: dict) -> float:
+def hl_is_upper(i: int, n: int, h: dict) -> bool:
+    """CAIXA ALTA É DO CÓDIGO, NUNCA DO CSS.
+
+    `text-transform` aplica DEPOIS da medição: mede-se a minúscula e desenha-se
+    a maiúscula, que é mais larga — e a headline estoura o quadro sem erro
+    nenhum. Foi o que aconteceu com o manuscrito e o gigante ao serem montados.
+    """
+    if h.get("upper"):
+        return True
+    ul = h.get("upperLines")
+    if ul == "last":
+        return i == n - 1
+    if ul == "rest":
+        return i > 0
+    if isinstance(ul, list):
+        return i in ul
+    return False
+
+
+def hl_ks(lines: list[str], h: dict) -> list[float]:
+    """Multiplicador de corpo por linha; a última entrada vale para as extras."""
+    sizes = h.get("sizes")
+    if not sizes:
+        return [1.0] * len(lines)
+    return [float(sizes[min(i, len(sizes) - 1)]) for i in range(len(lines))]
+
+
+def hl_line_weight(h: dict, i: int) -> int:
+    w = h["weights"]
+    return w[min(i, len(w) - 1)]
+
+
+def hl_line_family(h: dict, i: int, fonts: dict) -> str:
+    role = h.get("fontRole")
+    if role and role[min(i, len(role) - 1)] == "accent":
+        return fonts["accent"]
+    return fonts["main"]
+
+
+def hl_fit(lines: list[str], h: dict, fonts: dict) -> float:
     """Corpo que faz a linha mais larga caber em `safeW`, limitado por `cap`.
 
     `cap` é TETO, não medida fixa: uma headline curta pode chegar nele, uma
     longa tem que encolher. Duas passadas porque a largura não é perfeitamente
     linear no corpo — a primeira estima, a segunda corrige.
+
+    A LINHA HERÓI sai desta conta: ela é medida sozinha contra a largura
+    inteira, senão uma palavra curta ficaria pequena e uma longa puxaria todas
+    as outras linhas para baixo junto com ela.
     """
-    w = h["weights"]
+    ks = hl_ks(lines, h)
+    idx = [i for i in range(len(lines))
+           if not (h.get("heroLast") and i == len(lines) - 1)] or list(range(len(lines)))
 
     def widest(size: float) -> float:
-        return max(hl_width(lines[0], size, w[0]),
-                   hl_width(lines[1] if len(lines) > 1 else "", size, w[1]))
+        return max(hl_width(lines[i], size * ks[i],
+                            hl_weight_for(hl_line_family(h, i, fonts), hl_line_weight(h, i)),
+                            hl_line_family(h, i, fonts)) for i in idx)
 
-    size = int(h["safeW"] / max(1.0, widest(100)) * 100)
-    size = int(h["safeW"] / max(1.0, widest(size)) * size)
+    size = h["safeW"] / max(1.0, widest(100)) * 100
+    size = h["safeW"] / max(1.0, widest(size)) * size
     return max(VARIANTS["headlineMinSize"], min(size, h["cap"]))
+
+
+def hl_hero_size(lines: list[str], h: dict, fonts: dict) -> float:
+    i = len(lines) - 1
+    fam = hl_line_family(h, i, fonts)
+    w = hl_weight_for(fam, hl_line_weight(h, i))
+    s = h["safeW"] / max(1.0, hl_width(lines[i], 100, w, fam)) * 100
+    s = h["safeW"] / max(1.0, hl_width(lines[i], s, w, fam)) * s
+    return min(s, h["cap"])
 
 
 def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tuple[str, str]:
@@ -592,14 +746,26 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
         raise SystemExit(f"estilo de headline '{style_id}' não existe. "
                          f"Prontos: {', '.join(VARIANTS['headlines'])}")
 
-    raw = [l for l in (hook.get("lines") or []) if l]
-    if len(raw) == 1:
-        raw = hl_two_lines(raw[0], h["weights"])
-    raw = (raw + ["", ""])[:2]
-    if h["upper"]:
-        raw = [l.upper() for l in raw]
+    fonts = {
+        "main": hook.get("fontMain") or VARIANTS["headlineFamily"],
+        "accent": hook.get("fontAccent") or VARIANTS["headlineAccentFamily"],
+    }
+    main_color = hook.get("color") or "#FFFFFF"
 
-    size = hl_fit(raw, h)
+    raw = [l for l in (hook.get("lines") or []) if l]
+    # Uma linha só, ou um `text` corrido: a quebra é resolvida aqui — e o "/"
+    # do usuário manda sobre o equilíbrio automático.
+    if len(raw) <= 1:
+        raw = hl_lines(raw[0] if raw else (hook.get("text") or ""), h)
+    raw = [l for l in raw if l]
+    if not raw:
+        return "", ""
+    raw = [l.upper() if hl_is_upper(i, len(raw), h) else l for i, l in enumerate(raw)]
+
+    size = hl_fit(raw, h, fonts)
+    ks = hl_ks(raw, h)
+    if h.get("heroLast"):
+        ks[-1] = hl_hero_size(raw, h, fonts) / size
     end = float(hook.get("endSec", 4.0))
 
     # O gancho NÃO transfere de graça para a tela dividida: a altura padrão o
@@ -611,13 +777,45 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
         if w["start"] < end and w["end"] > 0:
             top = VARIANTS["split"][w["layout"]]["hookTop"]
             break
-    lines = "".join(f'<div class="hl-line">{esc(l)}</div>' for l in raw if l)
+
+    paint = h.get("paint") or {}
+    out = []
+    for i, l in enumerate(raw):
+        cls = ["hl-line"]
+        if paint.get("tagBox") is not None and i == (paint.get("tag") or 0):
+            cls.append("hl-tag")
+        if paint.get("hollowLines") and i in paint["hollowLines"]:
+            cls.append("hl-hollow")
+        wgt = hl_weight_for(hl_line_family(h, i, fonts), hl_line_weight(h, i))
+        if paint.get("wordBox"):
+            # sem espaço entre as tarjas: o espaço ficaria DENTRO da tarja e as
+            # caixas se encostariam. A folga é a margem do .hl-word.
+            inner = "".join(f'<span class="hl-word">{esc(w)}</span>' for w in l.split())
+        else:
+            inner = esc(l)
+        out.append(
+            f'<div class="{" ".join(cls)}" data-text="{esc(l)}" '
+            f'style="--hl-k:{ks[i]:.4f}; font-weight:{wgt}">{inner}</div>')
+
+    grad = h.get("gradient")
+    extra = ""
+    if grad:
+        dark = grad.get("to") == "dark"
+        amt = float(grad.get("amount", 0.35))
+        extra = (f' --hl-main-2:{hl_shade(main_color, amt, dark)};'
+                 f' --hl-accent-2:{hl_shade(accent, amt, dark)};')
+
     block = (f'  <div id="hook" class="ave-hook {style_id} clip" data-start="0" '
              f'data-duration="{end:.3f}" data-track-index="{TRACK['hook']}" '
-             f'style="--hl-scale:1; --hl-size:{size}; --hl-lh:{h["lh"]}; '
-             f'--hl-top:{top}; --hl-accent:{accent}; --hl-stroke:{h["stroke"]}">'
-             f'{lines}</div>')
-    return block, '<link rel="stylesheet" href="styles/headline.css">'
+             f'style="--hl-scale:1; --hl-size:{size:.2f}; --hl-lh:{h["lh"]}; '
+             f'--hl-top:{top}; --hl-main:{main_color}; --hl-accent:{accent}; '
+             f'--hl-font:{hl_css_family(fonts["main"])}; '
+             f'--hl-font-accent:{hl_css_family(fonts["accent"])}; '
+             f'--hl-stroke:{h["stroke"]};{extra}">'
+             f'{"".join(out)}</div>')
+    css = ('<link rel="stylesheet" href="styles/headline.css">'
+           + hl_fontface_css([fonts["main"], fonts["accent"]]))
+    return block, css
 
 
 def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty,
@@ -843,11 +1041,38 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         data = {**data, "_camOff": True}
     cam_js, cam_style, flash_blocks = camera_parts(data, duration)
 
+    # A FAMÍLIA ESCOLHIDA NA ABA ESTILO, com o padrão sendo a do próprio
+    # estilo. Vazio aqui não é "sem fonte": é "a de fábrica", e por isso a
+    # variável só é emitida quando alguém escolheu — assim trocar de estilo
+    # continua trazendo a letra com que ele foi desenhado.
+    cap_fam = cfg.get("fontMain")
+    fam_var = f" --cap-family:{hl_css_family(cap_fam)};" if cap_fam else ""
+
     gfont = st["gfont"]
+    # As famílias da LEGENDA entram na mesma folha. Sem isto, escolher uma
+    # fonte na aba renderizava com a de fábrica — o CSS pedia a nova, o
+    # navegador não a tinha, e caía numa genérica sem erro visível.
+    q_cap = hl_gfont_query([cap_fam] if cap_fam else [])
+    if q_cap:
+        gfont = f"{gfont}&{q_cap}"
+    cap_face = hl_fontface_css([cap_fam] if cap_fam else [])
+    if cap_face:
+        cap_css = f"{cap_css}\n{cap_face}"
     if hook_block:
-        # a headline usa Poppins em 400/800/900; pedir só o peso da legenda
-        # deixaria o texto cair numa fonte genérica sem erro visível
-        gfont = f"{gfont}&{VARIANTS['headlineGfont']}"
+        # AS FAMÍLIAS ESCOLHIDAS, montadas a partir do dado — nunca uma consulta
+        # fixa. Com a consulta fixa, trocar a fonte no editor renderizaria com a
+        # antiga: a folha do Google traria Poppins, o CSS pediria a nova, e o
+        # texto cairia numa genérica sem erro visível em lugar nenhum.
+        hk = data.get("hook") or {}
+        q = hl_gfont_query([
+            hk.get("fontMain") or VARIANTS["headlineFamily"],
+            hk.get("fontAccent") or VARIANTS["headlineAccentFamily"],
+        ])
+        # A consulta sai VAZIA quando as duas famílias são locais/empacotadas —
+        # e um `&` solto no fim da URL faz o Google recusar a folha inteira,
+        # levando junto a fonte da LEGENDA, que não tem nada a ver com isso.
+        if q:
+            gfont = f"{gfont}&{q}"
 
     if style_id == "stacked":
         cap_css = ('<link rel="stylesheet" href="styles/stacked.css">\n'
@@ -858,17 +1083,34 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         container = (f'<div class="ave-stacked" style="--stk-scale:1;'
                      f' --stk-offset-y:{cfg.get("stackedOffsetY", st["offsetY"])};'
                      f' --stk-color:{cap_color};'
-                     f' --stk-orange:{accent or st["orange"]}">')
+                     + (f' --stk-family:{hl_css_family(cap_fam)};' if cap_fam else "")
+                     + f' --stk-orange:{accent or st["orange"]}">')
     elif style_id == "scatter":
         cap_css = ('<link rel="stylesheet" href="styles/scatter.css">\n'
                    '<script src="styles/scatter.js"></script>')
         container = (f'<div class="ave-scatter" style="--scat-scale:1;'
                      f' --scat-size:{size}; --scat-gap:{st["gap"]};'
                      f' --scat-offset-y:{cfg.get("scatterOffsetY", st["offsetY"])}">')
+    elif st.get("css") == "pop":
+        # Os TRÊS estilos de estouro compartilham a folha e o script: a curva é
+        # a mesma (medida do CapCut, idêntica byte a byte entre eles) e o que
+        # muda é o AGRUPAMENTO, que vai como classe.
+        cap_css = ('<link rel="stylesheet" href="styles/pop.css">\n'
+                   '<script src="styles/pop.js"></script>')
+        container = (f'<div class="ave-pop grupo-{st.get("grupo", "palavra")}"'
+                     f' style="--cap-scale:1;{fam_var} --cap-color:{cap_color};'
+                     f' --cap-accent:{accent or "#ff5200"};'
+                     f' --cap-size:{size}; --cap-bottom:{bottom}">')
+    elif st.get("css") == "revelar":
+        cap_css = ('<link rel="stylesheet" href="styles/revelar.css">\n'
+                   '<script src="styles/revelar.js"></script>')
+        container = (f'<div class="ave-rev" style="--cap-scale:1;{fam_var}'
+                     f' --cap-color:{cap_color}; --cap-accent:{accent or "#ff5200"};'
+                     f' --cap-size:{size}; --cap-bottom:{bottom}">')
     elif st["animated"]:
         cap_css = ('<link rel="stylesheet" href="styles/karaoke.css">\n'
                    '<script src="styles/karaoke.js"></script>')
-        container = (f'<div class="ave-cap {style_id}" style="--cap-scale:1;'
+        container = (f'<div class="ave-cap {style_id}" style="--cap-scale:1;{fam_var}'
                      f' --cap-color:{cap_color};'
                      f' --cap-size:{size}; --cap-bottom:{bottom}">')
     else:
@@ -888,6 +1130,10 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         parts.append("  AVE_STACKED.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif style_id == "scatter":
         parts.append("  AVE_SCATTER.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+    elif st.get("css") == "pop":
+        parts.append("  AVE_POP.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+    elif st.get("css") == "revelar":
+        parts.append("  AVE_REVELAR.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif st["animated"]:
         parts.append("  AVE_KARAOKE.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     if track_js:

@@ -68,20 +68,67 @@ def warm_cache(family: str, weight: int = 400, italic: bool = False) -> None:
         )
 
 
+# FONTES QUE VIAJAM COM A SKILL.
+#
+# Nem toda família do catálogo do Google é servida pelo caminho que o cache do
+# HyperFrames usa — a Bebas Neue não é. E a falha aparecia no pior lugar: na
+# COMPOSIÇÃO, depois de o usuário ter escolhido a fonte na tela e visto a prévia
+# funcionar. A prévia funciona porque o NAVEGADOR carrega direto do Google;
+# quem falha é a medição, que é local. Ver `assets/styles/fonts/LEIA-ME.md`.
+BUNDLED = Path(__file__).resolve().parent.parent / "assets" / "styles" / "fonts"
+
+
+def local_font(family: str, weight: int = 400, italic: bool = False) -> Path | None:
+    """A fonte instalada nesta máquina. Ver `helpers/local_fonts.py`."""
+    try:
+        import local_fonts
+        return local_fonts.find(family, weight, italic)
+    except Exception:
+        return None
+
+
+def bundled_font(family: str, weight: int = 400, italic: bool = False) -> Path | None:
+    """A reserva empacotada, se houver. Mesmo padrão de nome do cache."""
+    style = "italic" if italic else "normal"
+    exato = BUNDLED / f"{slug(family)}-{weight}-{style}.ttf"
+    if exato.is_file():
+        return exato
+    # Peso pedido ausente: usa o mais próximo que existe em vez de morrer. As
+    # famílias que caem aqui são justamente as de peso único.
+    hits = sorted(BUNDLED.glob(f"{slug(family)}-*-{style}.ttf"))
+    if not hits:
+        return None
+    return min(hits, key=lambda p: abs(int(p.stem.split("-")[-2]) - weight))
+
+
 def font_files(family: str, weight: int = 400, italic: bool = False) -> list[Path]:
     """Todos os subsets do peso/estilo pedido, do cache do HyperFrames."""
     d = FONT_CACHE / slug(family)
     if not d.is_dir():
         warm_cache(family, weight, italic)
     if not d.is_dir():
+        reserva = bundled_font(family, weight, italic)
+        if reserva:
+            return [reserva]
+        # A FONTE INSTALADA NA MÁQUINA. É o que permite usar a tipografia da
+        # marca do usuário, que o Google nunca vai ter. O render a resolve pelo
+        # NOME (o Chrome roda aqui); quem precisa do arquivo é esta medição.
+        local = local_font(family, weight, italic)
+        if local:
+            return [local]
         raise FileNotFoundError(
-            f"fonte '{family}' não está no cache do HyperFrames ({d}) e a tentativa "
-            f"de baixá-la falhou.\nConfira o nome da família como o Google Fonts a "
-            f"escreve, ou rode um `hyperframes check` na composição que a usa."
+            f"fonte '{family}' não está no cache do HyperFrames ({d}), a tentativa "
+            f"de baixá-la falhou, não há reserva em {BUNDLED} e ela não está "
+            f"instalada nesta máquina.\nConfira o nome da família como o Google "
+            f"Fonts a escreve, ou ponha o arquivo em "
+            f"assets/styles/fonts/{slug(family)}-<peso>-normal.ttf."
         )
     style = "italic" if italic else "normal"
     hits = sorted(d.glob(f"{weight}-{style}-*.woff2"))
     if not hits:
+        reserva = bundled_font(family, weight, italic)
+        if reserva:
+            return [reserva]
         have = sorted({p.name.split("-")[0] + "-" + p.name.split("-")[1] for p in d.glob("*.woff2")})
         raise FileNotFoundError(
             f"'{family}' não tem o corte {weight}-{style} no cache. Disponíveis: {', '.join(have)}"

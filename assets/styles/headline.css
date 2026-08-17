@@ -1,14 +1,27 @@
-/* HOOK / headline — quatro estilos: contorno, cartão, realce, misto.
+/* HOOK / headline — os layouts do gancho.
  *
  * Fonte ÚNICA com a prévia da aba Estilo: os mesmos números, a mesma aparência.
  *
  * Autorado em referência de 1080px e escalado por --hl-scale (prévia passa
  * clientWidth/1080, composição passa 1). Família, peso e corpo vêm do dado —
- * o compositor os calcula medindo o texto real, porque a headline é sempre
- * DUAS linhas ajustadas à largura segura, nunca um corpo fixo.
+ * o compositor os calcula medindo o texto real, porque o corpo da headline é
+ * SEMPRE ajustado à largura segura, nunca fixo.
+ *
+ * DUAS CORES E DUAS FONTES, e a distinção é o que organiza esta folha:
+ *   --hl-main   / --hl-font          a frase
+ *   --hl-accent / --hl-font-accent   o destaque
+ * Cada layout declara em `paint` (variants.json) quem recebe qual. Nenhuma cor
+ * literal aqui além do preto do traço e do cinza do cartão — trocar a cor no
+ * editor tem de mudar o render, e um literal no CSS vence a variável em
+ * silêncio.
+ *
+ * O DEGRADÊ É REGRA DO MODELO, NÃO ESCOLHA DO USUÁRIO. Onde ele existe, a cor
+ * escolhida é a parada de CIMA e `--hl-main-2` / `--hl-accent-2` são DERIVADAS
+ * dela (escurecidas ou clareadas por `gradient.amount`). Pedir duas pontas ao
+ * usuário produz degradê sujo; pedir uma produz sempre um coerente.
  *
  * Cada headline sai como bloco próprio, com id estável e tempo próprio: é o que
- * vai permitir arrastá-la no editor sem reescrever o estilo.
+ * permite arrastá-la no editor sem reescrever o estilo.
  */
 
 .ave-hook {
@@ -16,7 +29,12 @@
   --hl-size: 82;
   --hl-lh: 1.06;
   --hl-top: 210;
+  --hl-main: #ffffff;
+  --hl-main-2: #cfcfcf;
   --hl-accent: #ff6b1a;
+  --hl-accent-2: #b8410b;
+  --hl-font: 'Poppins', sans-serif;
+  --hl-font-accent: 'Caveat', cursive;
   --hl-stroke: 12;
 
   position: absolute;
@@ -24,19 +42,26 @@
   right: 0;
   top: calc(var(--hl-top) * var(--hl-scale) * 1px);
   text-align: center;
-  font-family: 'Poppins', sans-serif;
-  color: #fff;
+  font-family: var(--hl-font);
+  color: var(--hl-main);
   line-height: var(--hl-lh);
   letter-spacing: calc(-1px * var(--hl-scale));
   white-space: pre;
   pointer-events: none;
 }
 
+/* O corpo POR LINHA, para os layouts com uma linha herói (etiqueta, gigante,
+   manuscrito). Sem isto toda headline é um bloco de linhas do mesmo tamanho, e
+   metade das referências deixa de ser possível. O multiplicador é escrito pelo
+   compositor/prévia em `--hl-k`, e o padrão 1 mantém os layouts uniformes
+   exatamente como sempre foram. */
 .ave-hook .hl-line {
-  font-size: calc(var(--hl-size) * var(--hl-scale) * 1px);
+  --hl-k: 1;
+  font-size: calc(var(--hl-size) * var(--hl-k) * var(--hl-scale) * 1px);
 }
 
-/* contorno — texto branco com traço preto grosso, sem cartão. O traço é
+/* ---------- contorno ---------- */
+/* texto na cor principal com traço preto grosso, sem cartão. O traço é
    desenhado ANTES do preenchimento; sem paint-order ele come metade da haste
    de dentro para fora e a letra afina. */
 .ave-hook.outline {
@@ -46,8 +71,9 @@
   filter: drop-shadow(0 calc(6px * var(--hl-scale)) calc(14px * var(--hl-scale)) rgba(0, 0, 0, 0.45));
 }
 
-/* cartão — caixa cinza-escura, texto em caixa alta, TODAS as linhas no mesmo
-   corpo (nunca uma linha herói e uma menor). */
+/* ---------- cartão ---------- */
+/* caixa cinza-escura, texto em caixa alta, TODAS as linhas no mesmo corpo
+   (nunca uma linha herói e uma menor). */
 .ave-hook.card {
   display: inline-block;
   left: 50%;
@@ -61,10 +87,10 @@
   text-shadow: 0 calc(1px * var(--hl-scale)) calc(4px * var(--hl-scale)) rgba(0, 0, 0, 0.55);
 }
 
-/* realce — cada linha ganha sua própria tarja no accent. Linhas separadas em
-   vez de um fundo só: uma tarja única atrás de duas linhas de larguras
-   diferentes vira um retângulo, e o efeito é justamente a tarja acompanhar o
-   texto. */
+/* ---------- realce ---------- */
+/* cada LINHA ganha sua própria tarja no destaque. Linhas separadas em vez de um
+   fundo só: uma tarja única atrás de duas linhas de larguras diferentes vira um
+   retângulo, e o efeito é justamente a tarja acompanhar o texto. */
 .ave-hook.realce {
   display: flex;
   flex-direction: column;
@@ -75,17 +101,197 @@
 
 .ave-hook.realce .hl-line {
   background: var(--hl-accent);
-  color: #fff;
+  color: var(--hl-main);
   padding: 0.08em 0.3em 0.16em;
   border-radius: calc(12px * var(--hl-scale));
   box-shadow: 0 calc(3px * var(--hl-scale)) calc(7px * var(--hl-scale)) rgba(0, 0, 0, 0.45);
 }
 
-/* misto — primeira linha leve e branca, segunda pesada no accent. O contraste
-   de peso é o que faz a segunda linha ser a frase. */
+/* ---------- misto ---------- */
+/* primeira linha leve na principal, segunda pesada no destaque. O contraste de
+   peso é o que faz a segunda linha ser a frase. */
 .ave-hook.misto {
   filter: drop-shadow(0 calc(6px * var(--hl-scale)) calc(16px * var(--hl-scale)) rgba(0, 0, 0, 0.55));
 }
 
-.ave-hook.misto .hl-line:nth-child(1) { font-weight: 400; color: #fff; }
+.ave-hook.misto .hl-line:nth-child(1) { font-weight: 400; color: var(--hl-main); }
 .ave-hook.misto .hl-line:nth-child(2) { font-weight: 900; color: var(--hl-accent); }
+
+/* ==========================================================================
+   LAYOUTS NOVOS
+   ========================================================================== */
+
+/* ---------- bloco ---------- */
+/* Linhas alternando principal e destaque com entrelinha esmagada: o texto vira
+   uma massa sólida em vez de linhas soltas. É o layout das miniaturas de
+   referência ("GROWING YOUR BUSINESS").
+   A entrelinha 0.84 faz as CAIXAS das linhas se tocarem sem os glifos se
+   tocarem — o mesmo content_overlap tolerado do misto, e pela mesma razão. */
+.ave-hook.bloco {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-weight: 900;
+  filter: drop-shadow(0 calc(8px * var(--hl-scale)) calc(18px * var(--hl-scale)) rgba(0, 0, 0, 0.6));
+}
+
+.ave-hook.bloco .hl-line { color: var(--hl-main); }
+/* CICLO, não "primeira/segunda": com o `/` o usuário escreve três ou quatro
+   linhas, e uma regra por posição deixaria da terceira em diante tudo na mesma
+   cor — a alternância morre justamente onde ela mais aparece. */
+.ave-hook.bloco .hl-line:nth-child(even) { color: var(--hl-accent); }
+
+/* ---------- etiqueta ---------- */
+/* Uma etiqueta pequena em caixa alta sobre a frase grande. A etiqueta é a
+   PRIMEIRA linha do texto: quem escreve decide o que é rótulo pondo a primeira
+   quebra ali. */
+.ave-hook.etiqueta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(14px * var(--hl-scale));
+  font-weight: 900;
+  filter: drop-shadow(0 calc(8px * var(--hl-scale)) calc(18px * var(--hl-scale)) rgba(0, 0, 0, 0.55));
+}
+
+.ave-hook.etiqueta .hl-line { color: var(--hl-main); }
+
+.ave-hook.etiqueta .hl-line.hl-tag {
+  background: var(--hl-accent);
+  color: var(--hl-main);
+  font-weight: 800;
+  letter-spacing: calc(3px * var(--hl-scale));
+  padding: 0.34em 0.8em 0.4em;
+  border-radius: calc(10px * var(--hl-scale));
+}
+
+/* ---------- manuscrito ---------- */
+/* Manuscrita pequena por cima, caixa alta pesada embaixo. O ÚNICO layout que
+   usa as duas famílias ao mesmo tempo — é ele que justifica o seletor de fonte
+   ser um par. A rotação leve na manuscrita é o que a faz ler como escrita à
+   mão, e não como uma cursiva alinhada na régua. */
+.ave-hook.manuscrito {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  filter: drop-shadow(0 calc(8px * var(--hl-scale)) calc(20px * var(--hl-scale)) rgba(0, 0, 0, 0.6));
+}
+
+.ave-hook.manuscrito .hl-line:nth-child(1) {
+  font-family: var(--hl-font-accent);
+  font-weight: 400;
+  color: var(--hl-accent);
+  transform: rotate(-3deg);
+  /* A manuscrita DESCE sobre a caixa alta: as duas se encaixam, e é isso que
+     separa o layout de "duas linhas empilhadas".
+     Em `em` e não em px: o encaixe tem de acompanhar o CORPO da manuscrita, que
+     muda com o texto (o corpo é ajustado, nunca fixo). Em px o mesmo -18 era
+     um encosto de leve numa headline curta e uma colisão numa longa. */
+  margin-bottom: -0.22em;
+}
+
+.ave-hook.manuscrito .hl-line:nth-child(n + 2) {
+  font-weight: 900;
+  color: var(--hl-main);
+}
+
+/* ---------- gigante ---------- */
+/* A última linha é UMA palavra ocupando a largura inteira; o que vem antes fica
+   pequeno em cima. O corpo da linha herói é medido SOZINHO contra a largura
+   segura (ver o ajuste no compositor) — no ajuste comum uma palavra curta
+   ficaria pequena e uma longa estouraria. */
+.ave-hook.gigante {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  filter: drop-shadow(0 calc(10px * var(--hl-scale)) calc(22px * var(--hl-scale)) rgba(0, 0, 0, 0.65));
+}
+
+.ave-hook.gigante .hl-line { color: var(--hl-main); font-weight: 700; }
+
+.ave-hook.gigante .hl-line:last-child {
+  font-weight: 900;
+  color: var(--hl-accent);
+  letter-spacing: calc(-4px * var(--hl-scale));
+}
+
+/* ---------- relevo ---------- */
+/* Caixa alta pesada com extrusão DURA no destaque — profundidade sólida, não
+   sombra borrada.
+   A extrusão vive num ::before com o mesmo texto, e não num text-shadow do
+   próprio elemento, porque o preenchimento é um DEGRADÊ recortado no texto
+   (background-clip) e com a cor transparente um text-shadow apareceria ATRAVÉS
+   do glifo em vez de atrás dele. Daí o `attr(data-text)`: o compositor e a
+   prévia escrevem o mesmo texto no atributo. */
+.ave-hook.relevo {
+  font-weight: 900;
+}
+
+.ave-hook.relevo .hl-line {
+  position: relative;
+  /* CRIA O CONTEXTO DE EMPILHAMENTO, e é isto que faz a extrusão aparecer.
+     Sem o `z-index: 0` aqui, o `z-index: -1` do ::before escapa da linha e vai
+     parar atrás do FUNDO do quadro — some inteiro, sem erro, e a headline
+     renderiza lisa como se o layout não tivesse relevo nenhum. */
+  z-index: 0;
+  background: linear-gradient(180deg, var(--hl-main) 0%, var(--hl-main-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ave-hook.relevo .hl-line::before {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: -1;
+  color: var(--hl-accent);
+  text-shadow:
+    calc(2px * var(--hl-scale)) calc(2px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(4px * var(--hl-scale)) calc(4px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(6px * var(--hl-scale)) calc(6px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(8px * var(--hl-scale)) calc(8px * var(--hl-scale)) 0 var(--hl-accent-2),
+    calc(10px * var(--hl-scale)) calc(10px * var(--hl-scale)) 0 var(--hl-accent-2),
+    calc(12px * var(--hl-scale)) calc(12px * var(--hl-scale)) 0 var(--hl-accent-2);
+}
+
+/* ---------- grifo ---------- */
+/* Cada PALAVRA com sua própria tarja, não a linha inteira como o realce. A
+   diferença aparece em linhas de larguras desiguais: o realce vira dois
+   retângulos, o grifo acompanha o texto palavra a palavra. */
+.ave-hook.grifo {
+  font-weight: 900;
+}
+
+.ave-hook.grifo .hl-word {
+  background: var(--hl-accent);
+  color: var(--hl-main);
+  padding: 0.06em 0.22em 0.14em;
+  border-radius: calc(8px * var(--hl-scale));
+  box-shadow: 0 calc(3px * var(--hl-scale)) calc(8px * var(--hl-scale)) rgba(0, 0, 0, 0.45);
+  /* A folga entre palavras vem do padding da tarja, não do espaço do texto: o
+     espaço ficaria DENTRO da tarja e as caixas se encostariam. */
+  margin: 0 calc(3px * var(--hl-scale));
+}
+
+/* ---------- contorno duplo ---------- */
+/* Duas linhas com pesos opostos: a de cima vazada (só contorno) e a de baixo
+   cheia. O vazado deixa a imagem passar, que é o que impede a headline de
+   virar uma placa em cima do rosto. */
+.ave-hook.contorno_duplo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-weight: 900;
+  filter: drop-shadow(0 calc(8px * var(--hl-scale)) calc(18px * var(--hl-scale)) rgba(0, 0, 0, 0.7));
+}
+
+.ave-hook.contorno_duplo .hl-line { color: var(--hl-accent); }
+
+.ave-hook.contorno_duplo .hl-line.hl-hollow {
+  color: transparent;
+  -webkit-text-stroke: calc(var(--hl-stroke) * var(--hl-scale) * 1px) var(--hl-main);
+  paint-order: stroke fill;
+}

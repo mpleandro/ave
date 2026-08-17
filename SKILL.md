@@ -122,6 +122,9 @@ Helpers live in `helpers/`, resolved relative to this SKILL.md (usually `~/.clau
 
 Phase 1:
 - **`ingest_url.py <url> --dest <videos_dir> [--section 12:00-25:30] [--max-height 1080]`** — edit from a link: yt-dlp → MP4 (≤1080p, ascii-safe filename) straight into the videos dir; from there it's a source like any other. `--section` downloads ONLY a time range of a longform source (keyframe-accurate) — the cheap way to clip minutes 12–25 of a 1h video. `--simulate` prints title/duration/resolution without downloading (confirm before big fetches; run those in the background).
+- **`source_roles.py <videos_dir> [--json]`** — **O PAPEL DE CADA FONTE, medido, antes de transcrever qualquer coisa.** Separa MULTICAM de B-ROLL pelo ÁUDIO: duas câmeras no mesmo momento gravam a mesma voz, então os envelopes de energia correlacionam alto e com um deslocamento fixo — e esse deslocamento é o sync da multicam, de brinde. Também desmascara **DUPLICATA** (o mesmo arquivo com e sem timecode dá correlação 1,00 com deslocamento 0; contá-la como ângulo faz você oferecer ao usuário uma troca de câmera que não muda um pixel) e **MESMO MOMENTO, OUTRO FORMATO** (a gravação de tela feita enquanto a câmera rodava casa tão bem quanto uma segunda câmera e NÃO é um ângulo dela). Medido no Fome de Poder: 4 arquivos → 2 ângulos reais (+6,32s) e 2 duplicatas. **O relatório separa o que foi MEDIDO do que é palpite** — `áudio ativo` não é voz — e tudo o que não foi medido cai na lista PERGUNTE, que é a entrada do `AskUserQuestion`.
+- **`capcut_captions.py [--novos N] [--id <id>] [--json]`** — lê os modelos de legenda do **CapCut instalado** e descreve o que cada um FAZ. O catálogo dele mistura TRÊS coisas em arquivos diferentes: **modelo** (`content.json` — look + comportamento), **animação** (`modules/AEData.lua` — keyframes no formato do After Effects) e **efeito de estilo** (`effectStyle.json` — preenchimento, sombras, contorno). Traduz cor de float para hexa, resolve o `richText` (que é o visual inteiro numa string) e converte os keyframes em `cubic-bezier` + milissegundos. **Copia PARÂMETROS, nunca as fontes proprietárias (`ZY*`) nem o JS deles** — o look é reconstruído em CSS nosso. Duas armadilhas de leitura registradas no arquivo: os trechos de keyframe têm ARIDADE variável (12 alças num formato, 4 noutro), e o bezier de 12 números se lê em COLUNA — ler em linha produz curvas plausíveis e erradas.
+- **`local_fonts.py [--rebuild] [--grep <trecho>]`** — índice das fontes INSTALADAS nesta máquina, para o seletor de fonte da headline (`~/.avelin/localfonts.json`, refeito só quando as pastas de fonte mudam). Existe porque o catálogo do Google cobre o genérico e não cobre a MARCA de ninguém. Guarda o CAMINHO de cada corte porque a medição (`text_measure`) precisa abrir o arquivo — a prévia e o render resolvem a família pelo nome, direto do sistema.
 - **`transcribe.py <video> --edit-dir <edit> [--language pt] [--backend auto|groq|elevenlabs|whispercpp]`** — word-level, cached. `backend=auto` (default): ElevenLabs Scribe for sources >5 min (when `ELEVENLABS_API_KEY` set), else Groq Whisper. Audio uploads as CBR 64kbps mono MP3 (~0.5 MB/min); oversized audio auto-chunks **by bytes**, so every chunk is guaranteed under Groq's 25 MB cap regardless of length. Chunks fetch **in parallel** with per-chunk resume cache and 5x backoff retries (provider blips don't restart the job).
 - **`transcribe_batch.py <videos_dir> [--backend auto|groq|elevenlabs]`** — 4-worker parallel transcription for multi-take shoots; same per-file auto backend selection by length.
 - **`pack_transcripts.py --edit-dir <dir>`** — transcripts → `takes_packed.md` (phrase-level, breaks on ≥0.5s silence). **The** reading view: 1/10 the tokens of raw JSON.
@@ -142,7 +145,7 @@ Phase 2/3 (see the track references for usage):
 - **`captions_words.py`** (legendas palavra a palavra, a base de todos os estilos) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
 
 Interface:
-- **`preview_server.py --root <edit> [--port 4820]`** — serves the standard preview interface (see the Preview interface section). App code lives at `assets/preview/` and is IMMUTABLE.
+- **`preview_server.py [--root <edit>] [--port 4820]`** — serves the standard preview interface (see the Preview interface section). App code lives at `assets/preview/` and is IMMUTABLE. **`--root` is optional**: without it the editor opens on its home screen (dropzone + recent/found projects) and the project is chosen on screen; with it, the session opens straight into that project.
 
 ## Preview interface (standard — launch it at the start of every edit)
 
@@ -167,13 +170,52 @@ Every edit session gets the same interactive interface in the user's preview pan
 3. `preview_start` with name `avelin-preview`.
 4. **Arm the watcher IN THE SAME TURN as `preview_start`** — never later, never
    "when the user starts editing":
-   `Monitor(command="python3 <skill>/helpers/watch_edits.py '<edit>'", description="escolhas e marcações salvas no preview", persistent=true)`
+   `Monitor(command="python3 <skill>/helpers/watch_edits.py", description="escolhas e marcações salvas no preview", persistent=true)`
+
+   **Pass NO path.** Without an argument the watcher follows whichever project
+   the editor has open, reading the pointer the server publishes at
+   `~/.avelin/current.json`. Pinning it to one `<edit>` — which is what the
+   path argument does — makes it go deaf the moment the user switches projects
+   on the home screen: they save a marking, see "enviado", and the notification
+   never arrives. Pass a path only to watch a folder the editor is NOT showing.
 
    Without it the UI still writes `preview_style.json` / `preview_edits.json` and
    **nothing happens** — the user clicks Salvar, sees the confirmation toast, and
    waits for work that was never triggered. The failure is silent on both ends:
    they think they told you, and you never heard. `ps aux | grep watch_edits`
    is the one-second check when you are unsure.
+
+### A tela sem projeto — a dropzone
+
+**O editor abre vazio.** Sem `--root`, a primeira tela é uma dropzone
+("Solte seu vídeo aqui") com os projetos recentes e os encontrados no disco
+abaixo. O botão ⌂ no cabeçalho volta para ela a qualquer momento — trocar de
+projeto não exige mais matar o servidor.
+
+O que o navegador NÃO entrega, e que explica o desenho: **o caminho do arquivo
+solto**. `File` traz nome, tamanho e conteúdo; `webkitdirectory` traz os nomes
+dos filhos. Nenhum diz onde a coisa está — é fronteira de segurança, não falta
+de API. Então:
+
+- **vídeo solto** → o servidor procura o par nome+tamanho no disco e usa o
+  arquivo ONDE ELE ESTÁ (cópia zero; uma fonte de 5 GB não vira duas). Só
+  quando não acha é que os bytes sobem, para `~/Movies/Avelin/<slug>/`.
+- **pasta solta** → mesma busca, desempatada pelos nomes dos filhos.
+- **"selecione uma pasta"** → navegador de pastas servido pelo próprio
+  servidor (`/api/browse`), que é o único lado que conhece caminhos absolutos.
+
+Um vídeo que já mora dentro de um projeto (`base.mp4`, `cut.mp4`, `final.mp4`)
+**abre aquele projeto** — não cria um `edit/edit` nem pede Fase 1 num trabalho
+pronto.
+
+**`preview_request.json` — a dropzone é o `/ave <pasta>` sem o terminal.** Um
+projeto NOVO nascido ali escreve esse arquivo, e o watcher te avisa. O editor
+cria a pasta e registra a fonte; **quem transcreve, corta e gradua é você** —
+faça o caminho normal da Fase 1 do começo. Depois apague o arquivo. Sem sessão
+sua rodando, o projeto fica criado e esperando.
+
+O estado do APLICATIVO (não do projeto) vive em `~/.avelin/`: `projects.json`
+(os recentes) e `current.json` (o projeto aberto agora, que o watcher segue).
 
 **Keep state.json fresh** — bump `phase` and `message` at each milestone (cut rendered, cut approved, Phase 2 rendered…). The UI polls and hot-reloads by itself; waveform + filmstrip regenerate automatically when preview.mp4 changes.
 
@@ -226,8 +268,32 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   `stacked` caption paint an accent, so the save also carries **`accentUsed`**;
   when it is `false` the picked styles have none and the colour is not an
   instruction to invent a place for one.
-- **Estilo de headline** — `outline`, `card`, `realce`, `misto`. Always two
-  lines, size fitted to the text (see the track reference).
+- **Estilo de headline** — onze layouts: `outline`, `card`, `realce`, `misto`,
+  `bloco`, `etiqueta`, `manuscrito`, `gigante`, `relevo`, `grifo`,
+  `contorno_duplo`. **N linhas**, corpo ajustado à largura segura (não mais
+  "sempre duas"). A quebra é do autor: **" / " no texto quebra a linha ali**;
+  sem barra, a divisão em duas é equilibrada pela largura MEDIDA. Layouts com
+  linha herói (`gigante`, `etiqueta`, `manuscrito`) têm corpo por linha, e o
+  herói é medido sozinho contra a largura inteira.
+- **As fontes do PRÓPRIO USUÁRIO entram no seletor** (`local_fonts.py` indexa
+  as instaladas — 617 nesta máquina — e o servidor as publica em
+  `/api/localfonts`). É o que permite usar a tipografia da MARCA, que o Google
+  nunca vai ter. Funciona porque o render roda em Chrome na mesma máquina e o
+  Chrome resolve a família pelo NOME; só a medição precisa do arquivo. **O
+  preço está dito na interface**: projeto com fonte local não sai igual em
+  outra máquina.
+- **Cores e fontes vêm DEPOIS do layout**, na mesma camada — a tela desce. Duas
+  cores (principal + destaque) e duas famílias (principal + destaque, do
+  catálogo do Google Fonts). Cada layout declara em `paint` quem recebe qual, e
+  **o degradê é regra do modelo**: onde existe, a cor escolhida é a parada de
+  cima e a de baixo é DERIVADA dela. A segunda família só é desenhada pelos
+  layouts que declaram `fontRole` (hoje o `manuscrito`) — a interface diz isso.
+- **A marca do usuário mora fora do projeto** (`~/.avelin/brand.json`): cor e
+  fonte são de QUEM faz, não do que está sendo feito, então um projeto novo já
+  nasce com elas. O que o projeto gravou vence sempre — reabrir um vídeo
+  entregue mostra as cores com que ele foi entregue. **Você também escreve
+  nesse arquivo** quando descobrir a marca por outro caminho (um site, um
+  material de referência, uma resposta no chat).
 - **Estilo de legenda** — three animated (`karaoke`, `stacked`/"Empilhado",
   `scatter`/"Disperso") and three static (`simples`, `serifada`, `classica`).
 - **Elementos da edição** — checkboxes: `tracking` (movimento de tracking),
@@ -276,7 +342,54 @@ Then delete `preview_edits.json` and update `state.json`.
 
 Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4` for approval. No text, no graphics.
 
-1. **Inventory + PAPEL DE CADA FONTE.** URL source? `ingest_url.py` first (`--section` when only a range of a longform video matters). `ffprobe` every source. `transcribe_batch.py` (or `transcribe.py`) → `pack_transcripts.py` → read `takes_packed.md`. Note dimensions/orientation and whether it looks flat/LOG. Material you can't picture from the transcript → `watch_video.py` for a one-Read visual survey.
+1. **PAPEL DE CADA FONTE — MEÇA, e meça ANTES de transcrever.** URL source?
+   `ingest_url.py` first (`--section` when only a range of a longform video
+   matters). Então **`source_roles.py <videos_dir>`**, que substitui o `ffprobe`
+   fonte a fonte e responde o que ele não responde.
+
+   Rode isto primeiro porque o resultado muda o passo seguinte: **multicam e
+   duplicata não se transcrevem duas vezes.** Quatro arquivos do Fome de Poder
+   são duas gravações; transcrever os quatro é pagar o dobro para receber o
+   mesmo texto duas vezes e depois confundir ângulo com tomada ao escrever o
+   EDL — o mesmo trecho entrando no corte duas vezes, com o rosto igual.
+
+   Depois disso: `transcribe_batch.py` (ou `transcribe.py`) **só nas fontes de
+   FALA** → `pack_transcripts.py` → leia `takes_packed.md`. Material que você
+   não consegue imaginar pelo transcrito → `watch_video.py` para um
+   levantamento visual de um Read só.
+1b. **PERGUNTE O PAPEL DO QUE SOBROU — com `AskUserQuestion`, não em prosa.**
+   Tudo que o `source_roles.py` listou em PERGUNTE é uma decisão do usuário, e
+   a interface de opções existe para ele responder num clique em vez de
+   escrever um parágrafo. Regras da pergunta:
+   - **Uma pergunta por fonte ambígua** (o `AskUserQuestion` aceita até 4 por
+     chamada; havendo mais, agrupe as parecidas numa pergunta só).
+   - **Pergunte pelo USO, com as opções descritas pelo que o ESPECTADOR VÊ.**
+     Nunca "qual o papel desta fonte?", nunca os nomes da tabela abaixo
+     (insert, tela dividida, overlay, B-roll) — esse é o vocabulário desta
+     skill, não o do usuário.
+   - **Traga a evidência medida no enunciado**, não a suposição: duração,
+     formato, e o que casou com o quê. É isso que deixa a escolha ser informada.
+   - **Ofereça sempre "é só referência, não entra no vídeo"** — material de
+     apoio que ninguém pretende usar é comum, e sem essa saída o usuário é
+     forçado a inventar um papel para ele.
+
+   Uma pergunta boa, com os números do projeto 29 dentro:
+
+   > **Header:** `Gravação de tela` · **Pergunta:** "A gravação de tela de 55s
+   > casa com a câmera no mesmo momento (correlação 0,86), mas está em 994×1594
+   > a 45fps — não é um segundo ângulo. Como ela entra no vídeo?"
+   > **Opções:** (a) toma a tela inteira por alguns segundos · (b) fica numa
+   > faixa com você embaixo (tela dividida) · (c) aparece pequena por cima sem
+   > tapar você · (d) é só referência, não entra
+
+   **O que ocupa tempo de tela vira RESERVADO no `edit-data.json` agora**, com
+   `planned: true` e sem `src` (ver "Papel de cada fonte" adiante). Sem isso o
+   usuário aprova, no portão da Fase 1, uma montagem com buracos que ele não
+   consegue ver.
+
+   **Multicam confirmada:** o deslocamento que o helper mediu é o sync. Ranges
+   do ângulo secundário usam a mesma janela de áudio com a fonte trocada e o
+   tempo corrigido por ele — não uma segunda passada de transcrição.
 2. **Pre-scan** `takes_packed.md` for verbal slips, mis-speaks, and dead-air-stretched words (Whisper stretches a word's end across silence — verify long "phrases" against `speech_regions.py`/waveform before trusting them). **Then rode DOIS auditores, porque o transcrito é cego de dois jeitos diferentes:**
    - **`transcript_audit.py <edit>`** — o transcrito é cego ao que ELE MESMO não escreveu. Gaguejo e repetição somem sem rastro: o parágrafo lê perfeito e falta uma frase inteira de áudio. Toda janela acusada é uma decisão a tomar ANTES do EDL. `--recheck` resolve as dúvidas transcrevendo só a janela, isolada.
    - **`voice_levels.py` em cada fonte** — o transcrito é cego ao NÍVEL, então um trecho inaudível lê igual a um normal. O que ele acusar: reforce com `gain_db`, ou corte o take.
@@ -339,8 +452,8 @@ not — verified in the render. Any other error still blocks.
 
 | | |
 |---|---|
-| Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` |
-| Headlines | `outline` `card` `realce` `misto` |
+| Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` `pop` `popLinha` `popBloco` `revelar` |
+| Headlines | `outline` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` |
 | Edição | `limpa` `split` `split2` |
 | Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash |
 | Curta | inserts, palavras em destaque, gráficos sob medida |
@@ -406,6 +519,12 @@ Phase 2 adds a soundtrack and effects, so the final mix is a different one.
 Nem toda fonte é fala. Antes de escrever o EDL, decida o que cada arquivo É, porque
 isso muda o que entra na Fase 1 e o que o usuário aprova.
 
+**A parte MEDÍVEL disto não se decide no olho: rode `source_roles.py`** (passo 1
+da Fase 1). Ele resolve sozinho o que é multicam, o que é duplicata e o que não
+tem voz nenhuma, e entrega o deslocamento de sync entre as câmeras. O que ele
+não decide — e não deve — é o papel do que sobrou: isso vai para o
+`AskUserQuestion` do passo 1b.
+
 | Papel | O que é | Ocupa tempo? | Onde entra |
 |---|---|---|---|
 | **fala** | a cabeça falante, a espinha do áudio | é o tempo | ranges do EDL |
@@ -438,9 +557,10 @@ portão, que é o que o portão existe para evitar.
 
 **Quando o papel não for óbvio, PERGUNTE — e pergunte pelo uso, não pelo formato.**
 Uma gravação de tela pode ser insert, tela dividida ou overlay, e o arquivo não diz
-qual. Junte a evidência primeiro (`ffprobe`: duração, resolução, proporção, tem áudio?
-`watch_video.py`: o que aparece) e faça UMA pergunta concreta, com as opções descritas
-pelo que o espectador vê:
+qual. Junte a evidência primeiro (`source_roles.py` mede duração, formato, áudio e
+com quem cada fonte casa; `watch_video.py` mostra o que aparece) e faça a pergunta
+pelo `AskUserQuestion`, com as opções descritas pelo que o espectador vê. Em prosa,
+a mesma pergunta seria:
 
 > Peguei três arquivos. Os dois DJI são você falando — o segundo é o refazer, e vou
 > usar ele. O terceiro é uma gravação de tela de 55s com uma roleta girando que para
@@ -732,6 +852,22 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Treating an unchecked element as "não pediu". It is an explicit NO: the user
   looked at "Movimento de tracking" and left it off. `watch_edits.py` prints the
   `fora:` line for exactly this reason.
+- Pôr a caixa alta no CSS (`text-transform`) em vez de no código. Ela aplica
+  DEPOIS da medição: mede-se a minúscula, desenha-se a maiúscula (mais larga), e
+  a headline estoura o quadro sem erro nenhum. Use `upper`/`upperLines` no dado.
+- Pedir ao Google Fonts um peso que a família não tem. A API v2 devolve ERRO —
+  sem CSS nenhum — e a headline sai na fonte de sistema com a largura toda
+  errada. Os pesos disponíveis são dado (`gfonts[].w`) e o peso pedido é grudado
+  no mais próximo.
+- Pedir uma família EMPACOTADA (`gfonts[].file`, hoje a Bebas Neue) ou LOCAL
+  (`k == "local"`) na folha do Google: elas não existem por lá e o erro derruba
+  a folha INTEIRA, levando junto a família que existe — medido, pedir a Gotham
+  junto da Caveat matava também a Caveat. Empacotada entra por `@font-face`;
+  local o Chrome resolve pelo nome. E consulta vazia não vira `&` solto no fim
+  da URL: isso derruba a folha do mesmo jeito, junto com a fonte da LEGENDA.
+- Manter uma segunda cópia dos números/catálogos no `app.js`. Já aconteceu com
+  os layouts de headline e com a lista de quem usa destaque — ao entrarem sete
+  layouts, a cópia teria nascido desatualizada. Leia do `variants.json`.
 - Hardcoding `#ff5200` (or any accent) in the template. The Estilo tab lets the
   user pick it, so a literal makes the preview show their colour and the render
   show orange — worse than not offering the choice. Feed `accent` into
@@ -741,6 +877,16 @@ On startup, read it if it exists and summarize the last session in one sentence 
   the real faces, sizes and motion, scaled from 1080-wide — that is the whole
   reason the user can choose by looking. A preview that lies about the style is
   worse than no preview.
+- Adicionar um estilo de legenda sem pôr a folha dele no `CAP_CSS` do `app.js`.
+  Faltar ali NÃO dá erro: `liveCss(undefined)` sai calado, a legenda AO VIVO
+  cai no ramo genérico de estilo estático e — sem a folha carregada — o texto
+  é desenhado cru, branco, encostado no TOPO do quadro. O usuário vê "a legenda
+  não aparece", e nada no console diz por quê.
+- Esquecer que a folha de um estilo pode nascer INVISÍVEL de propósito. O
+  `revelar` começa com `--rev-w: 0` porque quem revela é o render; na prévia ao
+  vivo, sem forçar 1, a legenda some inteira — e um estilo que some lê como
+  quebrado, não como "ainda não animou". O mesmo vale para o `opacity: 0` do
+  empilhado e do disperso.
 - Reading `transcripts/*.json`, `captions.json`, `track.json`, `segments.json`, or template TSX into context — machine data; read `takes_packed.md`/helper output instead.
 - Editing `src/Main.tsx` — the template is data-driven; the JSON is the edit.
 - Hardcoding a bespoke graphic's timings inside `CustomGraphics.tsx`. Put the
@@ -776,10 +922,29 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Indexing Phase 2 off `Σ(end−start)` when a `jcut_timeline` exists — the J-cut output is shorter, so everything after the first take lands late.
 - Assuming the color profile without running the detector.
 - Re-transcribing cached sources; re-rendering Phase 1 when only Phase 2 changed.
+- Arming `watch_edits.py` with a path when the editor is the thing you are
+  watching. Pinned to one folder it fica surdo assim que o usuário troca de
+  projeto na tela inicial — sem argumento ele segue o editor.
 - Launching the preview without arming `watch_edits.py` in the same turn. This
   is the one failure mode where the user reasonably believes they handed you a
   decision and you never got it — the toast says saved, the file is written, and
   no one is reading it.
 - Building a per-session preview UI — launch the standard interface and feed it `state.json`. (Improving `assets/preview/` itself IS allowed when the user asks for a UI change; it is shared, so the improvement lands for every project.)
 - Applying `preview_edits.json` blindly — validate new edges against `speech_regions.py` first (flag clipped words to the user).
+- Decidir no olho o que é multicam, o que é B-roll e o que é duplicata. É
+  medível (`source_roles.py`), e errar custa o corte inteiro: dois ângulos
+  tratados como duas tomadas põem o MESMO trecho duas vezes no vídeo.
+- Transcrever todas as fontes antes de saber o papel delas. Multicam e
+  duplicata devolvem o mesmo texto — é pagar duas vezes pela mesma transcrição
+  e ainda ficar com dois nomes para o mesmo momento na hora de escrever o EDL.
+- Tratar "correlação 1,00, deslocamento 0" como multicam. Duas câmeras de
+  verdade NUNCA começam a gravar no mesmo instante — isso é o mesmo arquivo
+  duas vezes (export com e sem timecode). Oferecer uma troca de ângulo ali
+  mostra ao usuário um corte que não muda um pixel.
+- Perguntar o papel das fontes em prosa quando o `AskUserQuestion` existe, ou
+  perguntar "qual o papel desta fonte?" — o vocabulário da tabela é desta
+  skill, não do usuário. Pergunte pelo que o espectador VÊ.
+- Confundir `áudio ativo` com fala. O helper mede energia acima do piso de
+  ruído; um clipe de estoque com um whoosh marcou 29%. Separar voz de música
+  pela modulação silábica já foi tentado e MEDIDO aqui: não separa.
 - Assuming what kind of video it is. Look first, ask second, edit last.

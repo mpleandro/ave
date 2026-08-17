@@ -24,6 +24,11 @@
   --cap-gap: 18;     /* espaço entre palavras, ref 1080 */
   --cap-bottom: 430; /* captions.paddingBottom */
   --cap-rise: 34;    /* subida da palavra na entrada */
+  /* A FAMÍLIA VIRA VARIÁVEL, com o padrão sendo a de sempre.
+     Trocar o literal por um valor novo mudaria o karaokê de TODO projeto
+     que já o escolheu; como variável com o mesmo padrão, quem não escolhe
+     nada continua exatamente onde estava. */
+  --cap-family: 'Poppins', sans-serif;
 
   position: absolute;
   inset: 0;
@@ -45,7 +50,7 @@
      isto. Um port não é o momento de trocar a marca de um estilo: se o
      karaokê passar a usar Open Sans, ele muda para todo projeto que já o
      escolheu. A identidade Avelin tem estilo próprio (`editorial`). */
-  font-family: 'Poppins', sans-serif;
+  font-family: var(--cap-family);
   font-weight: 900;
   color: var(--cap-color);
   line-height: 1;

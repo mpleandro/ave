@@ -170,6 +170,107 @@ main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding
 .empty p { color: var(--dim); font-size: 13px; }
 .empty code { color: var(--blue); }
 
+/* ---------- tela sem projeto ---------- */
+/* A dropzone é o CENTRO da tela, não um controle entre outros. Ela é a única
+   coisa que alguém faz aqui: chegou com um vídeo, larga o vídeo. As listas
+   ficam abaixo, menores, porque abrir um projeto que já existe é o caso menos
+   frequente — e quando é o caso, a pessoa vem procurando um nome, o que uma
+   lista compacta serve melhor que cartões grandes. */
+.home { flex: 1; display: flex; align-items: flex-start; justify-content: center;
+        overflow-y: auto; padding: 4vh 0 40px; }
+.home-inner { width: min(780px, 92vw); display: flex; flex-direction: column;
+              align-items: center; gap: 26px; }
+.home-logo { height: 26px; opacity: 0.85; }
+
+.dropzone {
+  width: 100%; padding: 44px 28px; text-align: center; cursor: pointer;
+  border: 1.5px dashed var(--stroke); border-radius: var(--radius);
+  background: var(--glass); color: var(--text);
+  transition: border-color .18s var(--ease-out), background .18s var(--ease-out),
+              transform .18s var(--ease-out);
+}
+.dropzone:hover, .dropzone:focus-visible { border-color: rgb(var(--orange-rgb) / .5); outline: none; }
+/* O estado de ARRASTO SOBRE precisa ser inconfundível: durante o arrasto o
+   cursor está preso ao arquivo e a pessoa não tem outra confirmação de que
+   soltar ali vai funcionar. */
+.dropzone.over {
+  border-color: var(--orange); background: rgb(var(--orange-rgb) / .1);
+  transform: scale(1.01);
+}
+.dropzone.busy { cursor: progress; border-style: solid; }
+.dz-icon { font-size: 26px; color: var(--orange-soft); margin-bottom: 10px; }
+.dz-title { font-size: 18px; font-weight: 600; letter-spacing: -0.2px; }
+.dz-sub { margin-top: 6px; font-size: 12.5px; color: var(--dim); }
+.dz-msg { margin-top: 10px; font-size: 12px; color: var(--dim); min-height: 15px; }
+.dz-msg.err { color: var(--orange-soft); }
+.dz-prog { margin: 14px auto 0; width: 60%; height: 3px; border-radius: 2px;
+           background: rgb(255 255 255 / .1); overflow: hidden; }
+.dz-prog-fill { height: 100%; width: 0; background: var(--orange);
+                transition: width .12s linear; }
+
+.linkish { background: none; border: 0; padding: 0; font: inherit; cursor: pointer;
+           color: var(--blue); text-decoration: underline;
+           text-underline-offset: 2px; }
+.linkish:hover { color: var(--orange-soft); }
+
+.home-lists { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+/* Numa janela estreita as duas colunas viram duas colunas ILEGÍVEIS, com o
+   nome do projeto cortado — que é a única coisa pela qual se escolhe. */
+@media (max-width: 700px) { .home-lists { grid-template-columns: 1fr; } }
+/* `min-width: 0` NÃO É DECORAÇÃO. Uma trilha `1fr` tem largura mínima
+   automática, então o recado longo de um projeto ("Fase 2 pronta — 13m06s com
+   14 trocas de câmera…") empurrava a coluna além dos 780px do container. O
+   resultado é o grid transbordando para os dois lados de um pai centralizado —
+   e o título "RECENTES" saindo pela esquerda da janela, cortado. */
+.home-col { min-width: 0; }
+.home-col h3 { font-size: 11px; font-weight: 600; text-transform: uppercase;
+               letter-spacing: 0.08em; color: var(--dim); margin-bottom: 8px; }
+.proj-list { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.proj-empty { font-size: 12px; color: var(--dim); opacity: .7; padding: 6px 2px; }
+.proj {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 8px 10px; border-radius: 10px; border: 1px solid transparent;
+  background: transparent; color: var(--text); font: inherit;
+  transition: background .14s var(--ease-out), border-color .14s var(--ease-out);
+}
+.proj:hover { background: var(--glass); border-color: var(--stroke); }
+.proj-name { font-size: 13px; font-weight: 500; display: block;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-meta { font-size: 11px; color: var(--dim); display: block; margin-top: 2px;
+             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-phase { color: var(--orange-soft); }
+
+/* ---------- navegador de pastas ---------- */
+.modal { position: fixed; inset: 0; z-index: 60; display: flex;
+         align-items: center; justify-content: center;
+         background: rgb(0 0 0 / .55); backdrop-filter: blur(3px); }
+.modal-card { width: min(620px, 92vw); max-height: 76vh; display: flex;
+              flex-direction: column; border-radius: var(--radius);
+              border: 1px solid var(--stroke); overflow: hidden; }
+.mod-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+            border-bottom: 1px solid var(--stroke); }
+/* Nada de `direction: rtl` para cortar pela esquerda: o truque funciona no
+   texto e MENTE na pontuação — `/Users/apple` era desenhado `Users/apple/`,
+   com a barra da raiz reposicionada no fim. O encurtamento é feito no JS, pelo
+   meio, onde não há ambiguidade sobre o que se perde. */
+.br-path { flex: 1; font-size: 12px; color: var(--dim);
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-list { flex: 1; overflow-y: auto; padding: 6px; min-height: 120px; }
+.br-row { display: flex; align-items: center; gap: 8px; width: 100%;
+          padding: 7px 10px; border: 0; border-radius: 9px; cursor: pointer;
+          background: transparent; color: var(--text); font: inherit;
+          font-size: 13px; text-align: left; }
+.br-row:hover { background: var(--glass); }
+.br-row .ic { color: var(--blue); }
+/* Marcar a pasta que É um projeto poupa um nível inteiro de navegação: a
+   pessoa vê onde chegar sem precisar entrar para descobrir. */
+.br-row .tag { margin-left: auto; font-size: 10px; padding: 2px 6px;
+               border-radius: 999px; color: var(--orange-soft);
+               background: rgb(var(--orange-rgb) / .14); }
+.mod-foot { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+            border-top: 1px solid var(--stroke); }
+.br-hint { flex: 1; font-size: 11.5px; color: var(--dim); }
+
 /* ---------- player ---------- */
 .player-wrap { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; }
 
@@ -837,6 +938,25 @@ kbd {
 .color-slot { display: flex; flex-direction: column; gap: 5px; }
 .color-lab { font-size: 10px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--dim); }
 
+/* ---------- seletor de família ---------- */
+/* Cada opção desenhada NA PRÓPRIA FONTE, e uma amostra ao lado. Escolher tipo
+   lendo o nome da fonte é escolher no escuro — a lista tem 27 famílias e os
+   nomes não dizem nada sobre a letra. */
+.font-pick { display: flex; align-items: center; gap: 9px; }
+.font-sel {
+  background: var(--glass); color: var(--text); font: inherit; font-size: 12.5px;
+  border: 1px solid var(--stroke); border-radius: 9px; padding: 6px 8px;
+  max-width: 170px; cursor: pointer;
+}
+.font-sel:hover { border-color: rgb(var(--orange-rgb) / .45); }
+/* O menu nativo herda o fundo do sistema; sem pintar as opções, metade dos
+   temas mostra texto claro sobre fundo claro. */
+.font-sel option { background: var(--bg1); color: var(--text); font-size: 15px; }
+.font-sample {
+  font-size: 19px; line-height: 1; color: var(--text); opacity: .85;
+  white-space: nowrap; min-width: 84px;
+}
+
 /* a headline é conteúdo, então ganha uma caixa de texto de verdade */
 .hl-text {
   width: 100%;
@@ -1121,9 +1241,23 @@ kbd {
   text-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
 }
 
-/* ---- headline demos: the template's hook styles, same scaling contract ----
-   Sizes and line breaks are computed in JS (buildHeadlineDemo) because the
-   template computes them too — only the look lives here. */
+/* ---- as prévias de headline usam a FOLHA DO RENDER (/styles/headline.css) ----
+   Só a MOLDURA é adaptada aqui. No render o bloco é posicionado no quadro do
+   vídeo (`position:absolute` + `top` + o `left:50%/translateX(-50%)` do
+   cartão); no cartão da prévia quem centra é o flex do `.cap-demo`, e deixar o
+   posicionamento do render valer jogava o cartão meia largura para a direita,
+   por cima do próprio seletor.
+   Neutralizar aqui, e não mexer na folha do render: ela descreve o vídeo. */
+#opt-headlines .ave-hook {
+  position: static;
+  left: auto; right: auto; top: auto;
+}
+#opt-headlines .ave-hook.card { transform: none; }
+/* A escala de encaixe: uma headline de três linhas é mais alta que o cartão, e
+   com o `/` isso deixou de ser exceção. Medida no JS e escrita aqui. */
+#opt-headlines .cap-demo > .hl-fit { transform: scale(var(--hl-fit, 1)); }
+
+/* ---- restos da cópia antiga do visual, mantidos só para as demos de legenda ---- */
 .hl-demo {
   position: absolute;
   text-align: center;
@@ -1788,3 +1922,8 @@ button.tl-chip:disabled { cursor: default; }
   margin-left: 6px;
   opacity: .8;
 }
+
+/* guardar a marca: um link discreto, não um botão de ação. Guardar cor e fonte
+   é um gesto raro (uma vez por identidade), e como botão sólido competiria com
+   "Enviar e renderizar", que é o gesto da tela. */
+.brand-save { margin-top: 10px; align-self: flex-start; font-size: 11.5px; }

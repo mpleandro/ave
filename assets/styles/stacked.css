@@ -76,7 +76,7 @@
   color: transparent;
 }
 
-.ave-stacked .s0 { font-family: 'Poppins', sans-serif; font-weight: 900; font-style: italic; }
+.ave-stacked .s0 { font-family: var(--stk-family, 'Poppins', sans-serif); font-weight: 900; font-style: italic; }
 .ave-stacked .s1 {
   font-family: 'Poppins', sans-serif;
   font-weight: 400;
@@ -84,8 +84,11 @@
   filter: drop-shadow(0 calc(5px * var(--stk-scale)) calc(10px * var(--stk-scale)) rgba(0, 0, 0, 0.55))
           drop-shadow(0 calc(2px * var(--stk-scale)) calc(3px * var(--stk-scale)) rgba(0, 0, 0, 0.55));
 }
+/* A serifada é IDENTIDADE DESTE ESTILO, não uma vaga a escolher: o empilhado
+   alterna quatro papéis tipográficos e este é um deles. Deixá-la trocável
+   dissolveria o estilo — quem quer outra letra quer outro estilo. */
 .ave-stacked .s2 { font-family: 'Playfair Display', serif; font-weight: 900; font-style: italic; color: var(--stk-orange); }
-.ave-stacked .s3 { font-family: 'Poppins', sans-serif; font-weight: 800; }
+.ave-stacked .s3 { font-family: var(--stk-family, 'Poppins', sans-serif); font-weight: 800; }
 
 /* palavra sozinha — o preparador a isola quando ela carrega a frase */
 .ave-stacked .stk-solo {

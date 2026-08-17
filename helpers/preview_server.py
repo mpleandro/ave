@@ -24,7 +24,13 @@ Routes:
                         <edit>/preview_style.json when body.type=="style-setup"
 
 Usage:
-    uv run helpers/preview_server.py --root <videos_dir>/edit [--port 4820]
+    uv run helpers/preview_server.py [--root <videos_dir>/edit] [--port 4820]
+
+`--root` é OPCIONAL. Sem ele o editor abre na tela sem projeto — dropzone,
+recentes e navegador de pastas — e a escolha acontece na interface
+(`/api/projects`, `/api/browse`, `/api/drop`, `/api/upload`, `/api/open`,
+`/api/close`). O projeto aberto é publicado em `~/.avelin/current.json`, que é
+o ponteiro que o `watch_edits.py` segue.
 """
 from __future__ import annotations
 
@@ -144,6 +150,229 @@ def _deps() -> dict:
     }
 
 
+# ---- projetos ----
+#
+# O EDITOR ABRE VAZIO.
+#
+# Enquanto o `--root` era obrigatório, isto não era um aplicativo: era a janela
+# de UMA pasta, decidida na linha de comando por quem subiu o processo. Abrir o
+# endereço mostrava o último projeto que alguém tinha passado — no caso que
+# originou esta mudança, um vídeo ENTREGUE meses antes, com legenda, trilha e
+# tudo pronto, como se fosse o trabalho da vez. Não há como "fechar" o que
+# nunca foi aberto, e a única forma de trocar de projeto era matar o servidor.
+#
+# Agora o root começa vazio e a escolha acontece na tela. Para escolher é
+# preciso lembrar, e lembrar tem de sobreviver ao processo — que reinicia toda
+# vez que a skill é atualizada — então a lista mora em disco, no HOME, e não em
+# memória.
+RECENTS = Path.home() / ".avelin" / "projects.json"
+RECENTS_MAX = 24
+
+# QUAL PROJETO ESTÁ ABERTO AGORA, publicado para fora do processo.
+#
+# O `watch_edits.py` é armado para UMA pasta, no instante em que a sessão
+# começa. Enquanto o projeto era escolhido na linha de comando isso bastava;
+# agora que a pessoa troca de projeto na tela, o vigia ficaria olhando a pasta
+# anterior — ela salva uma marcação, vê "enviado", e o agente nunca recebe.
+# Este arquivo é o ponteiro que ele segue.
+CURRENT = Path.home() / ".avelin" / "current.json"
+
+# A MARCA DA PESSOA, e ela não pertence a um projeto.
+#
+# Cor de destaque e família tipográfica não mudam de vídeo para vídeo — são de
+# QUEM faz, não do que está sendo feito. Enquanto viviam só no `state.json` de
+# cada projeto, cada vídeo novo começava no laranja de fábrica e o usuário
+# reescrevia o mesmo hexadecimal toda vez, às vezes errando um dígito e
+# entregando dois laranjas parecidos em vídeos da mesma série.
+#
+# Fica no HOME, ao lado dos recentes: é a mesma natureza de dado — o que o
+# aplicativo sabe sobre esta pessoa, não sobre este trabalho. O agente também
+# escreve aqui quando descobre a marca (de um site, de um material de
+# referência, de uma resposta no chat).
+BRAND = Path.home() / ".avelin" / "brand.json"
+BRAND_KEYS = ("accent", "textColor", "capColor", "fontMain", "fontAccent", "capFont")
+
+
+def _set_root(p: Path | None) -> None:
+    """Trocar de projeto é uma coisa só: o root e o ponteiro publicado."""
+    Handler.root = p
+    try:
+        CURRENT.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CURRENT.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"root": str(p) if p else None,
+                                   "at": time.time()}, ensure_ascii=False))
+        tmp.replace(CURRENT)
+    except OSError:
+        pass
+
+# Onde procurar projetos que nunca foram abertos por aqui. O usuário tem
+# projetos no disco de antes desta lista existir; sem a varredura a tela
+# inicial nasceria vazia para quem mais tem trabalho feito.
+SCAN_ROOTS = ("Movies", "Videos", "Desktop", "Documents")
+SCAN_MAX_DEPTH = 6
+SCAN_TTL_S = 60.0
+# Pastas que um projeto tem aos milhares de arquivos dentro e onde nunca há
+# outro projeto. Sem podar, a varredura entra em `clips_graded/` com 100
+# extrações e em `node_modules`, e leva segundos em vez de milissegundos.
+SCAN_SKIP = {
+    "node_modules", "clips_graded", "clips_proxy", "transcripts", "renders",
+    "hyperframes", "remotion", "verify", "pexels", "broll", "sfx", "film",
+    "Library", "Photos Library.photoslibrary", "__pycache__", ".git",
+}
+_scan_cache: dict = {"at": 0.0, "items": []}
+
+
+VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm", ".mts", ".mxf", ".m2ts"}
+
+# Onde nasce um projeto cujo vídeo veio de fora (uma pasta de entrada, ou um
+# arquivo que só existe como upload). Nunca a pasta de Downloads em si: um
+# `~/Downloads/edit` fica órfão junto de mil arquivos que não são do projeto.
+NEW_PROJECTS_DIR = Path.home() / "Movies" / "Avelin"
+INBOX_DIRS = {Path.home() / "Downloads", Path.home() / "Desktop"}
+
+
+def _locate_file(name: str, size: int) -> Path | None:
+    """Achar no disco o arquivo que a pessoa arrastou.
+
+    O navegador entrega o CONTEÚDO de um arquivo solto e esconde ONDE ele
+    está — não há API que dê o caminho absoluto, é fronteira de segurança do
+    navegador. Mas ele entrega nome e tamanho, e esse par identifica um vídeo
+    com folga de sobra dentro do HOME de uma pessoa.
+
+    Achando, o projeto usa o arquivo ONDE ELE ESTÁ: nada é copiado, e uma
+    fonte de 5 GB não vira duas. Só quando isto falha é que vale subir os bytes.
+    """
+    import os
+    for name_root in ("Movies", "Videos", "Desktop", "Documents", "Downloads"):
+        base = Path.home() / name_root
+        if not base.is_dir():
+            continue
+        base_depth = len(base.parts)
+        for dirpath, dirnames, filenames in os.walk(base, onerror=lambda e: None):
+            here = Path(dirpath)
+            if len(here.parts) - base_depth >= SCAN_MAX_DEPTH + 2:
+                dirnames[:] = []
+                continue
+            dirnames[:] = [d for d in dirnames
+                           if not d.startswith(".") and d not in SCAN_SKIP]
+            if name in filenames:
+                cand = here / name
+                try:
+                    if cand.stat().st_size == size:
+                        return cand
+                except OSError:
+                    pass
+    return None
+
+
+def _project_dir_for(video: Path) -> Path:
+    """A pasta de vídeos de um arquivo — que é onde o `edit/` vai morar.
+
+    Regra: o projeto nasce ao lado do vídeo, que é a convenção da skill
+    (`<videos_dir>/edit/`). A exceção são as pastas de ENTRADA: um `edit/`
+    dentro de Downloads não é um projeto, é lixo no meio da bagunça de todo
+    mundo — de lá o vídeo é copiado para uma pasta de projeto de verdade.
+    """
+    # O vídeo JÁ ESTÁ dentro de um projeto — `base.mp4`, `cut.mp4`, `final.mp4`
+    # e todo render vivem no `edit/`. Sem esta linha o projeto do projeto vira
+    # um `edit/edit`, e isso não é hipótese: existe um no disco, criado assim.
+    if video.parent.name == "edit":
+        return video.parent.parent
+    if video.parent in INBOX_DIRS:
+        dest = NEW_PROJECTS_DIR / _slug(video.stem)
+        dest.mkdir(parents=True, exist_ok=True)
+        alvo = dest / video.name
+        if not alvo.exists():
+            # COPIAR, nunca mover. O arquivo é do usuário e ele pode estar
+            # esperando encontrá-lo onde deixou.
+            shutil.copy2(video, alvo)
+        return dest
+    return video.parent
+
+
+def _is_project(p: Path) -> bool:
+    """Uma pasta `edit` com `state.json` dentro É um projeto do Avelin."""
+    try:
+        return (p / "state.json").is_file()
+    except OSError:
+        return False
+
+
+def _project_card(p: Path) -> dict:
+    """O cartão que a tela inicial mostra. Nunca levanta — a lista de recentes
+    envelhece junto com o disco, e um projeto renomeado ou num volume
+    desmontado não pode derrubar a tela que serve para escolher outro."""
+    card = {
+        # O NOME ÚTIL É O DA PASTA DE CIMA. Todo projeto se chama `edit`, então
+        # uma lista de dez fica com dez linhas idênticas.
+        "name": p.parent.name or p.name,
+        "path": str(p),
+        "phase": None, "message": "", "mtime": 0.0, "exists": p.is_dir(),
+    }
+    try:
+        st = json.loads((p / "state.json").read_text())
+        card["name"] = str(st.get("project") or card["name"])
+        card["phase"] = st.get("phase")
+        card["message"] = str(st.get("message") or "")
+        card["mtime"] = (p / "state.json").stat().st_mtime
+    except (OSError, json.JSONDecodeError):
+        pass
+    return card
+
+
+def _recents_read() -> list[str]:
+    try:
+        data = json.loads(RECENTS.read_text())
+        return [str(x) for x in data.get("recent", [])]
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _recents_touch(p: Path) -> None:
+    """Abriu → vai para o topo. Sem duplicata, e sem crescer para sempre."""
+    keep = [str(p)] + [x for x in _recents_read() if x != str(p)]
+    try:
+        RECENTS.parent.mkdir(parents=True, exist_ok=True)
+        tmp = RECENTS.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"recent": keep[:RECENTS_MAX]},
+                                  ensure_ascii=False, indent=2))
+        tmp.replace(RECENTS)
+    except OSError:
+        pass  # sem lista é pior, mas não é motivo para não abrir o projeto
+
+
+def _scan_projects(force: bool = False) -> list[str]:
+    """Projetos no disco que a lista de recentes ainda não conhece.
+
+    Cacheada por tempo: a tela inicial faz poll de 2 em 2 segundos e uma
+    varredura por poll transformaria a escolha de projeto num busy-loop de I/O.
+    """
+    import os
+    now = time.time()
+    if not force and now - _scan_cache["at"] < SCAN_TTL_S:
+        return _scan_cache["items"]
+    found: list[str] = []
+    for name in SCAN_ROOTS:
+        base = Path.home() / name
+        if not base.is_dir():
+            continue
+        base_depth = len(base.parts)
+        for dirpath, dirnames, filenames in os.walk(base, onerror=lambda e: None):
+            here = Path(dirpath)
+            if len(here.parts) - base_depth >= SCAN_MAX_DEPTH:
+                dirnames[:] = []
+                continue
+            dirnames[:] = [d for d in dirnames
+                           if not d.startswith(".") and d not in SCAN_SKIP]
+            if here.name == "edit" and "state.json" in filenames:
+                found.append(str(here))
+                # Um projeto não contém outro. Descer daqui só encontraria as
+                # pastas de trabalho — e num caso real, um `edit/edit` vazio.
+                dirnames[:] = []
+    _scan_cache.update(at=now, items=found)
+    return found
+
+
 def _stale() -> bool:
     """Algum arquivo do app mudou DEPOIS que este processo subiu?"""
     watched = [Path(__file__).resolve(), APP_DIR / "app.js",
@@ -216,7 +445,11 @@ def gen_thumbs(video: Path, out_dir: Path) -> None:
 
 
 class Handler(BaseHTTPRequestHandler):
-    root: Path  # set on the class by main()
+    # NENHUM projeto aberto é o estado inicial legítimo, não um erro de partida.
+    # Por isso `None` e não uma pasta qualquer: um root-padrão inventado faria
+    # o editor abrir mostrando um projeto que ninguém escolheu, que é
+    # exatamente o defeito que o estado vazio existe para corrigir.
+    root: Path | None = None
     protocol_version = "HTTP/1.1"
 
     # ---- helpers ----
@@ -291,7 +524,21 @@ class Handler(BaseHTTPRequestHandler):
         p = (base / rel.lstrip("/")).resolve()
         return p if str(p).startswith(str(base.resolve())) else None
 
+    def _no_project(self) -> bool:
+        """Rota que só faz sentido dentro de um projeto, sem projeto aberto.
+
+        Responde 409 e não 404: o caminho existe, o que falta é contexto. A
+        diferença importa para o app, que trata 404 como "ainda não gerado" e
+        continua tentando.
+        """
+        if self.root:
+            return False
+        self._json({"error": "nenhum projeto aberto", "noProject": True}, 409)
+        return True
+
     def _current_video(self) -> Path | None:
+        if not self.root:
+            return None
         state_p = self.root / "state.json"
         rel = "preview.mp4"
         if state_p.exists():
@@ -314,24 +561,53 @@ class Handler(BaseHTTPRequestHandler):
             p = self._safe(STYLE_DIR, path[len("/styles/"):])
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path.startswith("/media/"):
+            if self._no_project():
+                return
             p = self._safe(self.root, path[len("/media/"):])
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path == "/gen/words.json":
-            self._words()
+            self._no_project() or self._words()
         elif path == "/gen/waveform.json":
-            self._waveform()
+            self._no_project() or self._waveform()
         elif path.startswith("/gen/thumbs/"):
-            self._thumbs(path[len("/gen/thumbs/"):])
+            self._no_project() or self._thumbs(path[len("/gen/thumbs/"):])
         elif path == "/api/state":
             self._state()
+        elif path == "/api/projects":
+            self._projects()
+        elif path == "/api/browse":
+            self._browse()
+        elif path == "/api/brand":
+            self._brand_get()
+        elif path == "/api/localfonts":
+            self._localfonts()
         elif path == "/download":
-            self._download()
+            self._no_project() or self._download()
         else:
             self._json({"error": "unknown route"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path.split("?", 1)[0] != "/api/save":
+        route = self.path.split("?", 1)[0]
+        if route == "/api/upload":
+            return self._upload()
+        if route in ("/api/open", "/api/close", "/api/drop", "/api/brand"):
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, json.JSONDecodeError):
+                self._json({"error": "invalid JSON"}, 400)
+                return
+            if route == "/api/open":
+                return self._open(body)
+            if route == "/api/drop":
+                return self._drop(body)
+            if route == "/api/brand":
+                return self._brand_put(body)
+            return self._close()
+        if route != "/api/save":
             self._json({"error": "unknown route"}, 404)
+            return
+        if self._no_project():
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -482,8 +758,332 @@ class Handler(BaseHTTPRequestHandler):
         threading.Thread(target=run, daemon=True).start()
         return True
 
+    # ---- fontes instaladas ----
+    def _localfonts(self) -> None:
+        """As famílias instaladas nesta máquina, para o seletor da headline.
+
+        O catálogo do Google cobre o genérico e não cobre a MARCA de ninguém —
+        a tipografia da identidade do usuário está no computador dele. Funciona
+        porque o render roda em Chrome aqui e o Chrome resolve a família pelo
+        NOME; só a medição precisa do arquivo, e disso cuida o `text_measure`.
+
+        A primeira chamada indexa (~1,5s para 2600 arquivos); as seguintes leem
+        o índice cacheado. Vai sem os caminhos — o navegador não tem uso para
+        eles e mandá-los exporia a árvore de arquivos do usuário à toa.
+        """
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import local_fonts
+            self._json({"families": local_fonts.catalog()})
+        except Exception as exc:
+            # sem fontes locais o editor continua inteiro, só com o Google
+            self._json({"families": [], "error": str(exc)[:200]})
+
+    # ---- a marca ----
+    def _brand_get(self) -> None:
+        try:
+            d = json.loads(BRAND.read_text())
+        except (OSError, json.JSONDecodeError):
+            d = {}
+        self._json({k: d[k] for k in BRAND_KEYS if k in d})
+
+    def _brand_put(self, body: dict) -> None:
+        """Guarda só as chaves conhecidas — o corpo vem do navegador, e gravar o
+        que ele mandar transformaria este arquivo em depósito de qualquer coisa
+        que um dia passe pelo payload de estilo."""
+        try:
+            cur = json.loads(BRAND.read_text())
+        except (OSError, json.JSONDecodeError):
+            cur = {}
+        for k in BRAND_KEYS:
+            v = body.get(k)
+            if isinstance(v, str) and v.strip():
+                cur[k] = v.strip()
+        try:
+            BRAND.parent.mkdir(parents=True, exist_ok=True)
+            tmp = BRAND.with_suffix(".tmp")
+            tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2))
+            tmp.replace(BRAND)
+        except OSError as exc:
+            self._json({"error": str(exc)}, 500)
+            return
+        self._json({"ok": True, "brand": cur})
+
+    # ---- escolha de projeto ----
+    def _projects(self) -> None:
+        """O que a tela inicial oferece: recentes primeiro, achados depois.
+
+        Duas listas separadas e não uma só ordenada por data. Um recente é uma
+        escolha que a pessoa já fez; um achado é um palpite do programa. Fundir
+        as duas faria o palpite competir de igual para igual com a memória, e
+        no disco de quem edita há dezenas de achados para meia dúzia de
+        recentes.
+        """
+        recent = [_project_card(Path(p)) for p in _recents_read()]
+        vistos = {c["path"] for c in recent}
+        found = [_project_card(Path(p)) for p in _scan_projects()
+                 if p not in vistos]
+        found.sort(key=lambda c: c["mtime"], reverse=True)
+        self._json({
+            "recent": [c for c in recent if c["exists"]],
+            "found": found,
+            # de onde partir quando a pessoa quiser navegar
+            "home": str(Path.home()),
+        })
+
+    def _browse(self) -> None:
+        """Navegar o disco pelo navegador.
+
+        Precisa existir porque a página NÃO consegue entregar um caminho
+        absoluto: `<input webkitdirectory>` dá os nomes dos arquivos e esconde
+        onde eles estão, e o servidor precisa exatamente do que o navegador
+        esconde. Então quem lista as pastas é este lado.
+        """
+        from urllib.parse import parse_qs, urlparse
+        q = parse_qs(urlparse(self.path).query)
+        raw = (q.get("path") or [str(Path.home())])[0]
+        here = Path(raw).expanduser()
+        if not here.is_dir():
+            here = Path.home()
+        here = here.resolve()
+        dirs = []
+        try:
+            for d in sorted(here.iterdir(), key=lambda x: x.name.lower()):
+                if not d.is_dir() or d.name.startswith("."):
+                    continue
+                dirs.append({
+                    "name": d.name, "path": str(d),
+                    # a pasta É um projeto, ou CONTÉM um: as duas se abrem, e
+                    # marcá-las poupa a navegação de um nível inteiro
+                    "isProject": _is_project(d),
+                    "hasProject": _is_project(d / "edit"),
+                })
+        except OSError as exc:
+            self._json({"error": str(exc)}, 400)
+            return
+        self._json({
+            "path": str(here),
+            "parent": None if here.parent == here else str(here.parent),
+            "dirs": dirs,
+        })
+
+    def _open(self, body: dict) -> None:
+        """Abrir um projeto — o `--root` de antes, agora em tempo de execução.
+
+        Aceita a pasta `edit` ou a pasta de VÍDEOS que a contém, porque quem
+        navega chega pelo nome do vídeo e não pelo `edit` lá dentro. Com
+        `create`, uma pasta de vídeos sem `edit` vira um projeto novo: é o
+        único jeito de começar um trabalho sem voltar ao terminal.
+        """
+        raw = str(body.get("path") or "").strip()
+        if not raw:
+            self._json({"error": "sem caminho"}, 400)
+            return
+        p = Path(raw).expanduser()
+        if not p.is_dir():
+            self._json({"error": f"pasta não encontrada: {p}"}, 404)
+            return
+        p = p.resolve()
+        alvo = p if _is_project(p) else None
+        if alvo is None and _is_project(p / "edit"):
+            alvo = (p / "edit").resolve()
+        if alvo is None:
+            # pasta `edit` já existente, ainda sem state.json, conta como
+            # projeto começado — recusá-la mandaria a pessoa criar um "novo"
+            # por cima do que ela já tem
+            if p.name == "edit" or (p / "edit").is_dir():
+                alvo = (p if p.name == "edit" else p / "edit").resolve()
+            elif body.get("create"):
+                alvo = (p / "edit").resolve()
+                try:
+                    alvo.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    self._json({"error": str(exc)}, 400)
+                    return
+            else:
+                self._json({"error": "essa pasta não tem um projeto do Avelin",
+                            "canCreate": True}, 404)
+                return
+        _set_root(alvo)
+        _recents_touch(alvo)
+        self._json({"ok": True, "path": str(alvo), "project": _project_card(alvo)})
+
+    def _close(self) -> None:
+        _set_root(None)
+        self._json({"ok": True})
+
+    def _adopt(self, video: Path) -> None:
+        """Vídeo no disco → projeto aberto. O caminho comum das duas entradas.
+
+        Escreve o `state.json` inicial porque um projeto sem ele não é um
+        projeto: não aparece na lista de recentes na próxima vez, e o app não
+        tem o que mostrar no cabeçalho. É também o recado que a skill lê para
+        saber que há trabalho parado esperando a Fase 1.
+        """
+        pasta = _project_dir_for(video)
+        edit = pasta / "edit"
+        edit.mkdir(parents=True, exist_ok=True)
+        st = edit / "state.json"
+        # ARRASTAR UM VÍDEO DE UM PROJETO QUE JÁ EXISTE É ABRIR ELE, e nada
+        # mais. Pedir a Fase 1 aqui mandaria recortar um trabalho pronto — e o
+        # arquivo que mais convida a ser arrastado é justamente o render que
+        # está na pasta do projeto acabado.
+        novo = not st.exists()
+        if novo:
+            st.write_text(json.dumps({
+                "project": pasta.name,
+                "phase": 1,
+                "video": "preview_proxy.mp4",
+                "edl": "edl.json",
+                "message": "Projeto novo — aguardando a Fase 1",
+                "awaitingStyle": False,
+                "sources": [(pasta / video.name).name if (pasta / video.name).exists()
+                            else str(video)],
+            }, ensure_ascii=False, indent=2))
+        # O PEDIDO, para o lado da IA. O editor cria a pasta; transcrever e
+        # cortar é trabalho de agente, e o canal que já existe para isso é o
+        # arquivo vigiado pelo watch_edits.py. Sem isto a dropzone montaria o
+        # projeto e ele ficaria parado sem ninguém saber que existe.
+        if novo:
+            (edit / "preview_request.json").write_text(json.dumps({
+                "type": "new-project",
+                "videosDir": str(pasta),
+                "source": str((pasta / video.name) if (pasta / video.name).exists() else video),
+                "at": time.time(),
+            }, ensure_ascii=False, indent=2))
+        _set_root(edit.resolve())
+        _recents_touch(Handler.root)
+        _scan_cache["at"] = 0.0  # o projeto é novo; a varredura cacheada não o tem
+        self._json({"ok": True, "path": str(Handler.root),
+                    "project": _project_card(Handler.root)})
+
+    def _drop_dir(self, body: dict) -> None:
+        """Arrastou uma PASTA. Mesmo problema, mesma solução.
+
+        Uma pasta solta também chega sem caminho — só o nome e os nomes do que
+        tem dentro. O nome sozinho é fraco (há `Broll` em três projetos), então
+        o desempate é a lista de filhos: a pasta certa é a que contém os
+        arquivos que o navegador acabou de enumerar.
+        """
+        import os
+        name = str(body.get("name") or "").strip()
+        entries = {str(x) for x in (body.get("entries") or [])}
+        if not name:
+            self._json({"error": "sem nome de pasta"}, 400)
+            return
+        melhor, melhor_nota = None, -1
+        for name_root in ("Movies", "Videos", "Desktop", "Documents", "Downloads"):
+            base = Path.home() / name_root
+            if not base.is_dir():
+                continue
+            base_depth = len(base.parts)
+            for dirpath, dirnames, _f in os.walk(base, onerror=lambda e: None):
+                here = Path(dirpath)
+                if len(here.parts) - base_depth >= SCAN_MAX_DEPTH + 2:
+                    dirnames[:] = []
+                    continue
+                dirnames[:] = [d for d in dirnames
+                               if not d.startswith(".") and d not in SCAN_SKIP]
+                if name not in dirnames:
+                    continue
+                cand = here / name
+                try:
+                    nota = len(entries & {c.name for c in cand.iterdir()})
+                except OSError:
+                    continue
+                if nota > melhor_nota:
+                    melhor, melhor_nota = cand, nota
+        if melhor is None:
+            self._json({"error": f"não achei a pasta “{name}” no seu disco",
+                        "notFound": True}, 404)
+            return
+        self._open({"path": str(melhor), "create": True})
+
+    def _drop(self, body: dict) -> None:
+        if body.get("kind") == "dir":
+            return self._drop_dir(body)
+        """Arrastou um vídeo: tenta resolver SEM transferir os bytes."""
+        name = str(body.get("name") or "").strip()
+        size = int(body.get("size") or 0)
+        if not name:
+            self._json({"error": "sem nome de arquivo"}, 400)
+            return
+        if Path(name).suffix.lower() not in VIDEO_EXT:
+            self._json({"error": f"{Path(name).suffix or 'esse arquivo'} não é vídeo"}, 415)
+            return
+        found = _locate_file(name, size) if size else None
+        if not found:
+            # A resposta é uma INSTRUÇÃO, não um erro: o app sobe o arquivo e
+            # tenta de novo pela outra porta.
+            self._json({"needUpload": True})
+            return
+        self._adopt(found)
+
+    def _upload(self) -> None:
+        """Recebe o vídeo que não estava no disco — corpo cru, direto para o arquivo.
+
+        Cru e não multipart: o corpo é um vídeo inteiro e um parser de
+        multipart o carregaria na memória para devolver a mesma coisa. Aqui os
+        bytes vão do socket para o disco em blocos, então o tamanho do arquivo
+        não é o tamanho da RAM usada.
+        """
+        from urllib.parse import parse_qs, urlparse
+        q = parse_qs(urlparse(self.path).query)
+        name = (q.get("name") or [""])[0].strip()
+        name = Path(name).name  # nunca deixe o nome virar caminho
+        if not name or Path(name).suffix.lower() not in VIDEO_EXT:
+            self._json({"error": "nome de vídeo inválido"}, 400)
+            return
+        try:
+            total = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            total = 0
+        if total <= 0:
+            self._json({"error": "corpo vazio"}, 400)
+            return
+        dest_dir = NEW_PROJECTS_DIR / _slug(Path(name).stem)
+        try:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            alvo = dest_dir / name
+            tmp = alvo.with_suffix(alvo.suffix + ".part")
+            with open(tmp, "wb") as f:
+                restante = total
+                while restante > 0:
+                    bloco = self.rfile.read(min(1 << 20, restante))
+                    if not bloco:
+                        break
+                    f.write(bloco)
+                    restante -= len(bloco)
+            if restante > 0:
+                tmp.unlink(missing_ok=True)
+                self._json({"error": "transferência interrompida"}, 400)
+                return
+            tmp.replace(alvo)
+        except OSError as exc:
+            self._json({"error": str(exc)}, 500)
+            return
+        self._adopt(alvo)
+
     # ---- dynamic bits ----
     def _state(self) -> None:
+        if not self.root:
+            # O ESTADO VAZIO É UM ESTADO, e responde 200. Devolver erro aqui
+            # faria o poll do app tratar "nenhum projeto aberto" como servidor
+            # com problema — e a tela inicial é justamente onde o app funciona.
+            self._json({
+                "noProject": True,
+                "state": {}, "edl": None, "mtimes": {}, "videoDuration": 0,
+                "hasPendingEdits": False, "progress": None,
+                "serverStale": _stale(),
+                "keys": {"groq": _has_key("GROQ_API_KEY"),
+                         "elevenlabs": _has_key("ELEVENLABS_API_KEY"),
+                         "pexels": _has_key("PEXELS_API_KEY"),
+                         "google": _has_key("GOOGLE_API_KEY") and _has_key("GOOGLE_CSE_ID"),
+                         "treblo": _has_key("TREBLO_API_KEY")},
+                "deps": _deps(),
+                "now": time.time(),
+            })
+            return
         state_p = self.root / "state.json"
         state: dict = {}
         if state_p.exists():
@@ -511,6 +1111,8 @@ class Handler(BaseHTTPRequestHandler):
         edits_p = self.root / "preview_edits.json"
         video = self._current_video()
         self._json({
+            "noProject": False,
+            "root": str(self.root),
             "state": state,
             "edl": edl,
             "mtimes": mtimes,
@@ -601,24 +1203,34 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Avelin preview interface server")
-    ap.add_argument("--root", type=Path, required=True, help="the session <edit> dir")
+    # OPCIONAL de propósito. Sem ele o editor abre vazio e a pessoa escolhe na
+    # tela — que é como um aplicativo se comporta. Com ele, a sessão da skill
+    # continua abrindo direto no projeto de que ela já sabe o caminho.
+    ap.add_argument("--root", type=Path, default=None,
+                    help="abre já neste <edit> dir (a skill passa; sem isto, "
+                         "o editor abre vazio)")
     ap.add_argument("--port", type=int, default=4820)
     ap.add_argument("--auto", action="store_true",
                     help="salvar no editor já refaz o corte / a Fase 2, "
                          "sem depender de alguém rodar um comando depois")
     args = ap.parse_args()
 
-    root = args.root.resolve()
-    if not root.exists():
-        raise SystemExit(f"edit dir not found: {root}")
     if not (APP_DIR / "index.html").exists():
         raise SystemExit(f"app not found at {APP_DIR}")
 
-    Handler.root = root
+    root = None
+    if args.root is not None:
+        root = args.root.resolve()
+        if not root.exists():
+            raise SystemExit(f"edit dir not found: {root}")
+        _recents_touch(root)
+
+    _set_root(root)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     srv.auto_apply = args.auto
     modo = " · salvar já refaz" if args.auto else ""
-    print(f"Avelin — editor → http://127.0.0.1:{args.port}  (root: {root}){modo}", flush=True)
+    onde = f"  (root: {root})" if root else "  (sem projeto — escolha na tela)"
+    print(f"Avelin — editor → http://127.0.0.1:{args.port}{onde}{modo}", flush=True)
     srv.serve_forever()
 
 

@@ -99,8 +99,11 @@ const ICON = {
 // inteiro; este mapa diz o que dele está pronto hoje. Manter os dois separados
 // é de propósito: o catálogo é a promessa, isto é o estado.
 const PORTED = {
-  captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked']),
-  headlines: new Set(['outline', 'card', 'realce', 'misto']),
+  captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked',
+                     'pop', 'popLinha', 'popBloco', 'revelar']),
+  headlines: new Set(['outline', 'card', 'realce', 'misto',
+                      'bloco', 'etiqueta', 'manuscrito', 'gigante',
+                      'relevo', 'grifo', 'contorno_duplo']),
   edits: new Set(['limpa', 'split', 'split2']),
 };
 
@@ -172,6 +175,13 @@ const STYLE_CATALOG = {
     {id: 'card', name: 'Cartão', hl: 'card'},
     {id: 'realce', name: 'Realce', hl: 'realce'},
     {id: 'misto', name: 'Misto', hl: 'misto'},
+    {id: 'bloco', name: 'Bloco', hl: 'bloco'},
+    {id: 'etiqueta', name: 'Etiqueta', hl: 'etiqueta'},
+    {id: 'manuscrito', name: 'Manuscrito', hl: 'manuscrito'},
+    {id: 'gigante', name: 'Gigante', hl: 'gigante'},
+    {id: 'relevo', name: 'Relevo', hl: 'relevo'},
+    {id: 'grifo', name: 'Grifo', hl: 'grifo'},
+    {id: 'contorno_duplo', name: 'Contorno duplo', hl: 'contorno_duplo'},
   ],
   captions: [
     {id: 'karaoke', name: 'Karaokê', demo: 'karaoke'},
@@ -180,6 +190,10 @@ const STYLE_CATALOG = {
     {id: 'simples', name: 'Simples', stat: 'simples'},
     {id: 'serifada', name: 'Serifada', stat: 'serifada'},
     {id: 'classica', name: 'Clássica', stat: 'classica'},
+    {id: 'popBloco', name: 'Estouro (bloco)', demo: 'popBloco'},
+    {id: 'popLinha', name: 'Estouro (linha)', demo: 'popLinha'},
+    {id: 'pop', name: 'Estouro (palavra)', demo: 'pop'},
+    {id: 'revelar', name: 'Revelação', demo: 'revelar'},
   ],
   elements: [
     {
@@ -374,14 +388,158 @@ function buildStackedDemo(host) {
  * the preview shows the real break at the real size, not an approximation.
  * HL_STYLES exists on both sides; change one, change the other.
  */
-const HEADLINE_TEXT = 'É assim que vai ficar a sua headline';
+const HEADLINE_TEXT = 'É assim que vai ficar / a sua headline';
 const HL_MIN = 40;
-const HL_STYLES = {
+
+/* OS NÚMEROS VÊM DO `variants.json`, não de uma cópia aqui.
+ *
+ * Esta constante já foi uma segunda tabela mantida à mão ao lado da do
+ * compositor, com um comentário pedindo para atualizar as duas juntas — que é
+ * exatamente o arranjo que a skill proíbe para os estilos de legenda, e pela
+ * razão que se confirmou: ao ganhar sete layouts, a cópia teria nascido
+ * desatualizada. O fallback existe só para a janela entre o app carregar e o
+ * fetch do variants voltar. */
+const HL_FALLBACK = {
   outline: { weights: [800, 800], cap: 92, safeW: 900, lh: 1.02 },
-  card: { weights: [900, 900], cap: 82, safeW: 820, lh: 1.06 },
+  card: { weights: [900, 900], cap: 82, safeW: 820, lh: 1.06, upper: true },
   realce: { weights: [900, 900], cap: 86, safeW: 830, lh: 1.04 },
   misto: { weights: [400, 900], cap: 98, safeW: 900, lh: 0.98 },
 };
+const hlStyle = (id) =>
+  ((LIVE.variants && LIVE.variants.headlines) || {})[id] || HL_FALLBACK[id] || HL_FALLBACK.card;
+
+/* ---------- as duas famílias ----------
+ * Catálogo CURADO do Google Fonts, não a API inteira. Duas razões, e a segunda
+ * é a que obriga: mil e quinhentas famílias não se escolhem numa lista, e a
+ * API v2 responde ERRO — sem CSS nenhum — quando se pede um peso que a família
+ * não tem. Uma fonte de peso único como a Anton pedida em 900 derrubaria o
+ * carregamento inteiro, e o sintoma seria a headline renderizar na fonte de
+ * sistema. Por isso os pesos disponíveis são DADO aqui, e o peso pedido é
+ * grudado no mais próximo que existe. */
+const GFONTS_FALLBACK = [
+  { n: 'Poppins', w: [400, 500, 600, 700, 800, 900], k: 'display' },
+  { n: 'Montserrat', w: [400, 500, 600, 700, 800, 900], k: 'display' },
+  { n: 'Inter', w: [400, 500, 600, 700, 800, 900], k: 'display' },
+  { n: 'Rubik', w: [400, 500, 600, 700, 800, 900], k: 'display' },
+  { n: 'Oswald', w: [400, 500, 600, 700], k: 'display' },
+  { n: 'Barlow Condensed', w: [400, 500, 600, 700, 800, 900], k: 'display' },
+  { n: 'Teko', w: [400, 500, 600, 700], k: 'display' },
+  { n: 'Anton', w: [400], k: 'display' },
+  { n: 'Archivo Black', w: [400], k: 'display' },
+  { n: 'Bebas Neue', w: [400], k: 'display' },
+  { n: 'Fjalla One', w: [400], k: 'display' },
+  { n: 'Titan One', w: [400], k: 'display' },
+  { n: 'Passion One', w: [400, 700, 900], k: 'display' },
+  { n: 'Alfa Slab One', w: [400], k: 'display' },
+  { n: 'Playfair Display', w: [400, 500, 600, 700, 800, 900], k: 'serif' },
+  { n: 'Libre Baskerville', w: [400, 700], k: 'serif' },
+  { n: 'Lora', w: [400, 500, 600, 700], k: 'serif' },
+  { n: 'Merriweather', w: [300, 400, 700, 900], k: 'serif' },
+  { n: 'Bitter', w: [400, 500, 600, 700, 800, 900], k: 'serif' },
+  { n: 'Caveat', w: [400, 500, 600, 700], k: 'manuscrita' },
+  { n: 'Dancing Script', w: [400, 500, 600, 700], k: 'manuscrita' },
+  { n: 'Permanent Marker', w: [400], k: 'manuscrita' },
+  { n: 'Shadows Into Light', w: [400], k: 'manuscrita' },
+  { n: 'Kalam', w: [300, 400, 700], k: 'manuscrita' },
+  { n: 'Satisfy', w: [400], k: 'manuscrita' },
+  { n: 'Pacifico', w: [400], k: 'manuscrita' },
+  { n: 'Gloria Hallelujah', w: [400], k: 'manuscrita' },
+];
+/* O catálogo mora no `variants.json`, com a lista acima só de reserva para a
+ * janela antes do fetch voltar — mesma razão dos números dos layouts: uma
+ * segunda cópia mantida à mão diverge na primeira família adicionada de um
+ * lado só, e o sintoma seria a prévia oferecer uma fonte que o render não sabe
+ * pedir. */
+const gfonts = () => (LIVE.variants && LIVE.variants.gfonts) || GFONTS_FALLBACK;
+
+/* AS FONTES DO PRÓPRIO USUÁRIO, indexadas pelo servidor (`/api/localfonts`).
+ *
+ * O catálogo do Google cobre o genérico e não cobre a MARCA de ninguém: a
+ * tipografia da identidade está instalada no computador de quem edita. Isto
+ * funciona porque o render roda em Chrome NESTA máquina e o Chrome resolve
+ * `font-family: 'Gotham'` pelo nome, direto do sistema — nem a prévia nem o
+ * render precisam do arquivo. Quem precisa é a medição, que é local.
+ *
+ * O PREÇO, dito na interface: um projeto com fonte local não renderiza igual
+ * em outra máquina. */
+let LOCAL_FONTS = [];
+async function loadLocalFonts() {
+  try {
+    const d = await (await fetch('/api/localfonts')).json();
+    LOCAL_FONTS = Array.isArray(d.families) ? d.families : [];
+  } catch (e) { LOCAL_FONTS = []; }
+}
+const allFonts = () => gfonts().concat(LOCAL_FONTS);
+const GF = (name) => allFonts().find((f) => f.n === name) || gfonts()[0];
+const isLocal = (name) => (GF(name) || {}).k === 'local';
+const FONT_MAIN_DEF = 'Poppins';
+const FONT_ACCENT_DEF = 'Caveat';
+
+/* O peso PEDIDO grudado no que a família TEM. Sem isto, escolher a Anton num
+ * layout que pede 900 deixaria o navegador falsear o negrito — engorda o glifo
+ * por transformação e o texto fica sujo, além de medir diferente do render. */
+function nearestWeight(family, w) {
+  const ws = GF(family).w;
+  return ws.reduce((a, b) => (Math.abs(b - w) < Math.abs(a - w) ? b : a), ws[0]);
+}
+const FALLBACK_GENERICO = { manuscrita: 'cursive', serif: 'serif' };
+const cssFamily = (name) =>
+  `'${name}', ${FALLBACK_GENERICO[GF(name).k] || 'sans-serif'}`;
+
+/* A folha do Google para o par escolhido. Uma família por vez e só os pesos que
+ * ela tem — ver o comentário do catálogo. */
+function gfontHref(fams) {
+  const q = [...new Set(fams)].filter(Boolean)
+    // EMPACOTADAS e LOCAIS não existem por este caminho, e pedi-las devolve
+    // erro na folha INTEIRA — derrubando junto a família que existe
+    .filter((n) => !GF(n).file && GF(n).k !== 'local')
+    .map((n) => {
+      const f = GF(n);
+      const ws = f.w.length > 1 ? `:wght@${f.w.join(';')}` : '';
+      return `family=${n.replace(/ /g, '+')}${ws}`;
+    });
+  return q.length ? `https://fonts.googleapis.com/css2?${q.join('&')}&display=swap` : '';
+}
+
+/* `@font-face` das famílias que viajam com a skill, servidas de /styles/fonts/.
+ * A prévia tem de desenhar a MESMA letra do render — sem isto ela cairia numa
+ * genérica, e o layout seria escolhido sobre uma mentira. */
+let bundledStyle = null;
+function ensureBundled() {
+  const regras = gfonts().filter((f) => f.file).map((f) =>
+    `@font-face{font-family:'${f.n}';src:url('/styles/fonts/${f.file}');`
+    + `font-weight:${f.w[0]};font-style:normal;font-display:block}`).join('');
+  if (!regras) return;
+  if (!bundledStyle) {
+    bundledStyle = document.createElement('style');
+    document.head.appendChild(bundledStyle);
+  }
+  if (bundledStyle.textContent !== regras) bundledStyle.textContent = regras;
+}
+
+let gfontLink = null;
+function ensureFonts(fams) {
+  ensureBundled();
+  const href = gfontHref(fams);
+  if (!href) return;   // só empacotadas — não há folha do Google a pedir
+  if (!gfontLink) {
+    gfontLink = document.createElement('link');
+    gfontLink.rel = 'stylesheet';
+    document.head.appendChild(gfontLink);
+  }
+  if (gfontLink.href !== href) gfontLink.href = href;
+}
+
+/* ---------- degradê: a segunda parada é DERIVADA ----------
+ * A regra é do MODELO, não do usuário: ele escolhe uma cor e o layout decide
+ * se o degradê caminha para o escuro ou para o claro. Pedir as duas pontas
+ * devolveria degradê sujo com o dobro de perguntas. */
+function shadeHex(hex, amount, toDark) {
+  const n = parseInt((normHex(hex) || '#FFFFFF').slice(1), 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const f = (c) => (toDark ? Math.round(c * (1 - amount)) : Math.round(c + (255 - c) * amount));
+  return `#${ch.map((c) => f(c).toString(16).padStart(2, '0')).join('')}`;
+}
 
 // Measured in RENDER units (1080-wide), scaled to the box only at the end — the
 // template's letterSpacing is -1px at 1080, which is NOT proportional once the
@@ -404,69 +562,182 @@ function measureType(text, size, weight, family, tracking) {
 }
 const hlWidth = (text, size, weight) => measureType(text, size, weight);
 
-// Balance by MEASURED width, not word count: "É assim que vai" and "ficar a sua
-// headline" are 4 and 3 words but nearly the same width — counting words breaks
-// the line in the wrong place.
-function hlTwoLines(text, weights) {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  if (words.length < 2) return [words[0] || '', ''];
+/* A QUEBRA. O "/" MANDA; sem ele, equilibra por LARGURA MEDIDA.
+ *
+ * A barra é o controle que faltava: quem escreve sabe onde a frase respira, e
+ * o equilíbrio automático não sabe — ele só sabe deixar as linhas do mesmo
+ * tamanho. Com a barra o autor decide a quebra E quantas linhas existem, que é
+ * o que destrava os layouts de três linhas e os de linha herói.
+ *
+ * Sem barra, o antigo equilíbrio de DUAS linhas continua: por largura medida e
+ * não por contagem de palavras, porque "É assim que vai" e "ficar a sua
+ * headline" têm 4 e 3 palavras e quase a mesma largura. */
+function hlLines(text, S) {
+  const t = (text || '').trim();
+  if (t.includes('/')) {
+    const parts = t.split('/').map((s) => s.trim()).filter(Boolean);
+    if (parts.length) return parts;
+  }
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length < 2) return [words[0] || ''];
   let best = [words[0], words.slice(1).join(' ')];
   let bestDiff = Infinity;
   for (let i = 1; i < words.length; i++) {
     const a = words.slice(0, i).join(' ');
     const b = words.slice(i).join(' ');
-    const d = Math.abs(hlWidth(a, 100, weights[0]) - hlWidth(b, 100, weights[1]));
+    const d = Math.abs(hlWidth(a, 100, S.weights[0]) - hlWidth(b, 100, S.weights[1]));
     if (d < bestDiff) { bestDiff = d; best = [a, b]; }
   }
   return best;
 }
 
-function hlFit(lines, S) {
-  const widest = (size) =>
-    Math.max(hlWidth(lines[0], size, S.weights[0]), hlWidth(lines[1], size, S.weights[1]));
-  let size = Math.floor((S.safeW / Math.max(1, widest(100))) * 100);
-  size = Math.floor((S.safeW / Math.max(1, widest(size))) * size);
+/* CAIXA ALTA É DO CÓDIGO, NUNCA DO CSS.
+ * `text-transform` aplica DEPOIS da medição: mede-se a minúscula e desenha-se a
+ * maiúscula, que é mais larga — e a headline estoura o quadro sem erro nenhum.
+ * Foi o que aconteceu com o manuscrito e o gigante ao serem montados. */
+function hlUpper(i, n, S) {
+  if (S.upper) return true;
+  if (S.upperLines === 'last') return i === n - 1;
+  if (S.upperLines === 'rest') return i > 0;
+  if (Array.isArray(S.upperLines)) return S.upperLines.includes(i);
+  return false;
+}
+
+// o multiplicador de corpo de cada linha; a última entrada vale para as extras
+function hlKs(lines, S) {
+  if (!S.sizes) return lines.map(() => 1);
+  return lines.map((_, i) => S.sizes[Math.min(i, S.sizes.length - 1)]);
+}
+const hlWeight = (S, i) => S.weights[Math.min(i, S.weights.length - 1)];
+const hlFamily = (S, i, fonts) =>
+  (S.fontRole && S.fontRole[Math.min(i, S.fontRole.length - 1)] === 'accent')
+    ? fonts.accent : fonts.main;
+
+function hlFit(lines, S, fonts) {
+  const ks = hlKs(lines, S);
+  /* A LINHA HERÓI SAI DA CONTA COMUM. Ela é medida sozinha, contra a largura
+     inteira: no ajuste conjunto uma palavra curta ficaria pequena e uma longa
+     puxaria todas as outras linhas para baixo junto com ela. */
+  const idx = lines.map((_, i) => i).filter((i) => !(S.heroLast && i === lines.length - 1));
+  const alvo = idx.length ? idx : lines.map((_, i) => i);
+  const widest = (size) => Math.max(...alvo.map((i) =>
+    measureType(lines[i], size * ks[i], nearestWeight(hlFamily(S, i, fonts), hlWeight(S, i)),
+                cssFamily(hlFamily(S, i, fonts)))));
+  let size = (S.safeW / Math.max(1, widest(100))) * 100;
+  size = (S.safeW / Math.max(1, widest(size))) * size;
   return Math.max(HL_MIN, Math.min(size, S.cap));
 }
 
-function buildHeadlineDemo(host, styleId) {
-  const s = host.clientWidth / 1080;
-  const S = HL_STYLES[styleId];
-  host.innerHTML = '';
-  const wrap = el('div', 'cap-demo', host);
-  const raw = styleId === 'card' ? HEADLINE_TEXT.toUpperCase() : HEADLINE_TEXT;
-  const lines = hlTwoLines(raw, S.weights);
-  const size = hlFit(lines, S) * s;
-  const box = el('div', `hl-demo hl-${styleId}`, wrap);
-  box.style.lineHeight = String(S.lh);
-  box.style.letterSpacing = `${-1 * s}px`;
+function hlHeroSize(lines, S, fonts) {
+  const i = lines.length - 1;
+  const fam = cssFamily(hlFamily(S, i, fonts));
+  const w = nearestWeight(hlFamily(S, i, fonts), hlWeight(S, i));
+  let s = (S.safeW / Math.max(1, measureType(lines[i], 100, w, fam))) * 100;
+  s = (S.safeW / Math.max(1, measureType(lines[i], s, w, fam))) * s;
+  return Math.min(s, S.cap);
+}
 
-  if (styleId === 'realce') {
-    for (const l of lines) {
-      if (!l) continue;
-      const b = el('div', 'hl-block', box);
-      b.style.fontSize = `${size}px`;
-      b.style.borderRadius = `${12 * s}px`;
-      b.textContent = l;
-    }
-    return;
+/* As quatro variáveis de cor de UM bloco. As duas derivadas do degradê saem
+ * daqui junto com as escolhidas — separá-las deixaria a segunda parada com a
+ * cor antiga por um quadro, que é visível no arrasto. */
+function paintHook(box, S, main, accent) {
+  box.style.setProperty('--hl-main', main);
+  box.style.setProperty('--hl-accent', accent);
+  if (S && S.gradient) {
+    const dark = S.gradient.to === 'dark';
+    box.style.setProperty('--hl-main-2', shadeHex(main, S.gradient.amount, dark));
+    box.style.setProperty('--hl-accent-2', shadeHex(accent, S.gradient.amount, dark));
   }
-  if (styleId === 'card') {
-    box.style.borderRadius = `${24 * s}px`;
-    box.style.padding = `${28 * s}px ${46 * s}px`;
-  }
-  if (styleId === 'outline') {
-    box.style.webkitTextStroke = `${12 * s}px #000`;
-  }
+}
+
+/* Repinta as prévias JÁ MONTADAS. A cor não muda medida nenhuma, então
+ * remontar as onze a cada quadro do arrasto seria pagar a medição de todas
+ * elas para trocar duas variáveis. */
+function paintHeadlines() {
+  const main = normHex(S.style.textColor) || '#FFFFFF';
+  const accent = normHex(S.style.accent) || ACCENT_DEFAULT;
+  document.querySelectorAll('#opt-headlines .ave-hook').forEach((box) => {
+    const id = [...box.classList].find((c) => c !== 'ave-hook');
+    paintHook(box, hlStyle(id), main, accent);
+  });
+}
+
+/* Monta uma headline REAL — a mesma marcação e as mesmas classes que o
+ * compositor emite, com o mesmo `headline.css`. É o que permite escolher um
+ * layout olhando, em vez de escolher pelo nome. */
+function buildHeadline(host, styleId, text, opts) {
+  const o = opts || {};
+  const S = hlStyle(styleId);
+  const fonts = { main: o.fontMain || FONT_MAIN_DEF, accent: o.fontAccent || FONT_ACCENT_DEF };
+  ensureFonts([fonts.main, fonts.accent]);
+  const s = (o.width || host.clientWidth) / 1080;
+  host.innerHTML = '';
+  const box = el('div', `ave-hook ${styleId}`, host);
+  box.style.setProperty('--hl-scale', s);
+  box.style.setProperty('--hl-top', o.top == null ? 0 : o.top);
+  box.style.setProperty('--hl-lh', S.lh);
+  box.style.setProperty('--hl-stroke', S.stroke || 0);
+  box.style.setProperty('--hl-font', cssFamily(fonts.main));
+  box.style.setProperty('--hl-font-accent', cssFamily(fonts.accent));
+  /* AS CORES VÃO CRAVADAS NA CAIXA, e não herdadas do painel.
+     Herdar não funciona: o próprio `.ave-hook` DECLARA `--hl-main`/`--hl-accent`
+     como padrão na folha, e uma declaração na regra vence o valor herdado — as
+     prévias ficariam presas no laranja de fábrica enquanto o usuário arrasta a
+     roda. Quem repinta ao vivo é `paintHeadlines()`, que só troca as variáveis
+     das caixas já montadas, sem remedir nada. */
+  const main = normHex(o.main) || '#FFFFFF';
+  const accent = normHex(o.accent) || ACCENT_DEFAULT;
+  paintHook(box, S, main, accent);
+  if (o.position) box.style.position = o.position;
+
+  let lines = hlLines(text, S);
+  lines = lines.map((l, i) => (hlUpper(i, lines.length, S) ? l.toUpperCase() : l));
+  const size = hlFit(lines, S, fonts);
+  box.style.setProperty('--hl-size', size);
+  const ks = hlKs(lines, S);
+  if (S.heroLast) ks[lines.length - 1] = hlHeroSize(lines, S, fonts) / size;
+
+  const paint = S.paint || {};
   lines.forEach((l, i) => {
-    if (!l) return;
-    const d = el('div', '', box);
-    d.style.fontSize = `${size}px`;
-    d.style.fontWeight = String(S.weights[i]);
-    // var(), not a literal — an inline colour would beat the accent variable and
-    // this preview would keep painting orange while the others followed the pick
-    if (styleId === 'misto') d.style.color = i === 1 ? 'var(--hl-accent)' : '#fff';
-    d.textContent = l;
+    const d = el('div', 'hl-line', box);
+    d.style.setProperty('--hl-k', ks[i]);
+    // o peso vai INLINE porque foi grudado no que a família tem — deixar a
+    // folha pedir 900 numa fonte de peso único faz o navegador falsear o negrito
+    d.style.fontWeight = String(nearestWeight(hlFamily(S, i, fonts), hlWeight(S, i)));
+    d.dataset.text = l;   // a extrusão do relevo lê daqui
+    if (paint.tagBox != null && i === (paint.tag == null ? 0 : paint.tag)) d.classList.add('hl-tag');
+    if (paint.hollowLines && paint.hollowLines.includes(i)) d.classList.add('hl-hollow');
+    if (paint.wordBox) {
+      // sem nó de espaço entre as tarjas: o espaço ficaria DENTRO da tarja e as
+      // caixas se encostariam. A folga é a margem do .hl-word.
+      l.split(/\s+/).forEach((w) => { el('span', 'hl-word', d).textContent = w; });
+    } else {
+      d.textContent = l;
+    }
+  });
+  return box;
+}
+
+function buildHeadlineDemo(host, styleId) {
+  const wrap = el('div', 'cap-demo', host);
+  const fit = el('div', 'hl-fit', wrap);
+  buildHeadline(fit, styleId, S.style.headlineText || HEADLINE_TEXT, {
+    width: host.clientWidth,
+    main: S.style.textColor,
+    accent: S.style.accent,
+    fontMain: S.style.fontMain,
+    fontAccent: S.style.fontAccent,
+  });
+  /* ENCAIXE NA ALTURA DO CARTÃO. O corpo é ajustado à LARGURA segura, então
+     uma headline de três linhas é simplesmente mais alta — e com o `/` três
+     linhas deixaram de ser exceção. Sem isto a última linha some cortada pela
+     borda do cartão, e o usuário escolhe um layout sem ver o fim dele.
+     Reduzir a escala e não o corpo: mexer no corpo mudaria a QUEBRA, e a
+     prévia passaria a mostrar um arranjo de linhas que o render não vai fazer. */
+  requestAnimationFrame(() => {
+    const h = fit.getBoundingClientRect().height;
+    const alvo = host.clientHeight - 8;
+    fit.style.setProperty('--hl-fit', h > alvo && h > 0 ? Math.min(1, alvo / h) : 1);
   });
 }
 
@@ -606,7 +877,70 @@ function buildStaticDemo(host, id) {
   };
 }
 
-const CAP_BUILDERS = { karaoke: buildKaraokeDemo, stacked: buildStackedDemo, scatter: buildScatterDemo };
+/* Prévias dos estilos MEDIDOS do CapCut. Usam o CSS e o JS do RENDER
+ * (`/styles/pop.*`, `/styles/revelar.*`), não uma imitação: os tempos vêm de
+ * AVE_POP/AVE_REVELAR, que são os mesmos módulos que a composição carrega.
+ * Uma prévia que anima com outra curva é pior que nenhuma prévia. */
+function buildCapCutDemo(host, tipo, grupo) {
+  const s = host.clientWidth / 1080;
+  host.innerHTML = '';
+  const wrap = el('div', 'cap-demo', host);
+  const raiz = el('div', tipo === 'pop' ? `ave-pop grupo-${grupo}` : 'ave-rev', wrap);
+  raiz.style.position = 'absolute';
+  raiz.style.setProperty('--cap-scale', s);
+  if (S.style.capFont) {
+    ensureFonts([S.style.capFont]);
+    raiz.style.setProperty('--cap-family', cssFamily(S.style.capFont));
+  }
+  const linha = el('div', 'ave-cap-line', raiz);
+  /* No RENDER a legenda senta a `--cap-bottom` px do fundo do quadro de 1080.
+     No cartão da prévia, que tem um sexto da altura, essa mesma distância a
+     joga contra o topo. Aqui ela é centrada — a prévia mostra o ESTILO e a
+     animação, não o posicionamento no quadro, que é escolha de outra tela. */
+  linha.style.bottom = '50%';
+  linha.style.transform = 'translateY(50%)';
+  const palavras = CAP_TEXT.split(' ').slice(0, 4);
+  const spans = palavras.map((w, i) => {
+    const sp = el('span', i === 1 ? 'hi' : '', linha);
+    sp.textContent = w.toUpperCase();
+    return sp;
+  });
+
+  if (tipo === 'pop') {
+    const P = window.AVE_POP;
+    if (!P) return () => {};
+    const n = P.unitCount(spans.length, grupo);
+    const ciclo = P.lineDuration(spans.length, grupo) + 0.35;
+    const alvos = grupo === 'palavra' ? spans : [linha];
+    return (now) => {
+      const t = now % ciclo;
+      alvos.forEach((elm, i) => {
+        const st = P.unitState(t, i);
+        elm.style.opacity = st.opacity;
+        elm.style.transform = `skewX(-1deg) scale(${st.scale})`;
+      });
+    };
+  }
+  const R = window.AVE_REVELAR;
+  if (!R) return () => {};
+  const off = R.wordOffsets(palavras.map((w) => w.toUpperCase()));
+  const ciclo = R.lineDuration() + 0.4;
+  return (now) => {
+    const t = now % ciclo;
+    spans.forEach((elm, i) => {
+      const o = off.spans[i];
+      elm.style.setProperty('--rev-w', R.wordReveal(t, o.start, o.len, off.total));
+    });
+  };
+}
+
+const CAP_BUILDERS = {
+  karaoke: buildKaraokeDemo, stacked: buildStackedDemo, scatter: buildScatterDemo,
+  pop: (h) => buildCapCutDemo(h, 'pop', 'palavra'),
+  popLinha: (h) => buildCapCutDemo(h, 'pop', 'linha'),
+  popBloco: (h) => buildCapCutDemo(h, 'pop', 'bloco'),
+  revelar: (h) => buildCapCutDemo(h, 'revelar'),
+};
 
 // Largura da calha = deslocamento x das pistas dentro do conteúdo rolável.
 // Lida do token `--label-w` em vez de repetida aqui: era um número duplicado em
@@ -677,6 +1011,22 @@ function defaultStyle() {
     captions: STYLE_CATALOG.captions[0].id,
     accent: ACCENT_DEFAULT,
     capColor: '#FFFFFF',
+    /* A COR PRINCIPAL DA HEADLINE, separada da `capColor` da legenda.
+       O destaque continua ÚNICO para as duas de propósito — um vídeo com dois
+       laranjas diferentes não lê como um vídeo, lê como um erro. Já a cor do
+       corpo se separa porque headline e legenda vivem sobre fundos diferentes:
+       a legenda cai sobre a costura da tela dividida e a headline sobre a
+       imagem, e a mesma escolha raramente serve às duas. */
+    textColor: '#FFFFFF',
+    fontMain: FONT_MAIN_DEF,
+    fontAccent: FONT_ACCENT_DEF,
+    /* A LEGENDA TEM FONTE PRÓPRIA — UMA — e não herda a da headline: as duas
+       vivem em zonas diferentes do quadro e raramente pedem a mesma letra (a
+       headline grita, a legenda tem de ser lida corrida). UMA e não um par:
+       onde um estilo alterna famílias, como a serifada do empilhado, isso é
+       identidade DELE, não vaga de escolha. O `null` é "o padrão do estilo",
+       então trocar de estilo traz de volta a letra com que ele foi desenhado. */
+    capFont: null,
     capDy: 0,   // deslocamento GLOBAL da legenda, em px de referência 1080
     headlineText: '',
     elements,
@@ -1072,6 +1422,12 @@ async function poll() {
 }
 
 async function applyState(data) {
+  /* NENHUM PROJETO ABERTO É UM ESTADO, não uma falha de carregamento.
+     Sai antes de tudo: o resto desta função pressupõe um corte, um vídeo e um
+     EDL, e sem projeto nada disso existe — seguir daqui desenharia uma linha
+     do tempo vazia sob o cabeçalho de um projeto que ninguém abriu. */
+  if (data.noProject) { showHome(); return; }
+  hideHome();
   S.state = data.state || {};
   S.mtimes = data.mtimes || {};
   S.videoDuration = data.videoDuration || 0;
@@ -1095,7 +1451,12 @@ async function applyState(data) {
 
   // style picks: the skill's copy wins, so applying a change (or reopening the
   // session) shows what is actually rendered — not a stale local selection
-  S.style = { ...defaultStyle(), ...(S.state.style || {}) };
+  /* A MARCA ENTRA ENTRE O PADRÃO E O PROJETO, nessa ordem exata.
+     Cor e fonte são de QUEM faz, não do que está sendo feito — então um projeto
+     novo já nasce com as do usuário em vez do laranja de fábrica. Mas o que o
+     PROJETO gravou vence sempre: reabrir um vídeo entregue tem de mostrar as
+     cores com que ele foi entregue, e não as de hoje. */
+  S.style = { ...defaultStyle(), ...(S.brand || {}), ...(S.state.style || {}) };
   S.style.elements = { ...defaultStyle().elements, ...((S.state.style || {}).elements || {}) };
   $('setupNote').value = S.style.note || '';
   // a skill pediu uma escolha de estilo → leva o usuário para a Finalização,
@@ -1480,12 +1841,30 @@ const normHex = (v) => {
  * note depends on it: with `karaoke` + `outline` picked, nothing on screen uses
  * the colour, and saying so beats letting the user wonder why the previews did
  * not move. Mirrors the template — update both together. */
-const ACCENT_USERS = {headlines: ['realce', 'misto'], captions: ['stacked']};
+/* Quem PINTA o destaque sai do `variants.json` (`usesAccent`), com esta lista
+ * de reserva só para a janela antes do fetch voltar. Era uma lista fixa com um
+ * pedido de "mantenha em dia com o template" — e ao entrarem sete layouts ela
+ * teria dito que nenhum deles usa destaque, deixando a nota da interface
+ * mentir exatamente onde ela existe para não mentir. */
+const ACCENT_USERS_FALLBACK = {headlines: ['realce', 'misto'], captions: ['stacked']};
+const ACCENT_USERS = {
+  get headlines() {
+    const H = (LIVE.variants || {}).headlines;
+    return H ? Object.keys(H).filter((k) => H[k].usesAccent) : ACCENT_USERS_FALLBACK.headlines;
+  },
+  get captions() { return ACCENT_USERS_FALLBACK.captions; },
+};
 /* AVELIN-OVERLAY */ if (window.AVELIN_LOCAL) window.AVELIN_LOCAL.install({STYLE_CATALOG, CAP_BUILDERS, ACCENT_USERS});
 const ACCENT_DEFAULT = '#ff5200';
 
 function applyAccent() {
-  $('layersPanel').style.setProperty('--hl-accent', S.style.accent || ACCENT_DEFAULT);
+  const p = $('layersPanel');
+  p.style.setProperty('--hl-accent', S.style.accent || ACCENT_DEFAULT);
+  /* A cor principal desce pelo PAINEL, não por atributo em cada prévia. É o que
+     deixa arrastar a roda de cor atualizar as onze prévias ao vivo: um valor
+     embutido em cada caixa venceria a variável, e a cor só mudaria no próximo
+     remonte — que não acontece durante o arrasto, de propósito. */
+  p.style.setProperty('--hl-main', normHex(S.style.textColor) || '#FFFFFF');
 }
 
 /* One spectral swatch (the OS picker) plus a hex field — no preset row. A grid of
@@ -1525,6 +1904,7 @@ function renderColor(hostId, key, fallback, label) {
     inp.value = n;
     if (!fromHexField) hex.value = n.slice(1).toUpperCase();
     applyAccent();   // live — no full rebuild, so dragging the picker stays smooth
+    paintHeadlines();
     updateAccentNote();
     updateSummary();
     LIVE.key = null; renderLive();   // a legenda sobre o vídeo segue a cor na hora
@@ -1544,7 +1924,7 @@ function renderColor(hostId, key, fallback, label) {
     // `key`/`def`, NAO `accent`/ACCENT_DEFAULT: fixo no accent, digitar algo
     // invalido no campo da cor PRINCIPAL e sair preenchia ele com o hex do
     // destaque — o campo passava a mentir sobre a propria cor.
-    hex.value = (normHex(S.style[key]) || def).slice(1).toUpperCase();
+    hex.value = (normHex(S.style[key]) || fallback).slice(1).toUpperCase();
   });
   hex.addEventListener('keydown', (e) => { if (e.key === 'Enter') hex.blur(); });
 
@@ -1554,6 +1934,142 @@ function renderColor(hostId, key, fallback, label) {
 function renderAccents() {
   renderColor('optAccent', 'accent', ACCENT_DEFAULT, 'Cor de destaque');
   renderColor('optCapColor', 'capColor', '#FFFFFF', 'Cor principal da legenda');
+  // A headline tem os mesmos DOIS controles, na camada dela. O destaque é a
+  // MESMA chave `accent` — mudar por um lado muda o outro, que é o ponto.
+  renderColor('optAccentHl', 'accent', ACCENT_DEFAULT, 'Cor de destaque');
+  renderColor('optTextColor', 'textColor', '#FFFFFF', 'Cor principal da headline');
+  renderFonts();
+}
+
+/* O seletor de família. Um `<select>` e não uma grade de cartões: são 27
+ * famílias, e cada opção se desenha NA PRÓPRIA FONTE — é assim que se escolhe
+ * tipo, olhando a letra, não lendo o nome dela. */
+function renderFont(hostId, key, fallback, label) {
+  const host = $(hostId);
+  if (!host) return;
+  host.innerHTML = '';
+  const cur = S.style[key] || fallback;
+  // só as do GOOGLE precisam ser carregadas; as locais já estão no sistema e
+  // as empacotadas entram pelo @font-face de ensureBundled()
+  ensureFonts(gfonts().map((f) => f.n));
+  const sel = el('select', 'font-sel', host);
+  sel.setAttribute('aria-label', label);
+  const GRUPO = { display: 'sem serifa', serif: 'com serifa',
+                  manuscrita: 'manuscrita', local: 'do seu computador' };
+  let grupo = null;
+  let og = null;
+  for (const f of allFonts()) {
+    if (f.k !== grupo) {
+      grupo = f.k;
+      og = el('optgroup', '', sel);
+      og.label = GRUPO[grupo] || grupo;
+    }
+    const o = el('option', '', og || sel);
+    o.value = f.n;
+    o.textContent = f.n;
+    // a opção desenhada NA PRÓPRIA FONTE — é assim que se escolhe tipo
+    o.style.fontFamily = cssFamily(f.n);
+    if (f.n === cur) o.selected = true;
+  }
+  const amostra = el('div', 'font-sample', host);
+  const pinta = (n) => { amostra.style.fontFamily = cssFamily(n); amostra.textContent = 'Aa Gg 123'; };
+  pinta(cur);
+  sel.addEventListener('change', () => {
+    S.style[key] = sel.value;
+    pinta(sel.value);
+    updateFontNote();
+    updateSummary();
+    // as prévias medem com a fonte REAL: sem esperar o carregamento, a primeira
+    // montagem ajusta o corpo pela fonte de sistema e sai com a largura errada
+    ensureFonts([S.style.fontMain, S.style.fontAccent]);
+    // fonte local já está no sistema: esperar `document.fonts.load` por ela
+    // resolve na hora, mas a chamada existe para as que baixam
+    document.fonts.load(`900 40px "${sel.value}"`).then(() => renderSetup(), () => renderSetup());
+  });
+}
+
+function renderFonts() {
+  renderFont('optFontMain', 'fontMain', FONT_MAIN_DEF, 'Fonte principal');
+  renderFont('optFontAccent', 'fontAccent', FONT_ACCENT_DEF, 'Fonte de destaque');
+  // A legenda tem o par dela. O padrão de cada campo é a família do ESTILO
+  // escolhido, não uma constante: assim trocar de estilo traz de volta a letra
+  // com que ele foi desenhado, até alguém escolher outra de propósito.
+  const v = capVariant();
+  renderFont('optCapFontMain', 'capFont', v.family || FONT_MAIN_DEF, 'Fonte da legenda');
+  updateFontNote();
+  updateCapFontNote();
+}
+
+// os números do estilo de legenda escolhido
+const capVariant = () =>
+  ((LIVE.variants && LIVE.variants.styles) || {})[S.style.captions] || {};
+
+function updateCapFontNote() {
+  const n = $('capFontNote');
+  if (!n) return;
+  const fam = S.style.capFont || capVariant().family;
+  n.textContent = isLocal(fam)
+    ? 'do seu computador: sai igual aqui, não em outra máquina'
+    : (S.style.capFont ? '' : 'a família de fábrica deste estilo');
+}
+
+/* ---------- a marca ----------
+ * Cor e família não mudam de vídeo para vídeo: são de quem faz. Guardadas em
+ * `~/.avelin/brand.json`, FORA do projeto, elas viram o ponto de partida do
+ * próximo — em vez de o usuário redigitar o mesmo hexadecimal toda vez e um
+ * dia errar um dígito, entregando dois laranjas parecidos na mesma série.
+ * O agente escreve no mesmo arquivo quando descobre a marca por outro caminho. */
+const BRAND_KEYS = ['accent', 'textColor', 'capColor', 'fontMain', 'fontAccent',
+                    'capFont'];
+
+async function loadBrand() {
+  try {
+    const d = await (await fetch('/api/brand')).json();
+    S.brand = d && typeof d === 'object' ? d : null;
+  } catch (e) { S.brand = null; }
+}
+
+async function saveBrand(btn) {
+  const body = {};
+  for (const k of BRAND_KEYS) if (S.style[k]) body[k] = S.style[k];
+  try {
+    const r = await fetch('/api/brand', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'falhou');
+    S.brand = d.brand;
+    if (btn) { btn.textContent = '✓ guardado'; setTimeout(() => { btn.textContent = 'salvar como minha marca'; }, 2200); }
+  } catch (e) { toast(`não consegui guardar a marca: ${e.message}`, 4000); }
+}
+
+// a marca já está gravada e IGUAL ao que está na tela? então não há o que salvar
+const brandMatches = () =>
+  !!S.brand && BRAND_KEYS.every((k) => !S.style[k] || S.brand[k] === S.style[k]);
+
+/* Quais layouts realmente usam a SEGUNDA família. Mesma honestidade da nota do
+ * destaque: escolher uma manuscrita para um layout que não a desenha é escolher
+ * no vazio, e a interface tem de dizer isso. */
+function updateFontNote() {
+  const n = $('fontNote');
+  if (!n) return;
+  const S2 = hlStyle(S.style.headline);
+  const papel = (S2 && S2.fontRole)
+    ? 'a de destaque desenha a primeira linha deste layout'
+    : 'este layout usa só a principal';
+  /* O PREÇO DA FONTE LOCAL, dito onde ela é escolhida. Ela funciona porque o
+     render roda NESTA máquina — e é exatamente por isso que o projeto deixa de
+     sair igual em outra. Descobrir isso ao trocar de computador, com o vídeo já
+     aprovado, seria caro; a frase custa uma linha. */
+  const locais = [
+    isLocal(S.style.fontMain) && 'principal',
+    (S2 && S2.fontRole) && isLocal(S.style.fontAccent) && 'destaque',
+  ].filter(Boolean);
+  n.textContent = locais.length
+    ? `${papel} · a ${locais.join(' e a ')} ${locais.length > 1 ? 'são' : 'é'} `
+      + 'do seu computador: sai igual aqui, não em outra máquina'
+    : papel;
 }
 
 const accentUsed = () =>
@@ -1600,10 +2116,10 @@ function updateSummary() {
 const LAYERS = [
   { id: 'elementos', name: 'Elementos visuais', sub: 'Figurinhas, imagens, formas e gráficos',
     ico: 'inserts', groups: ['edits'] },
-  { id: 'headline', name: 'Headline', sub: 'O título fixo sobre a imagem',
-    ico: 'text', headlineText: true, groups: ['headlines'] },
-  { id: 'legendas', name: 'Legendas', sub: 'Estilo, cor principal e cor de destaque',
-    ico: 'captions', colors: true, groups: ['captions'] },
+  { id: 'headline', name: 'Headline', sub: 'Título, cores, fontes e layout',
+    ico: 'text', headlineText: true, hlColors: true, fonts: true, groups: ['headlines'] },
+  { id: 'legendas', name: 'Legendas', sub: 'Estilo, cores e fontes',
+    ico: 'captions', colors: true, capFonts: true, groups: ['captions'] },
   { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
     ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
   { id: 'transicoes', name: 'Transições', sub: 'Cortes, fades e transições entre clipes',
@@ -1735,11 +2251,31 @@ function renderSetup() {
  * render porque o estado que ele mostra (o que está escolhido) vive em S.style,
  * não no DOM — um diff incremental aqui só criaria uma segunda fonte de verdade.
  * O que sobrevive é `activeLayer`: qual camada está aberta é decisão do usuário. */
+/* Devolve o `scrollTop` DEPOIS que o conteúdo novo mediu a altura. No mesmo
+ * quadro o corpo ainda está vazio, `scrollHeight` é zero e o navegador prende
+ * o valor em 0 — a atribuição parece funcionar e não faz nada. */
+function restauraRolagem(el2, topo) {
+  if (!topo) return;
+  requestAnimationFrame(() => { el2.scrollTop = topo; });
+}
+
 function buildLayerRows() {
   const tabs = $('layerTabs');
   const body = $('layerBody');
+  /* A ROLAGEM SOBREVIVE AO REBUILD.
+     Escolher um cartão chama `renderSetup()`, que refaz este corpo inteiro — e
+     um `innerHTML = ''` zera o `scrollTop` do contêiner. O efeito é a aba
+     saltar para o topo a cada clique: quem estava escolhendo o nono cartão de
+     legenda perdia o lugar e tinha de rolar de novo para ver o que acabou de
+     escolher. Só apareceu quando a lista cresceu para onze — com quatro
+     cartões nada rolava e o defeito era invisível.
+     Guardar e devolver, em vez de rolar até o cartão: rolar até ele MOVE a
+     tela mesmo quando o cartão já estava visível, que é o mesmo incômodo com
+     outro nome. */
+  const scrollAntes = body.scrollTop;
   tabs.innerHTML = '';
   body.innerHTML = '';
+  restauraRolagem(body, scrollAntes);
 
   for (const L of LAYERS) {
     const chip = el('button', `layer-chip${L.id === activeLayer ? ' on' : ''}`, tabs);
@@ -1763,16 +2299,88 @@ function buildLayerRows() {
     const ta = el('textarea', 'hl-text', g);
     ta.id = 'headlineText';
     ta.rows = 2;
-    ta.placeholder = 'Ex.: 3 respostas dizem se você está na carreira certa';
+    ta.placeholder = 'Ex.: 3 respostas dizem / se você está na carreira certa';
     ta.value = S.style.headlineText || '';
+    /* A BARRA É O CONTROLE DE QUEBRA, e precisa estar escrito onde se escreve.
+       Sem a dica ela é um recurso invisível: quem não sabe deixa o equilíbrio
+       automático decidir e nunca descobre que podia mandar. */
+    el('span', 'group-note', g).textContent =
+      'use " / " para quebrar a linha onde você quiser — sem barra, o corte é '
+      + 'equilibrado pela largura medida e o corpo se ajusta sozinho';
   }
 
-  if (L.colors) {
+  for (const gid of L.groups || []) {
+    const g = el('div', 'setup-group', body);
+    el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
+    el('div', 'opt-grid', g).id = `opt-${gid}`;
+  }
+
+  /* CORES E FONTES DEPOIS DO LAYOUT, e não antes.
+     A ordem anterior pedia a cor de destaque antes de existir um layout que a
+     pintasse — decidir a cor de uma coisa que ainda não foi escolhida. Agora a
+     página desce: escolha o layout em cima, acerte cor e fonte embaixo. */
+  /* O acabamento só abre DEPOIS do layout. Enquanto não abre, diz por quê —
+     um espaço vazio leria como interface incompleta, não como um passo a
+     cumprir. */
+  if ((L.hlColors || L.fonts) && !S.style.headlinePicked) {
+    el('div', 'layer-soon', body).textContent =
+      'escolha um layout acima e as cores e fontes aparecem aqui';
+  }
+
+  if (L.hlColors && S.style.headlinePicked) {
+    const g = el('div', 'setup-group acabamento', body);
+    const h = el('div', 'group-head', g);
+    el('span', 'group-title', h).textContent = 'Cores';
+    el('span', 'group-note', h).id = 'accentNote';
+    const row = el('div', 'color-row', g);
+    const main = el('div', 'color-slot', row);
+    el('span', 'color-lab', main).textContent = 'principal';
+    el('div', 'swatches', main).id = 'optTextColor';
+    const acc = el('div', 'color-slot', row);
+    el('span', 'color-lab', acc).textContent = 'destaque';
+    el('div', 'swatches', acc).id = 'optAccentHl';
+  }
+
+  if (L.fonts && S.style.headlinePicked) {
+    /* DUAS famílias, e o par não é enfeite: o manuscrito desenha a primeira
+       linha na de destaque e a segunda na principal. Nos outros layouts a de
+       destaque fica sem uso — e a nota abaixo diz isso, em vez de deixar o
+       usuário escolher uma fonte que não vai aparecer em lugar nenhum. */
+    const g = el('div', 'setup-group acabamento', body);
+    const h = el('div', 'group-head', g);
+    el('span', 'group-title', h).textContent = 'Fontes';
+    el('span', 'group-note', h).id = 'fontNote';
+    const row = el('div', 'color-row', g);
+    const a = el('div', 'color-slot', row);
+    el('span', 'color-lab', a).textContent = 'principal';
+    el('div', 'font-pick', a).id = 'optFontMain';
+    const b = el('div', 'color-slot', row);
+    el('span', 'color-lab', b).textContent = 'destaque';
+    el('div', 'font-pick', b).id = 'optFontAccent';
+    /* Guardar é EXPLÍCITO. Salvar sozinho a cada mexida transformaria uma
+       experiência ("e se eu testar em verde?") na marca da pessoa. */
+    const save = el('button', 'linkish brand-save', g);
+    save.type = 'button';
+    save.textContent = 'salvar como minha marca';
+    save.title = 'guarda cor e fonte para os próximos projetos (~/.avelin/brand.json)';
+    save.addEventListener('click', (ev) => { ev.stopPropagation(); saveBrand(save); });
+  }
+
+  if ((L.colors || L.capFonts) && !S.style.captionsPicked) {
+    /* MESMO PORTÃO DA HEADLINE: primeiro o que a legenda É, depois com que cor
+       e que letra. Antes de haver estilo escolhido, perguntar a cor de
+       destaque é perguntar a cor de uma coisa que ainda não existe — e metade
+       dos estilos de legenda não pinta destaque nenhum. */
+    el('div', 'layer-soon', body).textContent =
+      'escolha um estilo acima e as cores e fontes aparecem aqui';
+  }
+
+  if (L.colors && S.style.captionsPicked) {
     /* DUAS cores, e a distinção importa: a principal é o corpo da legenda (era
        branco cravado na folha), a de destaque é a que pinta a palavra realçada
        — e ela é a MESMA da headline, porque um vídeo com dois laranjas
        diferentes não lê como um vídeo, lê como um erro. */
-    const g = el('div', 'setup-group', body);
+    const g = el('div', 'setup-group acabamento', body);
     const h = el('div', 'group-head', g);
     el('span', 'group-title', h).textContent = 'Cores';
     el('span', 'group-note', h).id = 'accentNote';
@@ -1785,11 +2393,25 @@ function buildLayerRows() {
     el('div', 'swatches', acc).id = 'optAccent';
   }
 
-  for (const gid of L.groups || []) {
-    const g = el('div', 'setup-group', body);
-    el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
-    el('div', 'opt-grid', g).id = `opt-${gid}`;
+  if (L.capFonts && S.style.captionsPicked) {
+    /* UMA fonte. Estilos que alternam famílias (a serifada do empilhado) o
+       fazem por identidade própria — expor isso como escolha dissolveria o
+       estilo, e quem quer outra letra ali quer outro estilo. */
+    const g = el('div', 'setup-group acabamento', body);
+    const h = el('div', 'group-head', g);
+    el('span', 'group-title', h).textContent = 'Fontes';
+    el('span', 'group-note', h).id = 'capFontNote';
+    const row = el('div', 'color-row', g);
+    const a = el('div', 'color-slot', row);
+    el('span', 'color-lab', a).textContent = 'família';
+    el('div', 'font-pick', a).id = 'optCapFontMain';
+    const save = el('button', 'linkish brand-save', g);
+    save.type = 'button';
+    save.textContent = 'salvar como minha marca';
+    save.title = 'guarda cor e fonte para os próximos projetos (~/.avelin/brand.json)';
+    save.addEventListener('click', (ev) => { ev.stopPropagation(); saveBrand(save); });
   }
+
   if (L.elements) el('div', 'check-row', body).id = `optEl-${L.id}`;
 }
 
@@ -1816,7 +2438,10 @@ $('layersPanel').addEventListener('click', (e) => {
   // os DOIS controles de cor se gerem sozinhos (ao vivo, sem remontar).
   // Faltando o da principal aqui, um clique no campo hex dela contava como
   // escolha de estilo e remontava o cartao por baixo do cursor.
-  if (e.target.closest('#optAccent') || e.target.closest('#optCapColor')) return;
+  if (e.target.closest('#optAccent') || e.target.closest('#optCapColor')
+      || e.target.closest('#optAccentHl') || e.target.closest('#optTextColor')
+      || e.target.closest('#optFontMain') || e.target.closest('#optFontAccent')
+      || e.target.closest('#optCapFontMain')) return;
 
   // acordeão mestre: recolhe o painel inteiro e devolve a altura para a timeline
   if (e.target.closest('#layersToggle')) {
@@ -1835,6 +2460,9 @@ $('layersPanel').addEventListener('click', (e) => {
   const chip = e.target.closest('.layer-chip');
   if (chip) {
     activeLayer = chip.dataset.layer;
+    // trocar de CAMADA começa do topo: é conteúdo novo, e manter a rolagem
+    // anterior abriria a camada nova no meio dela, sem contexto
+    $('layerBody').scrollTop = 0;
     renderSetup();
     return;
   }
@@ -1843,7 +2471,29 @@ $('layersPanel').addEventListener('click', (e) => {
   if (opt) {
     const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
     S.style[key] = opt.dataset.id;
+    /* ESCOLHER O LAYOUT ABRE O ACABAMENTO. São dois momentos: em cima o que a
+       headline É, embaixo com que cor e que letra. Antes de haver layout
+       escolhido, perguntar a cor de destaque é perguntar a cor de uma coisa que
+       ainda não existe — metade dos layouts nem pinta destaque. */
+    const doCaption = opt.dataset.group === 'captions';
+    const revelouCap = doCaption && !S.style.captionsPicked;
+    if (doCaption) S.style.captionsPicked = true;
+    const doHeadline = opt.dataset.group === 'headlines';
+    /* Só na PRIMEIRA escolha o acabamento aparece — e só aí faz sentido descer
+       até ele. Descer a cada troca de layout arrastaria a tela para longe dos
+       cartões justamente enquanto a pessoa compara um com o outro, que é o
+       mesmo incômodo que a rolagem preservada existe para eliminar. */
+    const revelou = doHeadline && !S.style.headlinePicked;
+    if (doHeadline) S.style.headlinePicked = true;
     renderSetup();
+    if (revelou || revelouCap) {
+      // desce até o acabamento sem tirar da tela o estilo que acabou de ser
+      // escolhido — `nearest` rola o mínimo, `start` jogaria os cartões para cima
+      requestAnimationFrame(() => {
+        const alvo = document.querySelector('.setup-group.acabamento');
+        if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      });
+    }
     return;
   }
   const chk = e.target.closest('.chk:not(.layer-chip)');
@@ -1864,8 +2514,22 @@ $('layersPanel').addEventListener('click', (e) => {
   }
 });
 
+/* AS PRÉVIAS DESENHAM O TEXTO QUE VOCÊ ESTÁ ESCREVENDO.
+ *
+ * Antes elas mostravam uma frase de exemplo fixa, e o layout se escolhia sobre
+ * um texto que não era o do vídeo — o que esconde justamente a decisão que
+ * importa: quantas linhas a SUA frase faz, onde ela quebra e que corpo sobra.
+ * Com o `/` isso deixou de ser detalhe: a mesma frase rende duas ou três linhas
+ * conforme onde a barra cai, e cada layout reage diferente.
+ *
+ * Com atraso porque remontar onze prévias medidas a cada tecla trava a
+ * digitação — a medição roda com a fonte real, uma vez por prévia. */
+let hlTextTimer = null;
 document.addEventListener('input', (e) => {
-  if (e.target && e.target.id === 'headlineText') S.style.headlineText = e.target.value;
+  if (!e.target || e.target.id !== 'headlineText') return;
+  S.style.headlineText = e.target.value;
+  clearTimeout(hlTextTimer);
+  hlTextTimer = setTimeout(() => renderSetup(), 260);
 });
 
 async function sendStyle() {
@@ -1885,6 +2549,13 @@ async function sendStyle() {
     accent: S.style.accent,
     accentName: accentName(S.style.accent),
     capColor: S.style.capColor || '#FFFFFF',
+    textColor: S.style.textColor || '#FFFFFF',
+    fontMain: S.style.fontMain || FONT_MAIN_DEF,
+    fontAccent: S.style.fontAccent || FONT_ACCENT_DEF,
+    capFont: S.style.capFont || capVariant().family || FONT_MAIN_DEF,
+    // se a segunda família chega a aparecer neste layout — sem isto a skill
+    // não sabe se a fonte de destaque é uma instrução ou um valor sem uso
+    fontAccentUsed: !!(hlStyle(S.style.headline) || {}).fontRole,
     capDy: S.style.capDy || 0,   // deslocamento GLOBAL da legenda, px de ref 1080
     headlineText: (S.style.headlineText || '').trim(),
     // whether the picked styles actually paint it — so the skill does not go
@@ -2220,10 +2891,20 @@ function renderChips() {
  * é exatamente a mentira que ela existe para evitar. */
 const LIVE = { variants: null, css: new Set(), key: null };
 
+/* A FOLHA DE CADA ESTILO, para a legenda AO VIVO sobre o vídeo.
+   Faltar aqui não dá erro: `liveCss(undefined)` sai calado, o estilo cai no
+   ramo genérico de legenda estática e — sem a folha correspondente carregada —
+   o texto é desenhado CRU, branco e encostado no topo do quadro. Foi
+   exatamente o sintoma dos estilos novos: "estáticas no topo". */
 const CAP_CSS = {
   karaoke: 'karaoke.css', simples: 'static.css', serifada: 'static.css',
   classica: 'static.css', stacked: 'stacked.css', scatter: 'scatter.css',
+  pop: 'pop.css', popLinha: 'pop.css', popBloco: 'pop.css',
+  revelar: 'revelar.css',
 };
+
+// os estilos medidos do CapCut, e o grupo de cada um
+const POP_GRUPO = { pop: 'palavra', popLinha: 'linha', popBloco: 'bloco' };
 
 function liveCss(file) {
   if (!file || LIVE.css.has(file)) return;
@@ -2289,6 +2970,20 @@ function renderLive() {
   liveCss(CAP_CSS[id]);
 
   LIVE.stackedLike = (id === 'stacked');
+  /* A família escolhida desce por variável, e o padrão é a do próprio estilo.
+     Aplicada uma vez aqui, no contêiner, em vez de repetida em cada ramo — os
+     ramos já divergem na MARCAÇÃO, e divergir também na fonte é onde um deles
+     acabaria esquecido. */
+  const capFam = S.style.capFont ? cssFamily(S.style.capFont) : (v.cssFamily || null);
+  if (S.style.capFont) ensureFonts([S.style.capFont]);
+  const vestir = (box) => {
+    if (capFam) {
+      box.style.setProperty('--cap-family', capFam);
+      box.style.setProperty('--stk-family', capFam);
+      box.style.setProperty('--scat-family', capFam);
+    }
+    return box;
+  };
   const cue = liveCue(renderedToDraft(video.currentTime || 0), v);
   if (!cue) { ov.innerHTML = ''; LIVE.key = null; return; }
 
@@ -2309,7 +3004,7 @@ function renderLive() {
      centralizada carregaria a fonte certa e mostraria um estilo que não existe
      — que é a mentira que esta prévia existe para não contar. */
   if (id === 'stacked') {
-    const box = el('div', 'ave-stacked', ov);
+    const box = vestir(el('div', 'ave-stacked', ov));
     box.style.setProperty('--stk-scale', sc);
     applyCapDy(box, id, v);
     box.style.setProperty('--stk-orange', S.style.accent || ACCENT_DEFAULT);
@@ -2327,7 +3022,7 @@ function renderLive() {
       sp.style.opacity = 1; // a folha nasce em 0 porque quem anima é o render
     });
   } else if (id === 'scatter') {
-    const box = el('div', 'ave-scatter', ov);
+    const box = vestir(el('div', 'ave-scatter', ov));
     box.style.setProperty('--scat-scale', sc);
     applyCapDy(box, id, v);
     if (v.size) box.style.setProperty('--scat-size', v.size);
@@ -2361,8 +3056,37 @@ function renderLive() {
         sp.style.opacity = 1; // a folha nasce em 0 porque quem anima é o render
       }
     }
+  } else if (POP_GRUPO[id]) {
+    /* Estouro. Ao vivo a legenda é mostrada ASSENTADA (escala 1), não a meio
+       estouro: esta prévia responde "como fica", e o quadro do meio de uma
+       animação de 400ms não é como fica. O movimento se vê nos cartões, que
+       rodam em laço. */
+    const box = vestir(el('div', `ave-pop grupo-${POP_GRUPO[id]}`, ov));
+    box.style.setProperty('--cap-scale', sc);
+    applyCapDy(box, id, v);
+    box.style.setProperty('--cap-color', S.style.capColor || '#fff');
+    box.style.setProperty('--cap-accent', S.style.accent || ACCENT_DEFAULT);
+    if (v.size) box.style.setProperty('--cap-size', v.size);
+    const line = el('div', 'ave-cap-line', box);
+    for (const word of words) el('span', '', line).textContent = word.toUpperCase();
+  } else if (id === 'revelar') {
+    const box = vestir(el('div', 'ave-rev', ov));
+    box.style.setProperty('--cap-scale', sc);
+    applyCapDy(box, id, v);
+    box.style.setProperty('--cap-color', S.style.capColor || '#fff');
+    box.style.setProperty('--cap-accent', S.style.accent || ACCENT_DEFAULT);
+    if (v.size) box.style.setProperty('--cap-size', v.size);
+    const line = el('div', 'ave-cap-line', box);
+    for (const word of words) {
+      const sp = el('span', '', line);
+      sp.textContent = word.toUpperCase();
+      /* A folha nasce com `--rev-w: 0` porque quem revela é o render. Ao vivo,
+         sem forçar 1, a legenda inteira fica INVISÍVEL — e um estilo que some
+         na prévia lê como quebrado, não como "ainda não animou". */
+      sp.style.setProperty('--rev-w', 1);
+    }
   } else if (id === 'karaoke') {
-    const box = el('div', 'ave-cap', ov);
+    const box = vestir(el('div', 'ave-cap', ov));
     box.style.setProperty('--cap-scale', sc);
     applyCapDy(box, id, v);
     box.style.setProperty('--cap-color', S.style.capColor || '#fff');
@@ -2370,7 +3094,7 @@ function renderLive() {
     const line = el('div', 'ave-cap-line', box);
     for (const word of words) el('span', '', line).textContent = word;
   } else {
-    const box = el('div', 'ave-cap-static', ov);
+    const box = vestir(el('div', 'ave-cap-static', ov));
     box.style.setProperty('--cap-scale', sc);
     applyCapDy(box, id, v);
     if (v.size) box.style.setProperty('--cap-size', v.size);
@@ -3099,7 +3823,9 @@ $('jcutToggle').addEventListener('click', () => {
   positionNeedle();
 });
 
-poll();
+// a marca ANTES do primeiro poll: ela entra na montagem do estilo, e chegando
+// depois o painel abriria no laranja de fábrica e trocaria de cor sozinho
+Promise.all([loadBrand(), loadLocalFonts()]).then(poll);
 rafLoop();
 // the headline fit is MEASURED, so it is wrong until Poppins is actually
 // loaded — rebuild once the fonts land
@@ -3648,3 +4374,343 @@ if ($('exportBtn')) $('exportBtn').addEventListener('click', doExport);
  * deixaria o usuário terminar a frase olhando para um botão ainda apagado —
  * e a leitura disso é "quebrado", não "espere". */
 if ($('setupNote')) $('setupNote').addEventListener('input', refreshActionBar);
+
+/* ==========================================================================
+   A TELA SEM PROJETO — dropzone, recentes e navegador de pastas
+   ==========================================================================
+   O editor abre aqui. Antes ele abria dentro da pasta passada na linha de
+   comando por quem subiu o processo, que na prática era o último projeto de
+   alguém — um vídeo entregue meses antes ocupando a tela como se fosse o
+   trabalho da vez, sem nenhuma forma de fechá-lo.
+
+   A DROPZONE É A ENTRADA. Soltar o vídeo é como um editor começa, e o resto
+   (recentes, navegar o disco) é o caso menos frequente de quem volta a um
+   trabalho que já existe.
+
+   O QUE O NAVEGADOR NÃO DÁ, e que decide todo o desenho daqui: o CAMINHO do
+   arquivo solto. `File` traz nome, tamanho e conteúdo; `webkitdirectory` traz
+   os nomes dos filhos. Nenhum dos dois diz onde a coisa está, e não é falta de
+   API — é fronteira de segurança do navegador. Por isso o par nome+tamanho vai
+   ao servidor, que procura o arquivo no disco e o usa ONDE ELE ESTÁ. Uma fonte
+   de 5 GB não vira duas. Só quando a busca falha é que os bytes sobem. */
+
+let homeOn = false;
+
+function showHome() {
+  if (!homeOn) {
+    homeOn = true;
+    const v = $('video');
+    if (v) { try { v.pause(); } catch (e) { /* ainda sem fonte */ } }
+    loadProjects();
+  }
+  $('home').classList.remove('hidden');
+  $('stage').classList.add('hidden');
+  $('emptyState').classList.add('hidden');
+  $('homeBtn').classList.add('hidden');
+  /* O cabeçalho é do PROJETO. Sem um aberto, tudo o que ele mostra é falso:
+     "Exportar" oferece um arquivo que não existe, o `?` explica atalhos de uma
+     linha do tempo que não está na tela, e o nome repetia a marca que o logo
+     ao lado já diz. Esconder é mais honesto que desabilitar — um botão apagado
+     ainda promete que há algo ali, só que agora não. */
+  $('exportBtn').classList.add('hidden');
+  if ($('btnHelp')) $('btnHelp').classList.add('hidden');
+  /* As barras de ação vivem FORA do `#stage` — esconder o palco não as levava
+     junto. O sintoma era um rodapé oferecendo "enviar ao Claude" sobre uma
+     tela onde não há corte nenhum, e ele só aparecia na VOLTA de um projeto,
+     que é o caminho que ninguém testa primeiro. */
+  ['approveBar', 'actionBar', 'procBar', 'savedPill'].forEach((id) => {
+    if ($(id)) $(id).classList.add('hidden');
+  });
+  $('projectName').textContent = '';
+  document.title = 'Avelin — Editor';
+}
+
+function hideHome() {
+  homeOn = false;
+  $('home').classList.add('hidden');
+  $('homeBtn').classList.remove('hidden');
+  $('exportBtn').classList.remove('hidden');
+  if ($('btnHelp')) $('btnHelp').classList.remove('hidden');
+}
+
+function faseLabel(p) {
+  return p == null ? '' : (p >= 3 ? 'entregue' : `fase ${p}`);
+}
+
+function projRow(c) {
+  const b = document.createElement('button');
+  b.className = 'proj';
+  b.title = c.path;
+  const fase = faseLabel(c.phase);
+  b.innerHTML = `<span class="proj-name"></span><span class="proj-meta">`
+    + `<span class="proj-phase"></span><span class="sep"></span></span>`;
+  b.querySelector('.proj-name').textContent = c.name;
+  b.querySelector('.proj-phase').textContent = fase;
+  // O RECADO do state, que é onde está escrito o que falta fazer. É a
+  // diferença entre uma lista de nomes e uma lista de trabalhos.
+  b.querySelector('.sep').textContent = c.message ? (fase ? ' · ' : '') + c.message : '';
+  b.addEventListener('click', () => openProject(c.path));
+  return b;
+}
+
+async function loadProjects() {
+  try {
+    const d = await (await fetch('/api/projects')).json();
+    for (const [alvo, itens, vazio] of [
+      ['recentList', d.recent || [], 'nenhum ainda — solte um vídeo acima'],
+      ['foundList', d.found || [], 'nada encontrado em Movies, Desktop ou Documents'],
+    ]) {
+      const el = $(alvo);
+      el.textContent = '';
+      if (!itens.length) {
+        const p = document.createElement('div');
+        p.className = 'proj-empty';
+        p.textContent = vazio;
+        el.appendChild(p);
+        continue;
+      }
+      itens.forEach((c) => el.appendChild(projRow(c)));
+    }
+  } catch (e) { /* servidor reiniciando; o poll volta */ }
+}
+
+/* Abrir NÃO espera o poll de 2s. Entre clicar e ver, dois segundos de tela
+   parada leem como clique perdido, e a pessoa clica de novo. */
+async function refreshNow() {
+  try {
+    const data = await (await fetch('/api/state')).json();
+    S.lastSig = JSON.stringify([data.state, data.edl, data.mtimes, data.videoDuration]);
+    await applyState(data);
+  } catch (e) { /* o poll pega */ }
+}
+
+async function openProject(path, create) {
+  try {
+    const res = await fetch('/api/open', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, create: !!create }),
+    });
+    const d = await res.json();
+    if (!res.ok) {
+      // A pasta existe e não tem projeto: isso é uma OFERTA, não um erro.
+      if (d.canCreate && confirm(`Criar um projeto novo em ${path}?`)) {
+        return openProject(path, true);
+      }
+      toast(d.error || 'não consegui abrir', 5000);
+      return false;
+    }
+    closeBrowser();
+    await refreshNow();
+    return true;
+  } catch (e) {
+    toast(`não consegui abrir: ${e.message}`, 5000);
+    return false;
+  }
+}
+
+// ---------- dropzone ----------
+const dzMsg = (txt, err) => {
+  const el = $('dzMsg');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.classList.toggle('err', !!err);
+};
+
+function dzBusy(on) {
+  $('dropzone').classList.toggle('busy', on);
+  if (!on) { $('dzProg').classList.add('hidden'); $('dzProgFill').style.width = '0'; }
+}
+
+async function handleFile(file) {
+  dzBusy(true);
+  dzMsg(`procurando “${file.name}” no seu disco…`);
+  let d;
+  try {
+    const res = await fetch('/api/drop', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: file.name, size: file.size }),
+    });
+    d = await res.json();
+    if (!res.ok && !d.needUpload) { dzBusy(false); dzMsg(d.error || 'não deu', true); return; }
+  } catch (e) { dzBusy(false); dzMsg(e.message, true); return; }
+
+  if (d.needUpload) {
+    // Não achou no disco: agora sim os bytes sobem. XHR e não fetch porque só
+    // ele reporta progresso de ENVIO — e é o envio que demora aqui.
+    dzMsg(`não achei no disco — copiando ${(file.size / 1048576).toFixed(0)} MB…`);
+    $('dzProg').classList.remove('hidden');
+    try {
+      await new Promise((ok, fail) => {
+        const x = new XMLHttpRequest();
+        x.open('POST', `/api/upload?name=${encodeURIComponent(file.name)}`);
+        x.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) {
+            $('dzProgFill').style.width = `${(ev.loaded / ev.total) * 100}%`;
+          }
+        };
+        x.onload = () => (x.status < 300 ? ok() : fail(new Error(
+          (JSON.parse(x.responseText || '{}').error) || `HTTP ${x.status}`)));
+        x.onerror = () => fail(new Error('a transferência falhou'));
+        x.send(file);
+      });
+    } catch (e) { dzBusy(false); dzMsg(e.message, true); return; }
+  }
+  dzBusy(false);
+  dzMsg('');
+  await refreshNow();
+}
+
+async function handleDirEntry(entry) {
+  dzBusy(true);
+  dzMsg(`procurando a pasta “${entry.name}”…`);
+  // Os filhos são o desempate: há três pastas `Broll` no disco desta máquina.
+  let entries = [];
+  try {
+    entries = await new Promise((ok) => {
+      const r = entry.createReader();
+      r.readEntries((es) => ok(es.map((e) => e.name)), () => ok([]));
+    });
+  } catch (e) { /* segue só com o nome */ }
+  try {
+    const res = await fetch('/api/drop', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'dir', name: entry.name, entries }),
+    });
+    const d = await res.json();
+    dzBusy(false);
+    if (!res.ok) {
+      dzMsg(`${d.error || 'não achei'} — use “selecione uma pasta”`, true);
+      return;
+    }
+    dzMsg('');
+    await refreshNow();
+  } catch (e) { dzBusy(false); dzMsg(e.message, true); }
+}
+
+function wireDropzone() {
+  const dz = $('dropzone');
+  if (!dz) return;
+  // A JANELA INTEIRA precisa cancelar o padrão, não só a zona. Sem isto,
+  // soltar o vídeo um pixel fora faz o Chrome NAVEGAR para o arquivo — a
+  // página do editor some e o trabalho vai junto.
+  ['dragenter', 'dragover', 'drop'].forEach((ev) => {
+    window.addEventListener(ev, (e) => { e.preventDefault(); }, false);
+  });
+  dz.addEventListener('dragenter', () => dz.classList.add('over'));
+  dz.addEventListener('dragover', (e) => {
+    e.dataTransfer.dropEffect = 'copy';
+    dz.classList.add('over');
+  });
+  // `dragleave` dispara ao cruzar para um filho da própria zona. Sem checar
+  // para ONDE foi, a moldura pisca a cada movimento do mouse lá dentro.
+  dz.addEventListener('dragleave', (e) => {
+    if (!dz.contains(e.relatedTarget)) dz.classList.remove('over');
+  });
+  dz.addEventListener('drop', async (e) => {
+    dz.classList.remove('over');
+    const it = e.dataTransfer.items && e.dataTransfer.items[0];
+    const entry = it && it.webkitGetAsEntry && it.webkitGetAsEntry();
+    if (entry && entry.isDirectory) return handleDirEntry(entry);
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) return handleFile(f);
+    dzMsg('não veio arquivo nenhum nesse arrasto', true);
+  });
+
+  dz.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return; // os dois links têm dono próprio
+    $('fileInput').click();
+  });
+  dz.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('fileInput').click(); }
+  });
+  $('pickFile').addEventListener('click', (e) => { e.stopPropagation(); $('fileInput').click(); });
+  $('pickFolder').addEventListener('click', (e) => { e.stopPropagation(); openBrowser(); });
+  $('fileInput').addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = ''; // reescolher o MESMO arquivo tem de disparar de novo
+    if (f) handleFile(f);
+  });
+}
+
+// ---------- navegador de pastas ----------
+let brPath = null;
+
+function elidePath(p, max = 58) {
+  if (p.length <= max) return p;
+  // O corte cai num separador: partir um nome de pasta pela metade produz um
+  // fragmento que parece outra pasta.
+  const cauda = p.slice(-(max - 14));
+  const sep = cauda.indexOf('/');
+  return `${p.slice(0, 12)}…${sep >= 0 ? cauda.slice(sep) : cauda}`;
+}
+
+async function openBrowser(path) {
+  $('browser').classList.remove('hidden');
+  await browseTo(path || null);
+}
+function closeBrowser() { $('browser').classList.add('hidden'); }
+
+async function browseTo(path) {
+  let d;
+  try {
+    d = await (await fetch(`/api/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`)).json();
+  } catch (e) { toast(`não consegui listar: ${e.message}`, 4000); return; }
+  if (d.error) { toast(d.error, 4000); return; }
+  brPath = d.path;
+  // Encurta pelo MEIO: num caminho longo quem identifica onde você está é o
+  // fim, e a raiz dá o contexto — o miolo é a parte descartável.
+  $('brPath').textContent = elidePath(d.path);
+  $('brPath').title = d.path;
+  $('brUp').disabled = !d.parent;
+  $('brUp').onclick = () => d.parent && browseTo(d.parent);
+  const eProj = d.dirs.some((x) => x.isProject || x.hasProject);
+  $('brHint').textContent = eProj
+    ? 'as marcadas já têm um projeto do Avelin'
+    : 'sem projeto aqui — abrir esta pasta cria um';
+  const list = $('brList');
+  list.textContent = '';
+  d.dirs.forEach((x) => {
+    const b = document.createElement('button');
+    b.className = 'br-row';
+    b.innerHTML = '<span class="ic">▸</span><span class="nm"></span>';
+    b.querySelector('.nm').textContent = x.name;
+    if (x.isProject || x.hasProject) {
+      const t = document.createElement('span');
+      t.className = 'tag';
+      t.textContent = 'projeto';
+      b.appendChild(t);
+      // Uma pasta que É o projeto abre; uma que CONTÉM o projeto também —
+      // descer mais um nível para clicar em `edit` é um passo sem escolha.
+      b.addEventListener('click', () => openProject(x.path));
+    } else {
+      b.addEventListener('click', () => browseTo(x.path));
+    }
+    list.appendChild(b);
+  });
+  if (!d.dirs.length) {
+    const p = document.createElement('div');
+    p.className = 'proj-empty';
+    p.textContent = 'nenhuma subpasta aqui';
+    list.appendChild(p);
+  }
+}
+
+if ($('brClose')) $('brClose').addEventListener('click', closeBrowser);
+if ($('brOpen')) $('brOpen').addEventListener('click', () => brPath && openProject(brPath, true));
+if ($('browser')) {
+  $('browser').addEventListener('click', (e) => { if (e.target === $('browser')) closeBrowser(); });
+}
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('browser').classList.contains('hidden')) closeBrowser();
+});
+
+if ($('homeBtn')) {
+  $('homeBtn').addEventListener('click', async () => {
+    // Fechar é do SERVIDOR, não da tela. Só esconder a interface deixaria o
+    // root apontando para o projeto antigo, e o próximo poll o traria de volta.
+    await fetch('/api/close', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    await refreshNow();
+  });
+}
+
+wireDropzone();

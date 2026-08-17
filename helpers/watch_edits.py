@@ -21,6 +21,40 @@ import time
 from pathlib import Path
 
 
+# O PROJETO ABERTO AGORA, publicado pelo servidor. Ver preview_server.CURRENT.
+CURRENT = Path.home() / ".avelin" / "current.json"
+
+
+def current_root() -> Path | None:
+    try:
+        r = json.loads(CURRENT.read_text()).get("root")
+        return Path(r) if r else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def request_digest(p: Path) -> str:
+    """UM PROJETO NOVO CHEGOU PELA DROPZONE — é o `/ave <pasta>` sem o terminal.
+
+    O editor cria a pasta e registra a fonte; transcrever, cortar e graduar é
+    trabalho de agente. Sem este aviso o projeto nasceria e ficaria parado, com
+    o usuário achando que largar o vídeo tinha começado alguma coisa.
+    """
+    try:
+        d = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return f"preview_request.json ilegível ({e.__class__.__name__})"
+    return "\n".join([
+        "🎬 PROJETO NOVO pela dropzone do editor — COMECE A FASE 1.",
+        f"   pasta de vídeos: {d.get('videosDir', '?')}",
+        f"   fonte: {d.get('source', '?')}",
+        "   O caminho normal da skill, do começo: ffprobe + transcrever,",
+        "   pack_transcripts, transcript_audit (--fix-times), voice_levels,",
+        "   detect_color, conversar a estratégia, EDL, proxy, e MOSTRAR.",
+        "   Depois apague o preview_request.json.",
+    ])
+
+
 def digest(p: Path) -> str:
     try:
         d = json.loads(p.read_text())
@@ -174,9 +208,8 @@ def approval_digest(p: Path) -> str:
     return "\n".join(out)
 
 
-def main() -> int:
-    root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").expanduser().resolve()
-    watched = {
+def targets(root: Path) -> dict:
+    return {
         root / "preview_edits.json": digest,
         root / "preview_style.json": style_digest,
         # TERCEIRO ALVO, e ele existe por causa de uma corrida real.
@@ -190,7 +223,18 @@ def main() -> int:
         # A aprovação: arquivo próprio, para não ser apagada junto com as
         # marcações quando o apply_edits consome o preview_edits.json.
         root / "preview_approval.json": approval_digest,
+        # O projeto nascido na dropzone.
+        root / "preview_request.json": request_digest,
     }
+
+
+def main() -> int:
+    arg = sys.argv[1] if len(sys.argv) > 1 else None
+    root = Path(arg).expanduser().resolve() if arg else current_root()
+    if root is None:
+        print("👀 Vigiando o editor — nenhum projeto aberto ainda.", flush=True)
+
+    watched: dict = targets(root) if root else {}
     # a file already sitting there at startup means it is pending — say so once
     last: dict[Path, float | None] = {}
     for target, fn in watched.items():
@@ -199,12 +243,33 @@ def main() -> int:
             print(fn(target), flush=True)
 
     while True:
+        # O VIGIA SEGUE O EDITOR. Antes ele era amarrado à pasta passada na
+        # partida; agora a pessoa troca de projeto na própria tela, e sem isto
+        # ele continuaria olhando o projeto anterior — ela salva, vê "enviado",
+        # e o aviso nunca chega.
+        #
+        # Ponteiro NULO não desarma nada: nulo significa "tela inicial", e um
+        # servidor desligado ou um ponteiro velho zerariam a vigilância de um
+        # projeto que ainda está sendo trabalhado.
+        novo = current_root()
+        if novo is not None and novo != root:
+            root = novo
+            watched = targets(root)
+            # Os pendentes do projeto NOVO são anunciados na entrada, como na
+            # partida — quem troca de projeto quer saber o que ficou aberto lá.
+            last = {}
+            print(f"📁 PROJETO ABERTO NO EDITOR: {root}", flush=True)
+            for target, fn in watched.items():
+                last[target] = target.stat().st_mtime if target.exists() else None
+                if last[target] is not None:
+                    print(fn(target), flush=True)
+
         for target, fn in watched.items():
             try:
                 cur = target.stat().st_mtime if target.exists() else None
             except OSError:
                 cur = None
-            if cur is not None and cur != last[target]:
+            if cur is not None and cur != last.get(target):
                 last[target] = cur
                 time.sleep(0.15)  # let the atomic replace settle before reading
                 print(fn(target), flush=True)
