@@ -48,19 +48,13 @@ def speech_regions(video: Path, noise_db: float) -> list[tuple[float, float]]:
     return regions
 
 
-def noise_floor_for(video: Path) -> float:
-    """Limiar calibrado no material — no MEIO entre o piso de ruído e a mediana.
+def levels_for(video: Path) -> tuple[float | None, float | None]:
+    """(piso de ruído, mediana da voz) em dBFS, medidos no material.
 
-    São duas populações (sala e voz) e o limiar tem de cair entre elas. Um
-    deslocamento fixo a partir da mediana não serve: neste projeto a mediana é
-    −41,4 e o piso −52,8, então "mediana − 10" dá −51, que fica ABAIXO do piso —
-    o detector passa a chamar room tone de fala, devolve uma região gigante e
-    toda fronteira aparece como "sem folga". Foi exatamente o que aconteceu, e o
-    sintoma é traiçoeiro porque a saída parece plausível: 100% sem folga é o que
-    você esperaria de uma fala muito corrida.
-
-    O ponto médio dá −47 aqui, que é o valor que as três sessões desta série
-    encontraram na mão.
+    Separado de `noise_floor_for` porque o `propose_breaths` precisa das DUAS
+    populações, não só do limiar entre elas: o limiar diz o que é silêncio, e a
+    mediana diz o que é VOZ — é comparando com ela que se descobre que um
+    "silêncio" tem alguém falando dentro.
     """
     out = subprocess.run(
         [sys.executable, str(HELPERS / "voice_levels.py"), str(video)],
@@ -78,6 +72,24 @@ def noise_floor_for(video: Path) -> float:
                 med = float(line.split("median speech:")[1].split("dBFS")[0].strip())
             except (IndexError, ValueError):
                 pass
+    return floor, med
+
+
+def noise_floor_for(video: Path) -> float:
+    """Limiar calibrado no material — no MEIO entre o piso de ruído e a mediana.
+
+    São duas populações (sala e voz) e o limiar tem de cair entre elas. Um
+    deslocamento fixo a partir da mediana não serve: neste projeto a mediana é
+    −41,4 e o piso −52,8, então "mediana − 10" dá −51, que fica ABAIXO do piso —
+    o detector passa a chamar room tone de fala, devolve uma região gigante e
+    toda fronteira aparece como "sem folga". Foi exatamente o que aconteceu, e o
+    sintoma é traiçoeiro porque a saída parece plausível: 100% sem folga é o que
+    você esperaria de uma fala muito corrida.
+
+    O ponto médio dá −47 aqui, que é o valor que as três sessões desta série
+    encontraram na mão.
+    """
+    floor, med = levels_for(video)
     if floor is not None and med is not None and floor < med:
         return round((floor + med) / 2)
     return -33.0

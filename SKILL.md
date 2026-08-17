@@ -487,7 +487,41 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
    picks the curve, the user picks the look.
 5. **Propose the cut strategy** (4–8 sentences: shape, takes, cut direction, grade direction, length estimate). **Wait for confirmation.**
 6. **Escreva o EDL.** `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times.
-7. **Encurte o ar morto — SEMPRE, antes do primeiro render.** `propose_breaths.py <edit> --apply`. Cortar no silêncio resolve o ar ENTRE tomadas; sobra o de DENTRO — a pausa no meio do próprio raciocínio, que nenhuma escolha de tomada remove porque está no meio da tomada escolhida. Num vídeo curto é o que mais custa retenção. A passada automática é conservadora de propósito (pausa >0,60s cai para 0,30s): tira o indefensável e para aí. O gosto fica para os chips da aba Transcrição, que descem até 0,15s — **o usuário refina o que sobrou, não faz a limpeza inteira à mão.** Diga em uma linha quantos respiros e quantos segundos saíram.
+7. **Encurte o ar morto — SEMPRE, antes do primeiro render, e PERGUNTANDO o ritmo.**
+   Cortar no silêncio resolve o ar ENTRE tomadas; sobra o de DENTRO — a pausa no
+   meio do próprio raciocínio, que nenhuma escolha de tomada remove porque está
+   no meio da tomada escolhida. Num vídeo curto é o que mais custa retenção.
+
+   **Nem todo silêncio é ar morto**, e é por isso que isto não é um limiar só. O
+   helper classifica cada vão por três coisas — **pausa** (duração), **dB**
+   (limiar calibrado na fonte, mais o pico dentro do vão como segunda opinião) e
+   **contexto** (a pontuação da palavra anterior: `?!….` = retórica, `,;:` =
+   respiração, nada = hesitação) — e cada classe tem seu próprio limiar em cada
+   perfil. O contexto decide SE encurta; a **borda continua acústica**.
+
+   ```bash
+   uv run python helpers/propose_breaths.py <edit> --comparar    # mede os três
+   uv run python helpers/propose_breaths.py <edit> --ritmo <perfil> --apply
+   ```
+
+   **Faça a pergunta com os números na mão** — `--comparar` devolve quantos
+   respiros e quantos segundos cada perfil tira DESTE material. Use
+   `AskUserQuestion`, uma pergunta só, header `Ritmo`:
+
+   > *"Como você quer o ritmo deste corte?"*
+   > · **Equilibrado** (recomendado) — tira hesitação, encurta respiração,
+   >   preserva a pausa dramática · *11 respiros, −6,4s*
+   > · **Conservador** — só o indefensável; pausa retórica intocada · *4, −2,1s*
+   > · **Agressivo** — retenção acima de tudo, cada décimo conta · *19, −12,8s*
+
+   Pergunte **uma vez por projeto** e registre a escolha no `state.json`
+   (`"ritmo"`); nas rodadas seguintes reaplique sem perguntar de novo. Sem
+   resposta do usuário, `equilibrado`.
+
+   O gosto fino fica para os chips da aba Transcrição, que descem até 0,15s —
+   **o usuário refina o que sobrou, não faz a limpeza inteira à mão.** Diga em
+   uma linha quantos respiros e quantos segundos saíram, e cite as retóricas
+   preservadas: um silêncio deliberado que sobrevive calado parece esquecimento.
 8. **Render do PROXY.** `render.py edl.json -o preview_proxy.mp4 --proxy --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`). **The J-cut runs by default** — see below; you do not ask for it and you do not configure it per project. It applies per junction, only where a breath exists.
 9. **Self-eval (numeric first).** `verify_cut.py edl.json preview_proxy.mp4` (longform: `--min-silence 1.2`). Clean → done. Flags → `timeline_view` ONLY the flagged junctions, fix, re-render the proxy. Cap 3 loops, then surface remaining flags to the user.
 10. **Corte pronto → ABRA A APLICAÇÃO, e só então fale.** Nesta ordem: garanta o
