@@ -41,6 +41,17 @@ And one thing must be true about the current agent:
 
 6. It can discover `SKILL.md` — either via a global skills directory (`~/.claude/skills/`, `~/.codex/skills/`) or via a `CLAUDE.md` / system-prompt import.
 
+**The same checklist exists at runtime, and it is the fastest way to diagnose.**
+`preview_server.py` publishes `deps` (ffmpeg, ffprobe, uv, node, yt-dlp, the
+HyperFrames cache) and `keys` (presence only, never the value) on every
+`/api/state`, and the editor's home screen renders them split into mandatory and
+optional — ✓/✗ with the fix command on each missing line. When the user says
+"something is missing", read that instead of guessing:
+
+```bash
+curl -s localhost:4820/api/state | python3 -m json.tool | sed -n '/deps/,/}/p'
+```
+
 ## Install prompt contract
 
 - Only ask the user for things you cannot generate — the Groq API key, and confirmation before any package-manager install that needs sudo/admin.
@@ -265,6 +276,12 @@ Tell the user, in one short message:
 - Where the skill is installed (the `<AVE>` path).
 - That they should `cd` into their footage folder and start their agent there (e.g. `claude`).
 - That a good first message is: *"edit these into a launch video"* or *"inventory these takes and propose a strategy."*
+- **What the first video looks like from their side:** the editor opens on the
+  dropzone with the install checklist under it; dropping a file only *creates*
+  the project — the cut starts when they press **Gerar cortes**, and the screen
+  then shows a loading state with the Phase-1 steps while you work. Say this
+  explicitly: someone who expects the drop itself to start the work will sit
+  waiting on a screen that is waiting for them.
 - That all outputs land in `<videos_dir>/edit/` — the repo stays clean.
 
 ## Keeping the skill current

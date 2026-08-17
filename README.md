@@ -17,6 +17,40 @@ horizontal** (YouTube).
 
 ---
 
+## Checklist da instalação
+
+São **três passos** — instalar os programas, baixar a skill, colar a chave do
+Groq — e depois o primeiro vídeo. O passo a passo com os comandos está logo
+abaixo; use esta lista para conferir onde você está.
+
+**Obrigatório — sem isto nada roda:**
+
+- [ ] **Git**, **uv**, **ffmpeg** e **Node.js 18+** instalados *(passo 1)*
+- [ ] Os quatro respondendo no terminal — `git --version` e companhia *(passo 2)*
+- [ ] A skill baixada em `.claude/skills/ave` *(passo 3)*
+- [ ] `uv sync` rodado dentro dela *(passo 4)*
+- [ ] A **chave do Groq** gravada no `.env` *(passo 5)*
+
+O ffmpeg traz o `ffprobe` junto — é um item só. O Node.js só é usado da Fase 2
+em diante (legendas, gráficos), mas instale junto: é o mesmo comando, e ele
+para de ser opcional no dia em que você aprovar o primeiro corte.
+
+**Opcional — dá para trabalhar sem, hoje e sempre:**
+
+| Item | Sem ele | Vale a pena quando |
+|---|---|---|
+| `yt-dlp` | não dá para puxar material de uma URL | você edita coisa que está no YouTube/Drive |
+| `ELEVENLABS_API_KEY` | fontes longas transcrevem no Groq, em pedaços | você edita aulas e vídeos de mais de 5 min |
+| `PEXELS_API_KEY` | as imagens vêm só da Wikimedia | você usa muito B-roll e imagem ilustrativa |
+| `TREBLO_API_KEY` | a trilha tem de ser um arquivo seu | você quer trilha gerada por IA |
+| `GOOGLE_API_KEY` + `GOOGLE_CSE_ID` | marcas e pessoas vêm da Wikimedia | a Wikimedia não achou a marca que você precisa |
+
+Nenhuma chave opcional é pedida na instalação: a IA pede cada uma **na primeira
+vez que o recurso for usado**, e você decide na hora. O editor também mostra
+essa mesma checklist na tela inicial, com ✓ e ✗ do que esta máquina tem.
+
+---
+
 ## Instalação
 
 > **A instalação é feita por você, no seu terminal.** Não peça para o agente
@@ -110,7 +144,7 @@ Igual ao macOS, trocando o passo 2 pelo gerenciador da sua distro
 
 ---
 
-## Chave do Groq (obrigatória)
+## Passo 5 — a chave do Groq (obrigatória)
 
 A transcrição roda no Groq Whisper. Sem essa chave nada funciona, porque a
 edição inteira parte do texto do que foi falado.
@@ -209,12 +243,27 @@ palavra, o desvio aparece na tela — nesse caso prefira o Groq.
 
 ---
 
-## Primeiro uso
+## Primeiro vídeo
 
 1. Coloque seus vídeos brutos numa pasta.
-2. Abra o Claude Code **dentro dessa pasta**.
-3. Diga: *"edita esses vídeos num Reels"* ou *"faz um inventário dessas tomadas
-   e me propõe uma estratégia"*.
+2. Abra o Claude Code **dentro dessa pasta** e diga: *"abre o editor do
+   Avelin"* — ou vá direto ao ponto: *"edita esses vídeos num Reels"*.
+3. **Confira a checklist** na tela inicial do editor. Se estiver escrito "tudo
+   pronto para editar", pode seguir; se faltar algo, a linha aberta diz o quê e
+   o comando que resolve.
+4. **Solte o vídeo** na área pontilhada (ou clique para escolher o arquivo).
+   Isso só monta o projeto — nada é cortado ainda.
+5. Na tela que abre, escolha o **formato** (ou deixe a IA sugerir), escreva um
+   **briefing** se quiser, e clique em **Gerar cortes**.
+6. A tela vira um **carregamento** com as etapas — transcrever, escolher as
+   tomadas, cortar os silêncios, corrigir a cor. Costuma levar de 2 a 10
+   minutos. Pode deixar a aba aberta: a linha do tempo aparece sozinha quando o
+   corte ficar pronto.
+7. Assista, marque o que quiser mudar e **aprove a Fase 1**. Só depois disso
+   entram legendas, gráficos e trilha.
+
+O botão só fica travado quando falta algo obrigatório — e nesse caso a própria
+tela lista o que é.
 
 Tudo o que for gerado vai para uma subpasta `edit/` — seus arquivos originais
 não são tocados.

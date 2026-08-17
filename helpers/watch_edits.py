@@ -33,26 +33,47 @@ def current_root() -> Path | None:
         return None
 
 
-def request_digest(p: Path) -> str:
-    """UM PROJETO NOVO CHEGOU PELA DROPZONE — é o `/ave <pasta>` sem o terminal.
+FORMAT_LABEL = {
+    "short": "SHORT-FORM vertical 9:16 (Reels/TikTok/Shorts)",
+    "long": "LONGFORM horizontal 16:9 (YouTube)",
+    "auto": "não escolhido — decida pelo material e confirme com o usuário",
+}
 
-    O editor cria a pasta e registra a fonte; transcrever, cortar e graduar é
-    trabalho de agente. Sem este aviso o projeto nasceria e ficaria parado, com
-    o usuário achando que largar o vídeo tinha começado alguma coisa.
+
+def request_digest(p: Path) -> str:
+    """O USUÁRIO APERTOU "GERAR CORTES" NO EDITOR — comece a Fase 1.
+
+    O editor monta a pasta quando o vídeo é solto, mas não pede nada: quem
+    dispara é o botão da tela de início. Este arquivo é esse botão chegando
+    aqui — com o que o usuário respondeu antes de apertá-lo (formato e
+    briefing), que é justamente o que a Fase 1 pararia para perguntar.
     """
     try:
         d = json.loads(p.read_text())
     except (OSError, json.JSONDecodeError) as e:
         return f"preview_request.json ilegível ({e.__class__.__name__})"
-    return "\n".join([
-        "🎬 PROJETO NOVO pela dropzone do editor — COMECE A FASE 1.",
+    fontes = [str(x) for x in (d.get("sources") or [])]
+    linhas = [
+        "🎬 O USUÁRIO PEDIU OS CORTES no editor — COMECE A FASE 1.",
         f"   pasta de vídeos: {d.get('videosDir', '?')}",
         f"   fonte: {d.get('source', '?')}",
+    ]
+    if len(fontes) > 1:
+        linhas.append(f"   ({len(fontes)} vídeos na pasta: {', '.join(fontes[:6])}"
+                      f"{'…' if len(fontes) > 6 else ''})")
+    linhas.append(f"   formato: {FORMAT_LABEL.get(d.get('format') or 'auto', 'auto')}")
+    brief = (d.get("brief") or "").strip()
+    if brief:
+        linhas.append(f'   briefing do usuário: "{brief}"')
+    linhas += [
         "   O caminho normal da skill, do começo: ffprobe + transcrever,",
         "   pack_transcripts, transcript_audit (--fix-times), voice_levels,",
         "   detect_color, conversar a estratégia, EDL, proxy, e MOSTRAR.",
+        "   A tela está em ESPERA mostrando um carregamento: mantenha o",
+        "   `message` do state.json atualizado a cada etapa — é o que ele lê.",
         "   Depois apague o preview_request.json.",
-    ])
+    ]
+    return "\n".join(linhas)
 
 
 def digest(p: Path) -> str:

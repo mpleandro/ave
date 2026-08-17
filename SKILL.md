@@ -208,11 +208,37 @@ Um vídeo que já mora dentro de um projeto (`base.mp4`, `cut.mp4`, `final.mp4`)
 **abre aquele projeto** — não cria um `edit/edit` nem pede Fase 1 num trabalho
 pronto.
 
-**`preview_request.json` — a dropzone é o `/ave <pasta>` sem o terminal.** Um
-projeto NOVO nascido ali escreve esse arquivo, e o watcher te avisa. O editor
-cria a pasta e registra a fonte; **quem transcreve, corta e gradua é você** —
-faça o caminho normal da Fase 1 do começo. Depois apague o arquivo. Sem sessão
-sua rodando, o projeto fica criado e esperando.
+### O primeiro envio — `awaitingStart` e a tela de carregamento
+
+Soltar o vídeo **monta o projeto e para aí**. O `state.json` nasce com
+`"awaitingStart": true`, e o editor mostra a tela de início: a fonte, o formato,
+um briefing opcional e o botão **Gerar cortes**. Nada é pedido a você antes
+disso — largar um arquivo não é o mesmo que mandar cortá-lo.
+
+**`preview_request.json` — o botão chegando até você.** É o `/ave <pasta>` sem o
+terminal: o editor escreve o arquivo **no submit**, o watcher te avisa, e o
+aviso já traz as duas respostas que você pararia para perguntar:
+
+```json
+{"type": "new-project", "videosDir": "…", "source": "…", "sources": ["…"],
+ "brief": "Reels de lançamento, tom direto, 45s", "format": "short|long|auto"}
+```
+
+`format: "auto"` = o usuário deixou a escolha com você; decida pelo material e
+confirme numa frase. `brief` vazio = converse. **Quem transcreve, corta e gradua
+é você** — faça o caminho normal da Fase 1 do começo, e depois apague o arquivo.
+Sem sessão sua rodando, o projeto fica criado e esperando.
+
+**Enquanto você trabalha, a tela dele é um carregamento** — etapas, relógio e
+uma linha de recado que sai do `message` do `state.json`. Essa linha é a única
+coisa que ele tem para saber que a máquina não travou, então **atualize o
+`message` a cada etapa** ("transcrevendo", "escolhendo as tomadas", "cortando os
+silêncios", "corrigindo a cor"): o editor casa esse texto com a etapa que
+destaca. A tela sai sozinha quando o vídeo do `state.json` existir.
+
+**Não invente `awaitingStart`.** Quem o liga é o editor, ao criar o projeto;
+quem o desliga é o submit. Escrevê-lo à mão num projeto em andamento manda o
+usuário de volta para uma tela de "começar" um trabalho que já começou.
 
 O estado do APLICATIVO (não do projeto) vive em `~/.avelin/`: `projects.json`
 (os recentes) e `current.json` (o projeto aberto agora, que o watcher segue).

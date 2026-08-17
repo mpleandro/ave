@@ -147,6 +147,8 @@ def _deps() -> dict:
         # o motor da Fase 2 resolve sozinho pelo npx; o cache é o sinal de que
         # ele já foi baixado uma vez (~365 MB, compartilhado entre projetos)
         "hyperframes": (Path.home() / ".cache" / "hyperframes").exists(),
+        # opcional: só quem traz fonte de URL precisa
+        "ytdlp": bool(shutil.which("yt-dlp")),
     }
 
 
@@ -296,6 +298,46 @@ def _is_project(p: Path) -> bool:
         return (p / "state.json").is_file()
     except OSError:
         return False
+
+
+def _videos_in(d: Path) -> list[str]:
+    """As fontes de uma pasta de projeto, pelo nome. Só o primeiro nível.
+
+    Primeiro nível porque `edit/` está logo abaixo e é cheio de renders: uma
+    varredura recursiva devolveria `preview_proxy.mp4` como se fosse material
+    bruto do usuário.
+    """
+    try:
+        return sorted(f.name for f in d.iterdir()
+                      if f.is_file() and f.suffix.lower() in VIDEO_EXT)[:40]
+    except OSError:
+        return []
+
+
+def _init_state(edit: Path, nome: str, sources: list[str]) -> None:
+    """O state.json de um projeto que ACABOU de nascer — e que ainda não começou.
+
+    `awaitingStart` é o que separa "a pasta existe" de "o trabalho começou".
+    Antes, largar o vídeo já disparava a Fase 1 na mesma batida: a tela ia
+    direto para "aguardando o primeiro render", sem o usuário ter confirmado
+    nada e sem saber o que tinha sido posto para rodar. Agora a dropzone
+    MONTA o projeto e para aqui; quem dispara é o botão da tela de início
+    (`/api/start`), que é onde o passo seguinte está escrito por extenso.
+    """
+    st = edit / "state.json"
+    if st.exists():
+        return
+    st.parent.mkdir(parents=True, exist_ok=True)
+    st.write_text(json.dumps({
+        "project": nome,
+        "phase": 1,
+        "video": "preview_proxy.mp4",
+        "edl": "edl.json",
+        "message": "Pronto para começar — confirme para gerar os cortes",
+        "awaitingStyle": False,
+        "awaitingStart": True,
+        "sources": sources,
+    }, ensure_ascii=False, indent=2))
 
 
 def _project_card(p: Path) -> dict:
@@ -590,7 +632,7 @@ class Handler(BaseHTTPRequestHandler):
         route = self.path.split("?", 1)[0]
         if route == "/api/upload":
             return self._upload()
-        if route in ("/api/open", "/api/close", "/api/drop", "/api/brand"):
+        if route in ("/api/open", "/api/close", "/api/drop", "/api/brand", "/api/start"):
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 body = json.loads(self.rfile.read(length) or b"{}")
@@ -603,6 +645,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._drop(body)
             if route == "/api/brand":
                 return self._brand_put(body)
+            if route == "/api/start":
+                return self._start(body)
             return self._close()
         if route != "/api/save":
             self._json({"error": "unknown route"}, 404)
@@ -904,12 +948,73 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "essa pasta não tem um projeto do Avelin",
                             "canCreate": True}, 404)
                 return
+        # Pasta nova (ou `edit` sem state): o projeto nasce aqui, igualzinho ao
+        # que a dropzone monta — inclusive esperando o submit. Sem isto, quem
+        # entra pelo navegador de pastas cai num projeto sem state nenhum, que
+        # é a tela que não sabe dizer o que fazer em seguida.
+        _init_state(alvo, alvo.parent.name or alvo.name, _videos_in(alvo.parent))
         _set_root(alvo)
         _recents_touch(alvo)
         self._json({"ok": True, "path": str(alvo), "project": _project_card(alvo)})
 
     def _close(self) -> None:
         _set_root(None)
+        self._json({"ok": True})
+
+    # O SUBMIT do primeiro vídeo. É o único lugar que pede a Fase 1.
+    #
+    # Existe porque montar o projeto e COMEÇAR a trabalhar nele eram, até aqui,
+    # o mesmo gesto: soltar o arquivo. Quem soltava não tinha onde ler o que ia
+    # acontecer, não tinha como desistir, e a tela seguinte ("aguardando o
+    # primeiro render") não dizia se alguma coisa estava rodando ou se ele tinha
+    # de fazer mais algum passo. Agora o gesto é explícito, e o que ele dispara
+    # está escrito ao lado do botão.
+    #
+    # `preview_request.json` continua sendo o canal — o mesmo arquivo que o
+    # watch_edits.py já vigia. O que mudou é QUANDO ele é escrito.
+    FORMATS = {"short", "long", "auto"}
+
+    def _start(self, body: dict) -> None:
+        if self._no_project():
+            return
+        state: dict = {}
+        try:
+            state = json.loads((self.root / "state.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+        pasta = self.root.parent
+        sources = [str(s) for s in (state.get("sources") or [])]
+        if not sources:
+            sources = _videos_in(pasta)
+        if not sources:
+            self._json({"error": "não achei nenhum vídeo nesta pasta"}, 400)
+            return
+        # Os nomes gravados são relativos à pasta de vídeos; um caminho absoluto
+        # (fonte que ficou fora da pasta) passa direto.
+        def _abs(s: str) -> str:
+            p = Path(s)
+            return str(p if p.is_absolute() else (pasta / p))
+
+        brief = str(body.get("brief") or "").strip()[:2000]
+        fmt = str(body.get("format") or "auto")
+        if fmt not in self.FORMATS:
+            fmt = "auto"
+        (self.root / "preview_request.json").write_text(json.dumps({
+            "type": "new-project",
+            "videosDir": str(pasta),
+            "source": _abs(sources[0]),
+            "sources": [_abs(s) for s in sources],
+            "brief": brief,
+            "format": fmt,
+            "at": time.time(),
+        }, ensure_ascii=False, indent=2))
+        self._patch_state(
+            awaitingStart=False,
+            startedAt=time.time(),
+            brief=brief,
+            format=fmt,
+            message="Fase 1 — gerando os cortes",
+        )
         self._json({"ok": True})
 
     def _adopt(self, video: Path) -> None:
@@ -923,34 +1028,17 @@ class Handler(BaseHTTPRequestHandler):
         pasta = _project_dir_for(video)
         edit = pasta / "edit"
         edit.mkdir(parents=True, exist_ok=True)
-        st = edit / "state.json"
         # ARRASTAR UM VÍDEO DE UM PROJETO QUE JÁ EXISTE É ABRIR ELE, e nada
         # mais. Pedir a Fase 1 aqui mandaria recortar um trabalho pronto — e o
         # arquivo que mais convida a ser arrastado é justamente o render que
         # está na pasta do projeto acabado.
-        novo = not st.exists()
-        if novo:
-            st.write_text(json.dumps({
-                "project": pasta.name,
-                "phase": 1,
-                "video": "preview_proxy.mp4",
-                "edl": "edl.json",
-                "message": "Projeto novo — aguardando a Fase 1",
-                "awaitingStyle": False,
-                "sources": [(pasta / video.name).name if (pasta / video.name).exists()
-                            else str(video)],
-            }, ensure_ascii=False, indent=2))
-        # O PEDIDO, para o lado da IA. O editor cria a pasta; transcrever e
-        # cortar é trabalho de agente, e o canal que já existe para isso é o
-        # arquivo vigiado pelo watch_edits.py. Sem isto a dropzone montaria o
-        # projeto e ele ficaria parado sem ninguém saber que existe.
-        if novo:
-            (edit / "preview_request.json").write_text(json.dumps({
-                "type": "new-project",
-                "videosDir": str(pasta),
-                "source": str((pasta / video.name) if (pasta / video.name).exists() else video),
-                "at": time.time(),
-            }, ensure_ascii=False, indent=2))
+        #
+        # E um projeto NOVO também não dispara nada por conta própria: nasce em
+        # `awaitingStart`, e quem manda a Fase 1 começar é o botão da tela de
+        # início. Ver `_init_state` e `_start`.
+        _init_state(edit, pasta.name,
+                    [(pasta / video.name).name if (pasta / video.name).exists()
+                     else str(video)])
         _set_root(edit.resolve())
         _recents_touch(Handler.root)
         _scan_cache["at"] = 0.0  # o projeto é novo; a varredura cacheada não o tem

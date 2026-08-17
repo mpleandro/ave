@@ -35,11 +35,22 @@
      usasse o laranja de ação, o usuário leria "botão" onde está escrito "isto
      aqui está errado". A marca tem duas famílias e nenhuma delas serve de
      alarme, então o rosa entra como token declarado — visível, nomeado e
-     trocável — em vez de aparecer cru em oito regras diferentes. */
-  --mark: var(--mark);
+     trocável — em vez de aparecer cru em oito regras diferentes.
+
+     Os três VALORES têm de estar escritos aqui, e é a única linha do arquivo
+     onde uma cor aparece crua. Os literais viraram `var(--mark)` numa troca em
+     massa que também acertou a PRÓPRIA declaração, e `--mark: var(--mark)` é
+     uma referência circular: o token fica inválido em tempo de cálculo e o
+     navegador descarta a declaração em silêncio, do mesmo jeito que o trio RGB
+     com vírgula. As catorze regras que pediam `var(--mark)` puro perdiam a cor
+     e caíam para o texto herdado — o chip de Marcações, o cabeçalho da nota, a
+     agulha do marcador. As que usam `rgb(var(--mark-rgb) / …)` continuavam
+     certas, o que deixava a interface meio rosa e meio branca sem um erro no
+     console. */
+  --mark: #ff5470;
   --mark-rgb: 255 84 112;
-  --mark-soft: var(--mark-soft);
-  --mark-mist: var(--mark-mist);
+  --mark-soft: #ff8098;
+  --mark-mist: #ffd7de;
 
   --bg0: #081726;               /* um degrau abaixo da noite, só para dar profundidade */
   --bg1: #0d2137;               /* --azul-noite: a cor-mãe */
@@ -1927,3 +1938,127 @@ button.tl-chip:disabled { cursor: default; }
    é um gesto raro (uma vez por identidade), e como botão sólido competiria com
    "Enviar e renderizar", que é o gesto da tela. */
 .brand-save { margin-top: 10px; align-self: flex-start; font-size: 11.5px; }
+
+/* ==========================================================================
+   CHECKLIST DA INSTALAÇÃO (tela inicial)
+   ==========================================================================
+   Um acordeão, e não uma lista sempre aberta: quando está tudo certo o
+   conteúdo útil é UMA linha, e onze confirmações verdes em toda abertura
+   empurrariam a lista de projetos para fora da tela. */
+.dep-card { width: 100%; overflow: hidden; }
+.dep-card.warn { border-color: rgb(var(--orange-rgb) / .38); background: rgb(var(--orange-rgb) / .07); }
+
+.dep-bar {
+  width: 100%; display: flex; align-items: center; gap: 9px;
+  padding: 11px 14px; background: none; border: 0; cursor: pointer;
+  color: var(--text); font: inherit; text-align: left;
+}
+.dep-caret { font-size: 12px; color: var(--dim); transition: transform .15s var(--ease-out); }
+.dep-bar[aria-expanded="true"] .dep-caret { transform: rotate(180deg); }
+.dep-summary { font-size: 12.5px; }
+.dep-card.warn .dep-summary { color: var(--orange-soft); }
+
+.dep-body { padding: 2px 14px 14px; display: flex; flex-direction: column; gap: 14px; }
+.dep-group h4 {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--dim); margin-bottom: 7px;
+}
+.dep-row { display: flex; align-items: baseline; gap: 9px; padding: 3px 0; font-size: 12px; }
+.dep-ic { flex: 0 0 12px; color: #5fd07a; font-size: 11px; line-height: 1.4; }
+.dep-row.miss .dep-ic { color: var(--orange); }
+.dep-row.unk .dep-ic { color: var(--dim); }
+.dep-txt { min-width: 0; }
+.dep-name { font-weight: 500; }
+/* A explicação vem DEPOIS do nome, na mesma linha enquanto couber: em duas
+   linhas fixas a lista dobra de altura e deixa de ser conferível de relance. */
+.dep-why { color: var(--dim); }
+.dep-why::before { content: ' — '; }
+.dep-row.miss .dep-why { color: var(--orange-soft); }
+.dep-foot { font-size: 11.5px; color: var(--dim); border-top: 1px solid var(--stroke); padding-top: 11px; }
+
+/* ==========================================================================
+   TELA DE INÍCIO — o submit do primeiro vídeo, e a espera
+   ========================================================================== */
+.start { flex: 1; display: flex; align-items: flex-start; justify-content: center;
+         overflow-y: auto; padding: 3vh 14px 30px; }
+.start-inner { width: min(560px, 94vw); padding: 26px 28px 24px; }
+
+.start-eyebrow {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--orange-soft); margin-bottom: 8px;
+}
+.start h2 {
+  font-size: 21px; font-weight: 600; letter-spacing: -0.3px;
+  display: flex; align-items: center; gap: 10px;
+}
+.start-sub { margin-top: 8px; font-size: 12.5px; line-height: 1.55; color: var(--dim); }
+
+/* A FONTE, dita pelo nome. É a única confirmação de que o arquivo que se
+   soltou é o arquivo que vai ser cortado — e ela some quando não há nome a
+   mostrar, em vez de deixar uma tarja vazia. */
+.start-src {
+  margin-top: 16px; padding: 10px 12px; border-radius: 10px;
+  background: var(--glass); border: 1px solid var(--stroke);
+  font-size: 12.5px; overflow-wrap: anywhere;
+}
+.start-src span { color: var(--dim); }
+
+.start-field { margin-top: 16px; }
+.start-label { display: block; font-size: 11px; font-weight: 600; color: var(--dim);
+               text-transform: uppercase; letter-spacing: .08em; margin-bottom: 7px; }
+.start-opt { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .8; }
+
+.start-seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.start-seg button {
+  padding: 7px 12px; font: inherit; font-size: 12px; cursor: pointer;
+  color: var(--text); background: var(--glass);
+  border: 1px solid var(--stroke); border-radius: 9px;
+  transition: background .15s var(--ease-out), border-color .15s var(--ease-out);
+}
+.start-seg button:hover { border-color: rgb(var(--orange-rgb) / .4); }
+.start-seg button.on {
+  background: rgb(var(--orange-rgb) / .18);
+  border-color: rgb(var(--orange-rgb) / .5);
+  color: var(--orange-soft);
+}
+
+#startBrief {
+  width: 100%; resize: vertical; font: inherit; font-size: 12.5px; line-height: 1.5;
+  padding: 9px 11px; border-radius: 10px; color: var(--text);
+  background: rgb(255 255 255 / .04); border: 1px solid var(--stroke);
+}
+#startBrief:focus { outline: none; border-color: rgb(var(--orange-rgb) / .5); }
+
+.start-check { margin-top: 16px; padding: 11px 12px; border-radius: 10px;
+               background: rgb(var(--orange-rgb) / .08);
+               border: 1px solid rgb(var(--orange-rgb) / .3); }
+.start-check h4 {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--orange-soft); margin-bottom: 6px;
+}
+
+.start-actions { margin-top: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.start-go { padding: 10px 20px; font-size: 13px; }
+.start-hint { font-size: 11.5px; color: var(--dim); }
+
+/* A ESPERA. As etapas não são enfeite: elas dizem que a demora tem partes, e
+   qual delas está correndo agora — a diferença entre "está processando" e
+   "travou" é a única coisa que o usuário quer saber nesses minutos. */
+.start-steps { margin-top: 18px; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.start-steps li {
+  position: relative; padding-left: 24px; font-size: 12.5px; color: var(--dim);
+}
+.start-steps li::before {
+  content: '○'; position: absolute; left: 4px; top: 0; font-size: 11px; opacity: .55;
+}
+.start-steps li.done { color: var(--text); opacity: .75; }
+.start-steps li.done::before { content: '✓'; color: #5fd07a; opacity: 1; }
+.start-steps li.now { color: var(--orange-soft); font-weight: 500; }
+.start-steps li.now::before {
+  content: ''; left: 3px; top: 4px; width: 9px; height: 9px; border-radius: 50%;
+  border: 2px solid rgb(var(--orange-rgb) / .3); border-top-color: var(--orange);
+  opacity: 1; animation: proc-turn .8s linear infinite;
+}
+
+.start-note { margin-top: 20px; font-size: 11.5px; line-height: 1.6; color: var(--dim); }
+.start-elapsed { color: var(--orange-soft); }

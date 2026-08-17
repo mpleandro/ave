@@ -979,6 +979,8 @@ let S = {
   selWords: new Set(),
   processing: false, // a IA está refazendo algo lá fora
   procFrom: 0,
+  keys: null, // chaves de API PRESENTES (nunca o valor) — vem do /api/state
+  deps: null, // ffmpeg, uv, node… o que esta máquina tem instalado
   pendingIn: null, // an IN is open, waiting for its OUT
   editingNote: null, // id of the note the editor is bound to
   style: null, // current picks {edit, captions, elements:{…}, note}
@@ -1400,6 +1402,12 @@ async function poll() {
     // "você tem ajustes não salvos" logo abaixo bloquearia a atualização
     // justamente enquanto o usuário espera, que é quando ele mais precisa ver.
     if (data.keys) S.keys = data.keys;
+    // O QUE A MÁQUINA TEM. Fora da assinatura pelo mesmo motivo do progresso:
+    // não muda a linha do tempo, e a checklist tem de acertar já no primeiro
+    // poll — inclusive na tela inicial, onde não há projeto e `applyState`
+    // sai antes de tudo.
+    if (data.deps) S.deps = data.deps;
+    renderDepsCard();
     setProgress(data.progress || null);
     // servidor velho servindo app novo: avisa UMA vez, com a instrução, em vez
     // de deixar o usuário descobrir por 404 em cada botão novo
@@ -1426,6 +1434,8 @@ async function applyState(data) {
      Sai antes de tudo: o resto desta função pressupõe um corte, um vídeo e um
      EDL, e sem projeto nada disso existe — seguir daqui desenharia uma linha
      do tempo vazia sob o cabeçalho de um projeto que ninguém abriu. */
+  if (data.keys) S.keys = data.keys;
+  if (data.deps) S.deps = data.deps;
   if (data.noProject) { showHome(); return; }
   hideHome();
   S.state = data.state || {};
@@ -2092,7 +2102,7 @@ function updateAccentNote() {
  * rebuilding every demo. Skipping it there left the footer naming the previous
  * colour while the previews already showed the new one. */
 function updateSummary() {
-  const box = $('setupSummary');
+  const box = $('depsSummary');
   if (!box) return;   // o resumo saiu da tela — nada a escrever
   const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
   const accentBit = accentUsed() ? ` · destaque ${accentName(S.style.accent)}` : '';
@@ -2151,11 +2161,30 @@ const onProxy = () => /(^|\/)preview_proxy\.mp4$/.test(S.state.video || '');
 const setupApplies = () => !!(S.state.awaitingStyle || S.state.style) && !onProxy();
 
 function renderSetup() {
+  /* SEM PROJETO NA TELA, esta função não tem sobre o que decidir — e decidir
+     assim mesmo estraga a tela inicial. Ela é chamada por caminhos ASSÍNCRONOS
+     (a fonte local que terminou de carregar, o resize), e qualquer um deles
+     chegando depois de `showHome()` acendia o "Aguardando o primeiro render"
+     por baixo da dropzone, num momento em que não há projeto nenhum aberto. */
+  if (homeOn || !Object.keys(S.state || {}).length) {
+    ['layersPanel', 'stage', 'emptyState', 'startPanel'].forEach((id) => {
+      if ($(id)) $(id).classList.add('hidden');
+    });
+    capAnims = [];
+    wasShowing = false;
+    return;
+  }
   const show = setupApplies();
   $('layersPanel').classList.toggle('hidden', !show);
   const hasVideo = S.videoDuration > 0;
   $('stage').classList.toggle('hidden', !hasVideo);
-  $('emptyState').classList.toggle('hidden', hasVideo);
+  /* SEM VÍDEO SÃO TRÊS TELAS, e não uma. Antes de existir a de início, um
+     projeto recém-criado e um projeto sendo processado mostravam a MESMA
+     frase ("aguardando o primeiro render"), que não diz qual dos dois é.
+     `#emptyState` fica com o que sobra: o projeto antigo, sem `awaitingStart`
+     nem `startedAt`, que espera um render que a IA já foi mandada fazer. */
+  const modoInicio = renderStart();
+  $('emptyState').classList.toggle('hidden', hasVideo || !!modoInicio);
 
   /* O portão precisa APARECER, não só faltar. Escondido, o painel de camadas
      some sem explicação e o usuário conclui que a interface está incompleta —
@@ -2294,7 +2323,7 @@ function buildLayerRows() {
     /* A headline é a única escolha desta tela que é CONTEÚDO, não estilo — e
        por isso ela nunca coube num catálogo de cartões. Quem escreve é o
        usuário; os cartões abaixo só decidem como ela é pintada. */
-    const g = el('div', 'setup-group', body);
+    const g = el('div', 'dep-group', body);
     el('span', 'group-title', el('div', 'group-head', g)).textContent = 'Texto da headline';
     const ta = el('textarea', 'hl-text', g);
     ta.id = 'headlineText';
@@ -2310,7 +2339,7 @@ function buildLayerRows() {
   }
 
   for (const gid of L.groups || []) {
-    const g = el('div', 'setup-group', body);
+    const g = el('div', 'dep-group', body);
     el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
     el('div', 'opt-grid', g).id = `opt-${gid}`;
   }
@@ -2328,7 +2357,7 @@ function buildLayerRows() {
   }
 
   if (L.hlColors && S.style.headlinePicked) {
-    const g = el('div', 'setup-group acabamento', body);
+    const g = el('div', 'dep-group acabamento', body);
     const h = el('div', 'group-head', g);
     el('span', 'group-title', h).textContent = 'Cores';
     el('span', 'group-note', h).id = 'accentNote';
@@ -2346,7 +2375,7 @@ function buildLayerRows() {
        linha na de destaque e a segunda na principal. Nos outros layouts a de
        destaque fica sem uso — e a nota abaixo diz isso, em vez de deixar o
        usuário escolher uma fonte que não vai aparecer em lugar nenhum. */
-    const g = el('div', 'setup-group acabamento', body);
+    const g = el('div', 'dep-group acabamento', body);
     const h = el('div', 'group-head', g);
     el('span', 'group-title', h).textContent = 'Fontes';
     el('span', 'group-note', h).id = 'fontNote';
@@ -2380,7 +2409,7 @@ function buildLayerRows() {
        branco cravado na folha), a de destaque é a que pinta a palavra realçada
        — e ela é a MESMA da headline, porque um vídeo com dois laranjas
        diferentes não lê como um vídeo, lê como um erro. */
-    const g = el('div', 'setup-group acabamento', body);
+    const g = el('div', 'dep-group acabamento', body);
     const h = el('div', 'group-head', g);
     el('span', 'group-title', h).textContent = 'Cores';
     el('span', 'group-note', h).id = 'accentNote';
@@ -2397,7 +2426,7 @@ function buildLayerRows() {
     /* UMA fonte. Estilos que alternam famílias (a serifada do empilhado) o
        fazem por identidade própria — expor isso como escolha dissolveria o
        estilo, e quem quer outra letra ali quer outro estilo. */
-    const g = el('div', 'setup-group acabamento', body);
+    const g = el('div', 'dep-group acabamento', body);
     const h = el('div', 'group-head', g);
     el('span', 'group-title', h).textContent = 'Fontes';
     el('span', 'group-note', h).id = 'capFontNote';
@@ -2490,7 +2519,7 @@ $('layersPanel').addEventListener('click', (e) => {
       // desce até o acabamento sem tirar da tela o estilo que acabou de ser
       // escolhido — `nearest` rola o mínimo, `start` jogaria os cartões para cima
       requestAnimationFrame(() => {
-        const alvo = document.querySelector('.setup-group.acabamento');
+        const alvo = document.querySelector('.dep-group.acabamento');
         if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       });
     }
@@ -4406,7 +4435,9 @@ function showHome() {
   $('home').classList.remove('hidden');
   $('stage').classList.add('hidden');
   $('emptyState').classList.add('hidden');
+  if ($('startPanel')) $('startPanel').classList.add('hidden');
   $('homeBtn').classList.add('hidden');
+  renderDepsCard();
   /* O cabeçalho é do PROJETO. Sem um aberto, tudo o que ele mostra é falso:
      "Exportar" oferece um arquivo que não existe, o `?` explica atalhos de uma
      linha do tempo que não está na tela, e o nome repetia a marca que o logo
@@ -4714,3 +4745,337 @@ if ($('homeBtn')) {
 }
 
 wireDropzone();
+
+/* ==========================================================================
+   A CHECKLIST DA INSTALAÇÃO
+   ==========================================================================
+   O servidor já publicava `deps` e `keys` a cada poll e ninguém lia. Enquanto
+   isso, quem instalava descobria cada dependência por MENSAGEM DE ERRO, uma de
+   cada vez, e sempre no meio de um trabalho: esperar dois minutos por uma
+   transcrição para então ler que falta o ffmpeg é o pior lugar possível para
+   dar essa notícia.
+
+   Duas regras de desenho:
+   · OBRIGATÓRIO e OPCIONAL ficam separados e nomeados. Uma lista única de onze
+     itens com ✓ e ✗ misturados não diz o que impede de trabalhar hoje.
+   · Recolhida quando está tudo certo. Dez confirmações verdes em toda abertura
+     são ruído; o que importa nesse caso cabe numa linha. */
+
+const IS_WIN = /Win/i.test((navigator.userAgentData && navigator.userAgentData.platform)
+                           || navigator.platform || navigator.userAgent || '');
+
+const DEP_ITEMS = [
+  { id: 'ffmpeg', dep: 'ffmpeg', req: true, name: 'ffmpeg',
+    why: 'corta, converte e exporta — a Fase 1 inteira passa por ele',
+    fix: IS_WIN ? 'winget install Gyan.FFmpeg' : 'brew install ffmpeg' },
+  { id: 'ffprobe', dep: 'ffprobe', req: true, name: 'ffprobe',
+    why: 'lê duração, resolução e fps das fontes',
+    fix: 'vem junto com o ffmpeg' },
+  { id: 'uv', dep: 'uv', req: true, name: 'uv (Python)',
+    why: 'roda os helpers da skill no ambiente certo',
+    fix: IS_WIN ? 'winget install astral-sh.uv' : 'brew install uv' },
+  { id: 'groq', key: 'groq', req: true, name: 'Chave do Groq',
+    why: 'transcrição — sem ela nada é cortado, porque o corte parte do texto',
+    fix: 'console.groq.com/keys → GROQ_API_KEY no .env da skill' },
+  /* Node é obrigatório, mas só a partir da Fase 2 — e essa diferença muda o
+     que a tela deve fazer: ela AVISA, e não impede de gerar o corte. */
+  { id: 'node', dep: 'node', req: true, phase2: true, name: 'Node.js 18+',
+    why: 'motor da Fase 2 (legendas, gráficos, imagens)',
+    fix: IS_WIN ? 'winget install OpenJS.NodeJS.LTS' : 'brew install node' },
+
+  { id: 'hyperframes', dep: 'hyperframes', name: 'Cache do HyperFrames',
+    why: 'os ~365 MB do motor da Fase 2',
+    fix: 'baixa sozinho na primeira Fase 2 — nada a fazer' },
+  { id: 'ytdlp', dep: 'ytdlp', name: 'yt-dlp',
+    why: 'trazer material de uma URL (YouTube, Drive)',
+    fix: IS_WIN ? 'winget install yt-dlp.yt-dlp' : 'brew install yt-dlp' },
+  { id: 'elevenlabs', key: 'elevenlabs', name: 'Chave da ElevenLabs',
+    why: 'transcrever fontes longas (>5 min) com mais precisão',
+    fix: 'elevenlabs.io/app/settings/api-keys → ELEVENLABS_API_KEY' },
+  { id: 'pexels', key: 'pexels', name: 'Chave da Pexels',
+    why: 'imagens e vídeos ilustrativos na Fase 2',
+    fix: 'pexels.com/api → PEXELS_API_KEY' },
+  { id: 'treblo', key: 'treblo', name: 'Chave da Treblo',
+    why: 'trilha gerada por IA na Fase 3 (um arquivo local não precisa de chave)',
+    fix: 'sonauto.ai → TREBLO_API_KEY' },
+  { id: 'google', key: 'google', name: 'Busca do Google',
+    why: 'marcas e pessoas que a Pexels não tem — a Wikimedia cobre sem chave',
+    fix: 'GOOGLE_API_KEY + GOOGLE_CSE_ID (mesmo projeto no Google Cloud)' },
+];
+
+/* Sem resposta do servidor ainda devolve `null`, não `false`: um ✗ por
+   ausência de dado acusaria o usuário de não ter instalado o que ele tem. */
+function depOk(it) {
+  const src = it.dep ? S.deps : S.keys;
+  if (!src) return null;
+  const k = it.dep || it.key;
+  return k in src ? !!src[k] : null;
+}
+
+const depMissing = (f) => DEP_ITEMS.filter((it) => depOk(it) === false).filter(f || (() => true));
+/* O que impede de gerar o corte HOJE. O Node fica de fora de propósito: ele
+   trava a Fase 2, e travar o botão por causa dele mandaria o usuário instalar
+   um motor de render para ver um corte que não usa nenhum. */
+const depBlocking = () => depMissing((it) => it.req && !it.phase2);
+
+function depRow(it) {
+  const ok = depOk(it);
+  const row = document.createElement('div');
+  row.className = `dep-row${ok === false ? ' miss' : ''}${ok === null ? ' unk' : ''}`;
+  row.innerHTML = '<span class="dep-ic"></span>'
+    + '<span class="dep-txt"><span class="dep-name"></span>'
+    + '<span class="dep-why"></span></span>';
+  row.querySelector('.dep-ic').textContent = ok === null ? '·' : (ok ? '✓' : '✗');
+  row.querySelector('.dep-name').textContent = it.name
+    + (it.phase2 ? ' — a partir da Fase 2' : '');
+  // Faltando, a linha diz COMO resolver; presente, diz para que serve. As duas
+  // frases servem a momentos diferentes e mostrar as duas juntas dobra a lista.
+  row.querySelector('.dep-why').textContent = ok === false ? it.fix : it.why;
+  return row;
+}
+
+function depGroup(titulo, itens) {
+  const wrap = document.createElement('div');
+  wrap.className = 'dep-group';
+  const h = document.createElement('h4');
+  h.textContent = titulo;
+  wrap.appendChild(h);
+  itens.forEach((it) => wrap.appendChild(depRow(it)));
+  return wrap;
+}
+
+let depsOpenUser = null;   // o usuário mandou abrir/fechar? aí a vontade dele manda
+let depsSig = '';
+
+function renderDepsCard() {
+  const card = $('depsCard');
+  if (!card) return;
+  if (!S.deps && !S.keys) { card.classList.add('hidden'); return; }
+  const sig = JSON.stringify([S.deps, S.keys, depsOpenUser]);
+  if (sig === depsSig) return;      // o poll é de 2s; remontar onze linhas a cada tique é à toa
+  depsSig = sig;
+  card.classList.remove('hidden');
+
+  const faltaObrig = depBlocking();
+  const faltaNode = depMissing((it) => it.phase2).length > 0;
+  const faltaOpc = depMissing((it) => !it.req).length;
+
+  let resumo;
+  if (faltaObrig.length) {
+    resumo = `Falta ${faltaObrig.length === 1 ? 'um item obrigatório' : `${faltaObrig.length} itens obrigatórios`}: `
+      + faltaObrig.map((it) => it.name).join(', ');
+  } else if (faltaNode) {
+    resumo = 'Pronto para cortar — o Node.js falta só para a Fase 2';
+  } else {
+    resumo = 'Tudo pronto para editar';
+    if (faltaOpc) resumo += ` · ${faltaOpc} opciona${faltaOpc === 1 ? 'l' : 'is'} sem configurar`;
+  }
+  $('depsSummary').textContent = resumo;
+  card.classList.toggle('warn', faltaObrig.length > 0);
+
+  const body = $('depsBody');
+  body.textContent = '';
+  body.appendChild(depGroup('Obrigatórios', DEP_ITEMS.filter((it) => it.req)));
+  body.appendChild(depGroup('Opcionais — a IA pede quando o recurso for usado',
+                              DEP_ITEMS.filter((it) => !it.req)));
+  const pe = document.createElement('div');
+  pe.className = 'dep-foot';
+  pe.textContent = 'As chaves moram no arquivo .env dentro da pasta da skill. '
+    + 'Peça à IA no chat — “põe minha chave do Groq no .env” — e ela grava para você.';
+  body.appendChild(pe);
+
+  // Aberta sozinha só quando há o que resolver. Depois que o usuário toca no
+  // acordeão, quem manda é ele.
+  const aberta = depsOpenUser === null ? faltaObrig.length > 0 : depsOpenUser;
+  body.classList.toggle('hidden', !aberta);
+  $('depsToggle').setAttribute('aria-expanded', String(aberta));
+}
+
+if ($('depsToggle')) {
+  $('depsToggle').addEventListener('click', () => {
+    depsOpenUser = $('depsBody').classList.contains('hidden');
+    depsSig = '';               // força a remontagem com o novo estado
+    renderDepsCard();
+  });
+}
+
+/* ==========================================================================
+   O COMEÇO DO TRABALHO — submeter o primeiro vídeo, e esperar vendo
+   ==========================================================================
+   Soltar o arquivo MONTAVA o projeto e PEDIA a Fase 1 na mesma batida. Quem
+   soltava não tinha onde ler o que ia acontecer, não tinha como desistir, e a
+   tela seguinte ("aguardando o primeiro render") era idêntica à de um projeto
+   parado: nada ali distinguia "a IA está trabalhando" de "falta você fazer
+   alguma coisa". Agora são dois estados explícitos, e o servidor só escreve o
+   `preview_request.json` quando o botão daqui é apertado.
+
+   Formato e briefing moram nesta tela porque são exatamente as duas perguntas
+   que a Fase 1 faria no chat antes de começar — respondê-las aqui é o que
+   deixa o primeiro envio virar trabalho, e não uma conversa. */
+
+/* As expressões são ESTREITAS de propósito. Com `/cort/` a mensagem inicial —
+   "Fase 1 — gerando os cortes" — casava com a terceira etapa e a tela abria
+   dizendo que já tinha transcrito e escolhido as tomadas, o que é mentira e
+   some com a única informação que o usuário quer. Sem casar nada, a primeira
+   fica correndo: transcrever é sempre o começo. */
+const F1_STEPS = [
+  { label: 'Transcrevendo o áudio', re: /transcri|whisper|scribe/i },
+  { label: 'Escolhendo as melhores tomadas', re: /tomada|\btake|decupa|estratégia|\bedl\b/i },
+  { label: 'Cortando os silêncios', re: /cortando|silêncio|montando o corte|renderiz/i },
+  { label: 'Corrigindo a cor', re: /correção de cor|graduaç|color.?grade|\bgrade\b/i },
+  { label: 'Montando a linha do tempo', re: /proxy|linha do tempo|pronto para/i },
+];
+
+let startFmt = 'auto';
+let startTick = null;
+
+/* '' = esta tela não é da vez · 'ready' = esperando o submit ·
+   'working' = enviado, a IA está com ele. O vídeo em tela vence os dois: se há
+   corte, o lugar do usuário é a linha do tempo. */
+function startMode() {
+  if (S.videoDuration > 0) return '';
+  if (S.state.awaitingStart) return 'ready';
+  if (S.state.startedAt) return 'working';
+  return '';
+}
+
+function startSourceLine() {
+  const src = (S.state.sources || []).map((s) => String(s).split('/').pop()).filter(Boolean);
+  const el = $('startSrc');
+  if (!el) return;
+  el.textContent = '';
+  if (!src.length) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  const nome = document.createElement('b');
+  nome.textContent = src[0];
+  el.appendChild(nome);
+  const meta = document.createElement('span');
+  meta.textContent = src.length > 1 ? ` + ${src.length - 1} outro${src.length > 2 ? 's' : ''} nesta pasta`
+                                    : ' · pronto para cortar';
+  el.appendChild(meta);
+}
+
+function renderStartReady() {
+  startSourceLine();
+  const fmt = S.state.format || startFmt;
+  $('startFormat').querySelectorAll('button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.fmt === fmt);
+  });
+  const brief = $('startBrief');
+  if (document.activeElement !== brief && !brief.value) brief.value = S.state.brief || '';
+
+  // A checklist aqui é PRÉ-VOO: só o que falta. Repetir onze linhas verdes
+  // sobre o botão empurraria o botão para fora da tela por nenhuma razão.
+  const alvo = $('startCheck');
+  alvo.textContent = '';
+  const falta = depMissing((it) => it.req);
+  if (falta.length) {
+    const t = document.createElement('h4');
+    t.textContent = 'Antes de começar';
+    alvo.appendChild(t);
+    falta.forEach((it) => alvo.appendChild(depRow(it)));
+  }
+  alvo.classList.toggle('hidden', !falta.length);
+
+  /* PASTA SEM VÍDEO é um caso real: quem chega pelo navegador de pastas pode
+     abrir uma pasta que ainda não recebeu o material. O servidor recusaria o
+     envio, mas depois do clique — e um botão que só falha ao ser apertado é
+     pior que um botão que explica antes. */
+  const trava = depBlocking();
+  const semFonte = !(S.state.sources || []).length;
+  const go = $('startGo');
+  go.disabled = trava.length > 0 || semFonte;
+  go.title = trava.length ? `Falta: ${trava.map((it) => it.name).join(', ')}` : '';
+  $('startHint').textContent = semFonte
+    ? 'Não achei vídeo nesta pasta — coloque o arquivo nela e recarregue'
+    : (trava.length
+      ? 'Instale o que falta acima e recarregue esta página'
+      : 'Você aprova o corte antes de qualquer legenda ou trilha');
+}
+
+function renderStartWorking() {
+  const msg = (S.state.message || '').trim();
+  const linha = (progLocal && progLocal.state === 'running' && progLocal.label) || msg
+    || 'Preparando o material…';
+  $('startWorkMsg').textContent = linha;
+
+  /* Qual etapa está correndo sai do TEXTO que a skill publica — não de um
+     contador nosso. Um contador local mentiria a cada caminho que a Fase 1
+     toma (fonte longa, LOG, várias tomadas); o texto, pelo menos, é o que
+     está acontecendo de fato. Sem casar nada, o destaque fica na primeira:
+     transcrever é sempre o começo. */
+  const alvo = `${linha} ${msg}`;
+  let ativa = 0;
+  F1_STEPS.forEach((s, i) => { if (s.re.test(alvo)) ativa = i; });
+
+  const ol = $('startSteps');
+  ol.textContent = '';
+  F1_STEPS.forEach((s, i) => {
+    const li = document.createElement('li');
+    li.className = i < ativa ? 'done' : (i === ativa ? 'now' : '');
+    li.textContent = s.label;
+    ol.appendChild(li);
+  });
+
+  const t0 = +S.state.startedAt || 0;
+  $('startElapsed').textContent = t0 ? `Rodando há ${fmtElapsed(Date.now() / 1000 - t0)}.` : '';
+}
+
+function renderStart() {
+  const painel = $('startPanel');
+  if (!painel) return;
+  const modo = startMode();
+  painel.classList.toggle('hidden', !modo);
+  $('startReady').classList.toggle('hidden', modo !== 'ready');
+  $('startWorking').classList.toggle('hidden', modo !== 'working');
+
+  if (modo === 'ready') renderStartReady();
+  if (modo === 'working') renderStartWorking();
+
+  // O relógio anda localmente: o poll é de 2s e um cronômetro que pula de dois
+  // em dois lê como travado — que é o oposto do que esta tela existe para dizer.
+  if (modo === 'working' && !startTick) startTick = setInterval(renderStartWorking, 1000);
+  if (modo !== 'working' && startTick) { clearInterval(startTick); startTick = null; }
+  return modo;
+}
+
+if ($('startFormat')) {
+  $('startFormat').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    startFmt = b.dataset.fmt;
+    S.state.format = startFmt;
+    renderStartReady();
+  });
+}
+
+if ($('startGo')) {
+  $('startGo').addEventListener('click', async () => {
+    const go = $('startGo');
+    go.disabled = true;
+    try {
+      const res = await fetch('/api/start', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brief: $('startBrief').value.trim(),
+          format: S.state.format || startFmt,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) { toast(d.error || 'não consegui enviar', 5000); go.disabled = false; return; }
+    } catch (e) {
+      toast(`não consegui enviar: ${e.message}`, 5000);
+      go.disabled = false;
+      return;
+    }
+    /* A troca de tela é IMEDIATA, sem esperar o poll. Entre clicar e ver, dois
+       segundos de tela parada leem como clique perdido — e o clique que se
+       repete aqui manda a Fase 1 duas vezes. */
+    S.state.awaitingStart = false;
+    S.state.startedAt = Date.now() / 1000;
+    S.state.message = 'Fase 1 — gerando os cortes';
+    renderStart();
+    toast('Enviado — a IA começou a gerar os cortes', 4000);
+    await refreshNow();
+  });
+}

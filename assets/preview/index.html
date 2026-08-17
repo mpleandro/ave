@@ -104,6 +104,21 @@
         <div id="dzMsg" class="dz-msg"></div>
       </div>
 
+      <!-- A CHECKLIST DA INSTALAÇÃO.
+           O que falta na máquina só aparecia como erro, um de cada vez, sempre
+           no meio de um trabalho: a pessoa descobria que não tinha ffmpeg
+           DEPOIS de esperar dois minutos por uma transcrição. O servidor já
+           publicava tudo (`deps` + `keys` no /api/state) e ninguém lia.
+           Recolhida quando está tudo certo — uma lista de dez ✓ é ruído em
+           toda abertura; o que importa nesse caso é a linha verde. -->
+      <section id="depsCard" class="dep-card glass hidden">
+        <button id="depsToggle" class="dep-bar" type="button" aria-expanded="false">
+          <span class="dep-caret">⌄</span>
+          <span id="depsSummary" class="dep-summary">Verificando a instalação…</span>
+        </button>
+        <div id="depsBody" class="dep-body hidden"></div>
+      </section>
+
       <div id="homeLists" class="home-lists">
         <section class="home-col">
           <h3>Recentes</h3>
@@ -143,6 +158,68 @@
       <p>Assim que o <code>preview_proxy.mp4</code> existir, a timeline aparece
          aqui sozinha. É a versão rápida, de trabalho — o render final só é feito
          depois que você aprovar a Fase&nbsp;1.</p>
+    </div>
+  </section>
+
+  <!-- O COMEÇO DO TRABALHO, em dois estados.
+       Soltar o vídeo montava a pasta E disparava a Fase 1 na mesma batida: sem
+       confirmação, sem dizer o que ia rodar, e a tela seguinte era um
+       "aguardando o primeiro render" que não distinguia "processando" de
+       "parado esperando você". Aqui o primeiro estado PERGUNTA (e é onde cabem
+       as duas respostas que a IA pararia para pedir: formato e briefing), e o
+       segundo mostra que está rodando enquanto roda. -->
+  <section id="startPanel" class="start hidden">
+    <div class="start-inner glass">
+
+      <div id="startReady">
+        <div class="start-eyebrow">Passo 1 de 3 · Geração de cortes</div>
+        <h2>Vamos gerar os cortes</h2>
+        <p class="start-sub">Ao enviar, a IA transcreve o áudio, escolhe as
+          melhores tomadas, corta os silêncios e aplica a correção de cor. No
+          fim ela mostra o corte aqui para você aprovar.</p>
+
+        <div id="startSrc" class="start-src"></div>
+
+        <div class="start-field">
+          <label class="start-label">Formato</label>
+          <div id="startFormat" class="start-seg" role="group" aria-label="Formato do vídeo">
+            <button type="button" data-fmt="auto" class="on">A IA sugere</button>
+            <button type="button" data-fmt="short">Vertical 9:16</button>
+            <button type="button" data-fmt="long">Horizontal 16:9</button>
+          </div>
+        </div>
+
+        <div class="start-field">
+          <!-- `start-opt` e não `opt`: `.opt` já é o cartão de opção da tela de
+               Estilo, com borda e caixa — a palavra "(opcional)" herdava tudo e
+               virava um retângulo vazio acima do campo. -->
+          <label class="start-label" for="startBrief">Briefing <span class="start-opt">(opcional)</span></label>
+          <textarea id="startBrief" rows="2"
+            placeholder="Ex.: “Reels de lançamento, tom direto, 45s” — ou deixe em branco e converse com a IA depois."></textarea>
+        </div>
+
+        <!-- A CHECKLIST, de novo e aqui: é o último instante em que dá para
+             consertar o que falta sem já estar esperando por um erro. -->
+        <div id="startCheck" class="start-check"></div>
+
+        <div class="start-actions">
+          <button id="startGo" class="btn primary start-go">Gerar cortes</button>
+          <span id="startHint" class="start-hint"></span>
+        </div>
+      </div>
+
+      <div id="startWorking" class="hidden">
+        <div class="start-eyebrow">Passo 1 de 3 · Geração de cortes</div>
+        <h2><span class="proc-spin"></span>Processando o seu vídeo</h2>
+        <p id="startWorkMsg" class="start-sub">Começando…</p>
+        <ol id="startSteps" class="start-steps"></ol>
+        <p class="start-note">
+          Costuma levar de 2 a 10 minutos, conforme o tamanho do material.
+          Pode deixar esta aba aberta — a linha do tempo aparece aqui sozinha
+          quando o corte ficar pronto. <span id="startElapsed" class="start-elapsed"></span>
+        </p>
+      </div>
+
     </div>
   </section>
 
