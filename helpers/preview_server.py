@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import array
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -179,6 +180,15 @@ RECENTS_MAX = 24
 # Este arquivo é o ponteiro que ele segue.
 CURRENT = Path.home() / ".avelin" / "current.json"
 
+# ONDE O EDITOR ESTÁ ATENDENDO, para quem precisa dizer isso ao usuário.
+#
+# A porta é decidida na hora (o harness passa `$PORT`, e a 4820 costuma estar
+# ocupada por outra sessão), então quem escreve a mensagem do chat não tem como
+# saber a URL — e o usuário fica com uma ferramenta visual aberta que ele não
+# consegue achar no navegador. O arquivo é o endereço publicado: qualquer
+# agente, em qualquer turno, lê daqui em vez de adivinhar 4820.
+SERVER = Path.home() / ".avelin" / "server.json"
+
 # A MARCA DA PESSOA, e ela não pertence a um projeto.
 #
 # Cor de destaque e família tipográfica não mudam de vídeo para vídeo — são de
@@ -206,6 +216,50 @@ def _set_root(p: Path | None) -> None:
         tmp.replace(CURRENT)
     except OSError:
         pass
+
+
+# O QUE JÁ FOI LIDO DO PONTEIRO. Só o mtime: reler o arquivo a cada poll de 2s
+# seria trabalho à toa num arquivo que muda uma vez por hora.
+_current_seen = {"mtime": 0.0}
+
+
+def _follow_current() -> None:
+    """O ponteiro no disco MANDA — inclusive quando não foi o servidor que o escreveu.
+
+    `current.json` era só uma PUBLICAÇÃO de mão única: o servidor escrevia, o
+    `watch_edits.py` lia. Quem trocasse de projeto escrevendo nele — um agente
+    com pressa, um script — mexia no VIGIA e não no servidor: o watcher passava
+    a seguir o projeto novo, a aba aberta continuava mostrando o antigo, e nada
+    em tela dizia que os dois discordavam. O sintoma é cruel porque cada metade
+    está certa sozinha: o chat fala do vídeo novo, a tela mostra "aguardando o
+    primeiro render" do vídeo velho, e ninguém tem motivo para suspeitar.
+
+    Seguir o arquivo faz o erro se corrigir sozinho no poll seguinte. Não
+    substitui `/api/open` (que valida a pasta e ainda devolve o cartão do
+    projeto), mas tira o desencontro de cima do usuário.
+    """
+    try:
+        mt = CURRENT.stat().st_mtime
+    except OSError:
+        return
+    if mt <= _current_seen["mtime"]:
+        return
+    _current_seen["mtime"] = mt
+    try:
+        raw = json.loads(CURRENT.read_text()).get("root")
+    except (OSError, json.JSONDecodeError):
+        return
+    novo = Path(raw).resolve() if raw else None
+    atual = Handler.root.resolve() if Handler.root else None
+    if novo == atual:
+        return                      # foi o próprio `_set_root` que acabou de escrever
+    if novo is not None and not novo.is_dir():
+        return                      # ponteiro para pasta que não existe: ignore
+    # Sem `_set_root`: o arquivo já diz isto, e reescrevê-lo só geraria outro
+    # mtime para o próximo poll examinar.
+    Handler.root = novo
+    if novo is not None:
+        _recents_touch(novo)
 
 # Onde procurar projetos que nunca foram abertos por aqui. O usuário tem
 # projetos no disco de antes desta lista existir; sem a varredura a tela
@@ -1154,6 +1208,9 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- dynamic bits ----
     def _state(self) -> None:
+        # O poll é o único relógio desta aplicação — é aqui que o ponteiro
+        # escrito por fora é percebido, e é o que faz a aba se corrigir sozinha.
+        _follow_current()
         if not self.root:
             # O ESTADO VAZIO É UM ESTADO, e responde 200. Devolver erro aqui
             # faria o poll do app tratar "nenhum projeto aberto" como servidor
@@ -1301,6 +1358,12 @@ def main() -> None:
     ap.add_argument("--auto", action="store_true",
                     help="salvar no editor já refaz o corte / a Fase 2, "
                          "sem depender de alguém rodar um comando depois")
+    # ABRIR NO NAVEGADOR. Existe para quem NÃO tem o painel de preview do
+    # harness — agente no terminal, máquina nova, sessão por SSH local. Sem
+    # isto, a ferramenta visual sobe e o usuário fica com uma URL para colar à
+    # mão justamente no momento em que ele queria só olhar.
+    ap.add_argument("--open", action="store_true", dest="open_browser",
+                    help="abre o editor no navegador padrão assim que subir")
     args = ap.parse_args()
 
     if not (APP_DIR / "index.html").exists():
@@ -1316,9 +1379,28 @@ def main() -> None:
     _set_root(root)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     srv.auto_apply = args.auto
+    url = f"http://127.0.0.1:{args.port}"
+    # PUBLICA O ENDEREÇO antes de servir. Ver o comentário em SERVER: sem isto,
+    # quem escreve no chat não sabe a porta e o usuário não acha a própria tela.
+    try:
+        SERVER.parent.mkdir(parents=True, exist_ok=True)
+        tmp = SERVER.with_suffix(".tmp")
+        tmp.write_text(json.dumps({
+            "url": url, "port": args.port, "pid": os.getpid(),
+            "root": str(root) if root else None, "at": time.time(),
+        }, ensure_ascii=False))
+        tmp.replace(SERVER)
+    except OSError:
+        pass
     modo = " · salvar já refaz" if args.auto else ""
     onde = f"  (root: {root})" if root else "  (sem projeto — escolha na tela)"
-    print(f"Avelin — editor → http://127.0.0.1:{args.port}{onde}{modo}", flush=True)
+    print(f"Avelin — editor → {url}{onde}{modo}", flush=True)
+    if args.open_browser:
+        # Numa thread: `webbrowser.open` pode bloquear enquanto o navegador
+        # inicia, e o primeiro pedido do próprio navegador chega antes de
+        # `serve_forever` — o editor abriria numa página de erro.
+        import webbrowser
+        threading.Timer(0.4, lambda: webbrowser.open(url)).start()
     srv.serve_forever()
 
 

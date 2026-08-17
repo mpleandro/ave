@@ -184,6 +184,57 @@ Every edit session gets the same interactive interface in the user's preview pan
    waits for work that was never triggered. The failure is silent on both ends:
    they think they told you, and you never heard. `ps aux | grep watch_edits`
    is the one-second check when you are unsure.
+5. **Dê a URL ao usuário, na mesma mensagem.** Ver "A URL é parte da resposta",
+   logo abaixo — o painel do harness não é o único lugar de onde ele assiste.
+
+### A URL é parte da resposta
+
+O editor é o apoio VISUAL de quem está esperando: é onde ele acompanha o corte
+nascer, e não a cada mensagem sua no chat. Mas a porta é decidida na hora
+(`autoPort`; a 4820 vive ocupada por outra sessão), e quem não recebe o endereço
+fica com uma ferramenta aberta que não consegue abrir.
+
+**Toda mensagem que mostra algo, pede algo ou anuncia que uma etapa começou
+termina com a linha do editor:**
+
+```
+🖥️ Editor: http://127.0.0.1:<porta>
+```
+
+O endereço não se adivinha: o servidor o publica em `~/.avelin/server.json`
+(`url`, `port`, `pid`, `at`) assim que sobe. Leia dali — é uma linha:
+
+```bash
+python3 -c "import json,pathlib;print(json.loads((pathlib.Path.home()/'.avelin/server.json').read_text())['url'])"
+```
+
+**Sem painel de preview no harness** (agente de terminal, máquina nova), suba o
+servidor com `--open`: ele abre o editor no navegador padrão sozinho. Com
+painel, não use — abrir a mesma tela duas vezes confunde qual das duas é a viva.
+
+Vale para as três fases, e principalmente para os minutos em que você está
+trabalhando e ele não tem o que ver no chat: quem sabe onde olhar espera; quem
+não sabe pergunta se travou.
+
+### Trocar de projeto é `POST /api/open` — nunca escrever o ponteiro na mão
+
+`~/.avelin/current.json` é publicado pelo servidor e lido pelo watcher.
+Escrevê-lo direto no disco parece atalho e é uma armadilha: o VIGIA passa a
+seguir o projeto novo e a aba aberta continua no antigo, sem nada em tela
+dizendo que os dois discordam. O sintoma é cruel porque cada metade está certa
+sozinha — o chat fala do vídeo novo, a tela mostra "Aguardando o primeiro
+render" do vídeo velho, e o usuário conclui que o corte não saiu.
+
+```bash
+curl -s -X POST localhost:<porta>/api/open -H 'Content-Type: application/json' \
+     -d '{"path": "<pasta de vídeos ou o edit/>", "create": true}'
+```
+
+A rota valida a pasta, registra nos Recentes e devolve o cartão do projeto. O
+servidor hoje também **segue** o `current.json` se alguém o escrever por fora
+(a aba se corrige no poll seguinte, em ~2s), mas isso é rede de proteção, não
+o caminho: pela rota você descobre na hora se a pasta não existe, em vez de
+descobrir pela tela do usuário.
 
 ### A tela sem projeto — a dropzone
 
@@ -439,7 +490,13 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
 7. **Encurte o ar morto — SEMPRE, antes do primeiro render.** `propose_breaths.py <edit> --apply`. Cortar no silêncio resolve o ar ENTRE tomadas; sobra o de DENTRO — a pausa no meio do próprio raciocínio, que nenhuma escolha de tomada remove porque está no meio da tomada escolhida. Num vídeo curto é o que mais custa retenção. A passada automática é conservadora de propósito (pausa >0,60s cai para 0,30s): tira o indefensável e para aí. O gosto fica para os chips da aba Transcrição, que descem até 0,15s — **o usuário refina o que sobrou, não faz a limpeza inteira à mão.** Diga em uma linha quantos respiros e quantos segundos saíram.
 8. **Render do PROXY.** `render.py edl.json -o preview_proxy.mp4 --proxy --no-subtitles` (+`--voice-master` if wanted; longform: `--keep-resolution`). **The J-cut runs by default** — see below; you do not ask for it and you do not configure it per project. It applies per junction, only where a breath exists.
 9. **Self-eval (numeric first).** `verify_cut.py edl.json preview_proxy.mp4` (longform: `--min-silence 1.2`). Clean → done. Flags → `timeline_view` ONLY the flagged junctions, fix, re-render the proxy. Cap 3 loops, then surface remaining flags to the user.
-10. **Mostre o proxy e PEÇA A APROVAÇÃO, com todas as letras.** É o portão, e ele tem de ser dito — *"aprova a Fase 1?"* — não subentendido. **Nada depois disto começa sem um sim**: nem estilo, nem legenda, nem trilha. Itere sempre no proxy: cada rodada de correção o refaz, e a 720p/veryfast isso é 3,2× mais barato por segmento que o final. Diga que é proxy ao mostrar, para ninguém revisar a COMPRESSÃO em vez do corte.
+10. **Corte pronto → ABRA A APLICAÇÃO, e só então fale.** Nesta ordem: garanta o
+   servidor no ar (`preview_start`), aponte-o para ESTE projeto pela rota
+   (`POST /api/open`, nunca escrevendo o `current.json`), confirme que
+   `state.json.video` existe no disco — e mande a URL na mesma mensagem. O
+   proxy é a primeira coisa que o usuário tem para julgar; mandá-lo procurar
+   onde assistir desperdiça o único momento em que ele estava esperando para
+   olhar. **Mostre o proxy e PEÇA A APROVAÇÃO, com todas as letras.** É o portão, e ele tem de ser dito — *"aprova a Fase 1?"* — não subentendido. **Nada depois disto começa sem um sim**: nem estilo, nem legenda, nem trilha. Itere sempre no proxy: cada rodada de correção o refaz, e a 720p/veryfast isso é 3,2× mais barato por segmento que o final. Diga que é proxy ao mostrar, para ninguém revisar a COMPRESSÃO em vez do corte.
 11. **Aprovado → encode o final, uma vez.** `render.py edl.json -o preview.mp4 --no-subtitles` (mesmas flags do passo 8, menos `--proxy`). É o arquivo sobre o qual a Fase 2 compõe, e o `phase2.py` recusa rodar sobre o proxy. Aponte `state.json.video` para `preview.mp4` — **é isso que destranca as camadas do render na interface** — e regenere o `segments.json` a partir dos segmentos FINAIS: as contagens de frame de `clips_proxy/` descrevem outro render.
 12. **Open the Estilo tab** — `"awaitingStyle": true` in `state.json`, and let the
    user pick the editing style, the caption style and the edit elements in the UI
