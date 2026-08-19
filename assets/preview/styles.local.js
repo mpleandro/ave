@@ -54,7 +54,7 @@
 
   "roles": {
     "_note": "Per-word roles for the editorial caption style. `em` multiplies captions.fontSize. This IS the site's editorial pattern moved to video: `.amber` — serif italic in orange for the emphasis — with dimmed connectives around it. Flatten the contrast and it stops being Avelin and starts being subtitles.",
-    "ctx":      {"font": "sans",  "weight": "400", "color": "blueLight", "em": 0.62},
+    "ctx":      {"font": "sans",  "weight": "400", "color": "offwhite", "em": 0.62},
     "stress":   {"font": "sans",  "weight": "700", "color": "offwhite",  "em": 1.0},
     "serif":    {"font": "serif", "color": "offwhite", "em": 1.12},
     "serifAcc": {"font": "serif", "color": "accent",   "em": 1.12},
@@ -209,13 +209,137 @@
     };
   }
 
+  // ------------------------------------------------------------------ dinâmico
+  // O primo ACUMULATIVO do editorial (referência Vd-1.mp4): bloco central
+  // revelado palavra a palavra, sans nascendo APAGADA e acendendo quando a
+  // próxima cai, serif itálica entrando LETRA A LETRA da direita. O demo mostra
+  // os três mecanismos — sem eles é só o editorial centralizado.
+  const DIN_FONTS_HREF =
+    'https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800&family=Playfair+Display:ital,wght@1,700;1,900&display=swap';
+  const DIN = {
+    base: '#F5F2EE', dim: '#8F8F8F',
+    sans: "'Inter', system-ui, sans-serif",
+    serif: "'Playfair Display', Georgia, serif",
+  };
+  // base acende; dim NUNCA acende (a conectiva final da referência); serif
+  // cascateia por caractere. Uma linha só de serif invade a de cima.
+  const DIN_LINES = [
+    [{t: 'chega ', r: 'base'}, {t: 'de ', r: 'base'}, {t: 'venda', r: 'base'}],
+    [{t: 'chata,', r: 'serifAcc'}],
+    [{t: 'no ', r: 'dim'}, {t: 'automático', r: 'serif'}],
+  ];
+
+  function dinOnce() {
+    if (document.getElementById('avelin-din-fonts')) return;
+    const link = document.createElement('link');
+    link.id = 'avelin-din-fonts';
+    link.rel = 'stylesheet';
+    link.href = DIN_FONTS_HREF;
+    document.head.appendChild(link);
+  }
+
+  const lerpHex = (a, b, t) => {
+    const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+    const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+    return `rgb(${pa.map((v, i) => Math.round(v + (pb[i] - v) * t)).join(',')})`;
+  };
+
+  function buildDinamicoDemo(host) {
+    dinOnce();
+    const s = host.clientWidth / 1080;
+    host.innerHTML = '';
+    const cue = document.createElement('div');
+    cue.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;' +
+      'justify-content:center;align-items:center;line-height:1;letter-spacing:-0.02em;';
+    host.appendChild(cue);
+
+    const SIZE = 76 * s;
+    const STEP = 0.30;
+    const CASC = 0.05;   // por caractere
+    const DUR = 0.38;
+    const all = [];
+    let idx = 0;
+    for (const ln of DIN_LINES) {
+      const row = document.createElement('div');
+      const lead = ln[0].r === 'serifAcc' || ln[0].r === 'serif';
+      row.style.cssText = 'display:flex;align-items:baseline;white-space:pre;' +
+        (lead ? `margin-top:${(-0.30 * SIZE).toFixed(1)}px;` : '');
+      cue.appendChild(row);
+      for (const w of ln) {
+        const serif = w.r === 'serif' || w.r === 'serifAcc';
+        const sp = document.createElement('span');
+        sp.style.cssText = `display:inline-block;font-size:${(SIZE * (serif ? 1.6 : 1)).toFixed(1)}px;` +
+          `font-weight:700;filter:drop-shadow(0 3px 7px rgba(13,33,55,.72));` +
+          (serif ? `font-family:${DIN.serif};font-style:italic;` : `font-family:${DIN.sans};`);
+        sp.style.color = w.r === 'serifAcc' ? 'var(--hl-accent)' : w.r === 'dim' ? DIN.dim : DIN.base;
+        row.appendChild(sp);
+        const start = idx * STEP;
+        if (serif) {
+          const chs = [];
+          for (const ch of w.t) {
+            const ci = document.createElement('i');
+            ci.textContent = ch;
+            ci.style.cssText = 'display:inline-block;font-style:inherit;transform-origin:left bottom;';
+            sp.appendChild(ci);
+            chs.push(ci);
+          }
+          all.push({sp, chs, r: w.r, start});
+        } else {
+          sp.textContent = w.t;
+          // acende quando a PRÓXIMA palavra cai; dim nunca acende
+          all.push({sp, r: w.r, start, lit: w.r === 'base' ? (idx + 1) * STEP : null});
+        }
+        idx++;
+      }
+    }
+    const lastIn = (idx - 1) * STEP + 0.6;
+    const HOLD = 1.1;
+    const exitStart = lastIn + HOLD;
+    const EXIT = 0.3;
+    const cycle = exitStart + EXIT + 0.15;
+
+    return (now) => {
+      const p = now % cycle;
+      const out = 1 - clamp01((p - exitStart) / EXIT);
+      for (const a of all) {
+        if (a.chs) {
+          a.sp.style.opacity = out;
+          a.chs.forEach((ci, k) => {
+            const e = easeOut(clamp01((p - a.start - k * CASC) / 0.5));
+            ci.style.opacity = e;
+            ci.style.transform = `translate(${(0.7 * (1 - e)).toFixed(3)}em, ${(0.16 * (1 - e)).toFixed(3)}em) ` +
+              `scale(${(1.42 - 0.42 * e).toFixed(3)})`;
+            ci.style.filter = `blur(${((1 - e) * 7 * s).toFixed(2)}px)`;
+          });
+        } else {
+          const e = easeOut(clamp01((p - a.start) / DUR));
+          a.sp.style.opacity = e * out;
+          a.sp.style.filter = `blur(${((1 - e) * 8 * s).toFixed(2)}px)`;
+          a.sp.style.transform = `translateY(${(0.1 * (1 - e)).toFixed(3)}em)`;
+          if (a.lit !== null && a.r === 'base') {
+            const lt = clamp01((p - a.lit) / 0.4);
+            a.sp.style.color = lerpHex(DIN.dim, DIN.base, lt);
+          }
+        }
+      }
+    };
+  }
+
   window.AVELIN_LOCAL = {
     install({STYLE_CATALOG, CAP_BUILDERS, ACCENT_USERS}) {
-      if (STYLE_CATALOG.captions.some((o) => o.id === 'editorial')) return;
-      // after the three animated ones, before the static block
-      STYLE_CATALOG.captions.splice(3, 0, {id: 'editorial', name: 'Editorial', demo: 'editorial'});
-      CAP_BUILDERS.editorial = buildEditorialDemo;
-      ACCENT_USERS.captions.push('editorial');
+      if (!STYLE_CATALOG.captions.some((o) => o.id === 'editorial')) {
+        // after the three animated ones, before the static block
+        STYLE_CATALOG.captions.splice(3, 0, {id: 'editorial', name: 'Editorial', demo: 'editorial'});
+        CAP_BUILDERS.editorial = buildEditorialDemo;
+        ACCENT_USERS.captions.push('editorial');
+      }
+      if (!STYLE_CATALOG.captions.some((o) => o.id === 'dinamico')) {
+        // ao lado do editorial — é o primo dele, o usuário compara os dois
+        const at = STYLE_CATALOG.captions.findIndex((o) => o.id === 'editorial') + 1;
+        STYLE_CATALOG.captions.splice(at || 4, 0, {id: 'dinamico', name: 'Dinâmico', demo: 'dinamico'});
+        CAP_BUILDERS.dinamico = buildDinamicoDemo;
+        ACCENT_USERS.captions.push('dinamico');
+      }
     },
   };
 })();

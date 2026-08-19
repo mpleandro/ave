@@ -150,6 +150,12 @@
 
 /* ---- mídia pronta: moldura de mockup + clip reveal ---- */
 .ave-bo-media {
+  /* MÍDIA VERTICAL cabe na faixa: com `aspect-ratio` declarado, o teto de
+     altura encolhe a largura junto e a proporção se mantém. Sem isto, uma
+     gravação de tela de celular (932x1594) vira 1505px de altura numa faixa
+     de 1200 e vaza por cima da legenda. */
+  max-height: 100%;
+  max-width: 92%;
   border: var(--bo-frame, 6px) solid var(--bo-deep, #000);
   border-radius: 26px;
   overflow: hidden;

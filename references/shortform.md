@@ -18,9 +18,11 @@ approved. Everything here rides on the **data-driven template** at
   user turns everything off, say what they lose and build it anyway.
 - **Visual hook (first ~4s):** static copywriting headline, **always two lines**
   with the size fitted to them (see "Headline styles"). Always on.
-- **Captions:** six styles — three animated (**karaoke**, **stacked**, **scatter**)
-  and three static (**simples**, **serifada**, **classica**). The user already
-  picked one on the Estilo tab; see the "Caption style" section.
+- **Captions:** three animated (**karaoke**, **stacked**, **scatter**), three
+  static (**simples**, **serifada**, **classica**), and the editorial pair
+  (**editorial** left-anchored by roles, **dinamico** centre-anchored and
+  accumulative). The user already picked one on the Estilo tab; see the
+  "Caption style" section.
   Karaoke: one line ≤3 words, words rise from below, Poppins Black, lower third,
   `measureText` fit into **SAFE_WIDTH 720** (~180px each side — clears
   Instagram/TikTok's right action rail; verified on a real screenshot). Never
@@ -47,7 +49,7 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `edit: "limpa"` | rotulado **"Nenhum"** e **o padrão** — NO split inserts, full frame throughout. See that section |
 | `edit: "split" \| "split2"` | **"Dividida ↑"** / **"Dividida ↓"** — the split-screen variant below; every image insert uses it |
 | `headline: "outline" \| "card" \| "realce" \| "misto"` | `hook.style` in edit-data.json |
-| `captions: "karaoke" \| "stacked" \| "scatter" \| "simples" \| "serifada" \| "classica"` | `captions.style` in edit-data.json (+ the director step for stacked) |
+| `captions: "karaoke" \| "stacked" \| "scatter" \| "simples" \| "serifada" \| "classica" \| "editorial" \| "dinamico"` | `captions.style` in edit-data.json (+ the director step for stacked/editorial/dinamico) |
 | `accent` (hex) | `hook.accent` + `captions.accent`. Only `realce`/`misto`/`stacked` paint it; `accentUsed:false` means the picked styles have none |
 | `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
@@ -299,7 +301,7 @@ legítima em `bloco` e `grifo`, e um erro nos layouts de duas.
 - In a split layout, `paddingTop` still has to follow the seam — see the split
   section.
 
-## Caption style — six of them
+## Caption style
 
 Three are animated (karaoke, stacked, scatter) and three are STATIC
 (`simples`, `serifada`, `classica`) — no animation at all, a cue just replaces
@@ -379,6 +381,39 @@ director folds it into a neighbouring stack instead. Fast connective speech hits
 this often. After generating cues, sanity-check the plan (it prints a summary):
 every non-`STACK_MIXED` cue should span ≥0.34s, and the word list across all
 cues must match the transcript exactly, in order.
+
+### DINÂMICO — o primo acumulativo do editorial
+
+Mapeado quadro a quadro de um vídeo de referência (Vd-1.mp4, 2026-08-19). O que
+o define — e o que não pode achatar sem matar o estilo:
+
+- **Bloco CENTRAL diagramado inteiro, revelado palavra a palavra** no tempo da
+  fala, sem reflow — a linha nunca se move para receber a próxima palavra.
+- **A sans nasce APAGADA e ACENDE** (cinza → branco) quando a próxima palavra
+  cai; a conectiva que FECHA a deixa fica apagada de vez (papel `dim`). Esse
+  relógio (`litMs`) é do diretor, não do template.
+- **A serif itálica entra LETRA A LETRA** vinda da direita/baixo com escala
+  1.42 assentando — não a palavra inteira crescendo como no editorial.
+- **`figure`**: um algarismo solto ("2", "5 mil", "1 milhão") pendura GIGANTE
+  à esquerda do bloco e o texto encolhe (0.85) para lhe dar altura. O corpo é
+  decidido pelo comprimento (≤2 caracteres ganham 3.4×; valores longos 2.1×).
+  Só a figure soa (callout) — um clique por acento serif viraria metrônomo.
+
+Fontes: Inter (sans) + Playfair Display itálica (serif), os substitutos Google
+do par Helvetica/Didot da referência. Papéis: `base`, `dim`, `serif` (branca),
+`serifAcc` (accent — segue a aba Estilo). O diretor acentua o PAYOFF: a última
+palavra de conteúdo de uma oração que termina, senão a de maior peso.
+
+O passo extra de dado (mesmo transcript do `captions_words.py`):
+```bash
+uv run python helpers/caption_style_dinamico.py \
+    --transcript <edit>/transcripts/cut.json \
+    -o hyperframes/caption-dinamico.json
+```
+Então `captions.style:"dinamico"` em edit-data.json. `phase2.py` roda o diretor
+sozinho quando o arquivo não existe. Números em `variants.json`
+(`styles.dinamico`): corpo 76, `figShrink`, `figEmShort`/`figEmLong` e o bloco
+`motion` (sansIn/lit/cascade/fig) que desce serializado em `data-motion`.
 
 ## Visual hook — static headline, first ~4s (always on)
 

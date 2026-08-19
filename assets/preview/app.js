@@ -100,7 +100,7 @@ const ICON = {
 // é de propósito: o catálogo é a promessa, isto é o estado.
 const PORTED = {
   captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked',
-                     'pop', 'popLinha', 'popBloco', 'revelar', 'editorial']),
+                     'pop', 'popLinha', 'popBloco', 'revelar', 'editorial', 'dinamico']),
   headlines: new Set(['', 'outline', 'card', 'realce', 'misto',
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
                       'relevo', 'grifo', 'contorno_duplo']),
@@ -3079,7 +3079,7 @@ const CAP_CSS = {
   karaoke: 'karaoke.css', simples: 'static.css', serifada: 'static.css',
   classica: 'static.css', stacked: 'stacked.css', scatter: 'scatter.css',
   pop: 'pop.css', popLinha: 'pop.css', popBloco: 'pop.css',
-  revelar: 'revelar.css', editorial: 'editorial.css',
+  revelar: 'revelar.css', editorial: 'editorial.css', dinamico: 'dinamico.css',
 };
 
 // os estilos medidos do CapCut, e o grupo de cada um

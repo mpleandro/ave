@@ -432,7 +432,9 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   nesse arquivo** quando descobrir a marca por outro caminho (um site, um
   material de referência, uma resposta no chat).
 - **Estilo de legenda** — three animated (`karaoke`, `stacked`/"Empilhado",
-  `scatter`/"Disperso") and three static (`simples`, `serifada`, `classica`).
+  `scatter`/"Disperso"), three static (`simples`, `serifada`, `classica`), and
+  the editorial pair (`editorial`, `dinamico`/"Dinâmico" — the accumulative,
+  centre-anchored cousin).
 - **Elementos da edição** — checkboxes: `tracking` (movimento de tracking),
   `zoomAuto` (automação de zoom in), `zoomCuts` (zoom in/out nos cortes),
   `flashCut` (flash na transição), `musicAI` (trilha sonora com IA), plus a
@@ -756,7 +758,7 @@ not — verified in the render. Any other error still blocks.
 
 | | |
 |---|---|
-| Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` `pop` `popLinha` `popBloco` `revelar` |
+| Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` `pop` `popLinha` `popBloco` `revelar` `editorial` `dinamico` |
 | Headlines | `outline` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` |
 | Edição | `limpa` `split` `split2` |
 | Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash |

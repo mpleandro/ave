@@ -42,7 +42,7 @@ ENV = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
 # Estilos que já existem de verdade. A aba Estilo oferece mais do que isto; um
 # pedido fora desta lista precisa falhar com nome, não renderizar outra coisa.
 PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica", "scatter", "stacked",
-                   "pop", "popLinha", "popBloco", "revelar", "editorial"}
+                   "pop", "popLinha", "popBloco", "revelar", "editorial", "dinamico"}
 PORTED_HEADLINES = {"outline", "card", "realce", "misto",
                     "bloco", "etiqueta", "manuscrito", "gigante",
                     "relevo", "grifo", "contorno_duplo"}
@@ -360,6 +360,20 @@ def main() -> None:
             print("  preparando os papéis do editorial…")
             progress.step(edit, detail="preparando os papéis do editorial")
             run([sys.executable, str(SKILL / "helpers" / "caption_style_editorial.py"),
+                 "--transcript", str(transcript), "-o", str(cues)])
+        compose += ["--cues", str(cues)]
+
+    if data.get("captions", {}).get("style") == "dinamico":
+        cues = pub / "caption-dinamico.json"
+        transcript = edit / "transcripts" / "cut_mapped.json"
+        if not transcript.exists():
+            transcript = edit / "transcripts" / "cut.json"
+        if not cues.exists():
+            if not transcript.exists():
+                sys.exit(f"o dinâmico precisa da transcrição do corte em {transcript}")
+            print("  preparando as deixas do dinâmico…")
+            progress.step(edit, detail="preparando as deixas do dinâmico")
+            run([sys.executable, str(SKILL / "helpers" / "caption_style_dinamico.py"),
                  "--transcript", str(transcript), "-o", str(cues)])
         compose += ["--cues", str(cues)]
     if args.end:

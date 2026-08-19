@@ -19,7 +19,7 @@
  */
 (function (root) {
   'use strict';
-  var SOMBRA = ' drop-shadow(0 6px 14px rgba(13,33,55,.72))';
+  var SOMBRA = ' drop-shadow(0 2px 5px rgba(0,0,0,.92)) drop-shadow(0 10px 28px rgba(13,33,55,.85))';   // espelha o filter do editorial.css
 
   function motionDe(el) {
     try { return JSON.parse(el.getAttribute('data-motion') || '{}'); }

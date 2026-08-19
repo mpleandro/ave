@@ -36,13 +36,23 @@
   display: inline-block;
   transform-origin: left center;
   opacity: 0;                    /* a entrada é do JS, palavra a palavra */
-  filter: drop-shadow(0 6px 14px rgba(13, 33, 55, .72));
+  /* SOMBRA DUPLA (pedido do usuário, 2026-08-19): uma curta e quase preta
+     que descola a letra do vídeo, e uma longa azul-noite que dá volume.
+     Precisa ser FORTE porque o estilo é branco sobre imagem viva — e a
+     constante SOMBRA do editorial.js tem de repetir isto EXATAMENTE:
+     animar `filter` substitui o valor inteiro e a sombra sumiria no
+     primeiro quadro. */
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .92)) drop-shadow(0 10px 28px rgba(13, 33, 55, .85));
   font-size: calc(var(--cap-size, 76px) * var(--em, 1));
   font-weight: var(--w, 400);
   color: var(--cor, #F5F2EE);
 }
 
-.edt-w.r-ctx      { --em: 0.62; --w: 400; --cor: #7A95AA; }
+.edt-w.r-ctx      { --em: 0.62; --w: 400; --cor: #F5F2EE; }
+/* O CONECTIVO É BRANCO, não cinza (pedido do usuário, 2026-08-19): a
+   paleta do estilo é branco/branco/laranja. O que separa `ctx` de
+   `stress` passa a ser só CORPO e PESO (0.62em/400 contra 1.0em/700) —
+   contraste de tamanho, não de cor. */
 .edt-w.r-stress   { --em: 1.0;  --w: 700; --cor: #F5F2EE; }
 .edt-w.r-serif,
 .edt-w.r-serifAcc,

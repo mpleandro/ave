@@ -217,7 +217,7 @@
       "roles": {
         "ctx": {
           "em": 0.62,
-          "color": "#7A95AA",
+          "color": "#F5F2EE",
           "weight": 400,
           "serif": false
         },
@@ -278,6 +278,77 @@
         "exit": 0.2
       },
       "weight": 400
+    },
+    "dinamico": {
+      "_note": "Dinâmico — o primo ACUMULATIVO do editorial (caption-dinamico.json, do caption_style_dinamico.py), mapeado quadro a quadro da referência Vd-1.mp4. Bloco CENTRAL diagramado inteiro e revelado palavra a palavra: a sans nasce APAGADA e acende quando a próxima palavra cai (litMs do diretor); a serif itálica entra letra a letra vinda da direita com escala 1.42; um algarismo solto ('2', '5 mil') vira figure pendurada à esquerda e o texto encolhe (figShrink) para lhe dar altura. figEmShort/figEmLong: corpo da figure em múltiplos de size, por comprimento do texto (≤2 caracteres ganham o gigante).",
+      "animated": true,
+      "needsCues": true,
+      "css": "dinamico",
+      "family": "Inter",
+      "cssFamily": "'Inter', system-ui, sans-serif",
+      "serifFamily": "'Playfair Display', Georgia, serif",
+      "gfont": "family=Inter:wght@500;700;800&family=Playfair+Display:ital,wght@1,700;1,900",
+      "size": 76,
+      "maxW": 900,
+      "lineHeight": 1.0,
+      "letterSpacing": -0.02,
+      "offsetY": 0.47,
+      "weight": 700,
+      "figShrink": 0.85,
+      "figEmShort": 3.4,
+      "figEmLong": 2.1,
+      "roles": {
+        "base": {
+          "em": 1.0,
+          "color": "#F5F2EE",
+          "weight": 700,
+          "serif": false,
+          "_note": "nasce em dimColor e ACENDE em litMs"
+        },
+        "dim": {
+          "em": 1.0,
+          "color": "#8F8F8F",
+          "weight": 700,
+          "serif": false
+        },
+        "serif": {
+          "em": 1.6,
+          "color": "#F5F2EE",
+          "weight": 700,
+          "serif": true
+        },
+        "serifAcc": {
+          "em": 1.6,
+          "color": "accent",
+          "weight": 700,
+          "serif": true
+        }
+      },
+      "dimColor": "#8F8F8F",
+      "motion": {
+        "sansIn": {
+          "dur": 0.38,
+          "blur": 8,
+          "riseEm": 0.1
+        },
+        "lit": {
+          "dur": 0.4
+        },
+        "cascade": {
+          "dur": 0.5,
+          "staggerPerChar": 0.055,
+          "fromXEm": 0.7,
+          "fromYEm": 0.16,
+          "fromScale": 1.42,
+          "blur": 7
+        },
+        "fig": {
+          "dur": 0.55,
+          "fromScale": 0.5,
+          "blur": 6
+        },
+        "exit": 0.2
+      }
     }
   },
   "_headlines_readme": "Números de CADA layout de headline, lidos pela prévia do editor E pelo compositor. `paint` diz quem recebe a cor PRINCIPAL e quem recebe o DESTAQUE — por linha, por palavra ou no fundo. `gradient` é regra do MODELO, não escolha do usuário: quando existe, a cor escolhida vira a parada de cima e a de baixo é DERIVADA dela (escurecendo ou clareando por `amount`), para o usuário escolher uma cor e receber um degradê coerente em vez de ter de casar duas pontas na mão. `sizes` por linha (multiplicadores do corpo ajustado) é o que permite layouts com uma linha herói — sem ele toda headline é um bloco de linhas do mesmo tamanho.",

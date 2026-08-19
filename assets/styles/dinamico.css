@@ -1,0 +1,89 @@
+/* DINÂMICO — legendas editoriais acumulativas, bloco CENTRAL.
+ *
+ * Primo do editorial mapeado quadro a quadro da referência (Vd-1.mp4,
+ * 2026-08-19). O que é identidade daqui e não pode achatar:
+ *
+ * - O bloco é diagramado INTEIRO e revelado palavra a palavra — a linha nunca
+ *   se move para receber a palavra seguinte (sem reflow).
+ * - A sans nasce APAGADA (--din-dim) e o JS a acende para --din-base quando a
+ *   próxima palavra cai. Papel `dim` nunca acende — contraste de estado, não
+ *   de fonte.
+ * - A serif itálica é MAIOR que a linha (1.6em) e INVADE a linha de cima
+ *   (.lead-serif com margem negativa) — o overlap é o estilo.
+ * - A `figure` (algarismo/valor) pendura à esquerda do bloco e o texto encolhe
+ *   (--din-shrink) para lhe dar altura; o tamanho dela é decidido no MARKUP
+ *   (--fig-em) porque depende do comprimento do texto.
+ *
+ * Cores descem por variável: --din-base/--din-dim são identidade do estilo;
+ * só o ACCENT (--cap-accent) segue a aba Estilo, como nos irmãos.
+ */
+
+.ave-din {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  font-family: var(--cap-family, 'Inter', system-ui, sans-serif);
+}
+
+.din-cue {
+  position: absolute;
+  left: 60px; right: 60px;
+  top: var(--din-top, 47%);
+  display: flex; flex-direction: row;
+  justify-content: center; align-items: center;
+  column-gap: calc(var(--cap-size, 76px) * 0.30);
+  line-height: var(--din-lh, 1.0);
+  letter-spacing: -0.02em;
+}
+
+.din-col { display: flex; flex-direction: column; align-items: center; }
+
+/* com figure, as linhas encostam nela à esquerda (o "2" da referência) e o
+   texto cede: encolhe para o numeral ganhar altura */
+.din-cue.has-fig .din-col { align-items: flex-start; }
+.din-cue.has-fig { --din-shrink: var(--din-fig-shrink, 0.85); }
+
+.din-line { display: flex; align-items: baseline; white-space: pre; }
+/* a serif que ABRE a linha invade a linha de cima — line-height negativo */
+.din-line.lead-serif { margin-top: calc(var(--cap-size, 76px) * var(--din-shrink, 1) * -0.30); }
+
+.din-w {
+  display: inline-block;
+  transform-origin: center bottom;
+  opacity: 0;                    /* a entrada é do JS, palavra a palavra */
+  /* mesma sombra dupla do editorial (pedido do usuário, 2026-08-19) — e a
+     mesma regra: o dinamico.js REAPLICA este valor em todo filter animado,
+     senão a sombra some no primeiro quadro */
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .92)) drop-shadow(0 10px 28px rgba(13, 33, 55, .85));
+  font-size: calc(var(--cap-size, 76px) * var(--em, 1) * var(--din-shrink, 1));
+  font-weight: var(--w, 700);
+  color: var(--cor, #F5F2EE);
+}
+
+.din-w.r-base { --em: 1.0; --w: 700; --cor: var(--din-base, #F5F2EE); }
+.din-w.r-dim  { --em: 1.0; --w: 700; --cor: var(--din-dim, #8F8F8F); }
+
+.din-w.r-serif,
+.din-w.r-serifAcc {
+  font-family: var(--din-serif, 'Playfair Display', Georgia, serif);
+  font-style: italic;
+  --w: 700;
+}
+.din-w.r-serif    { --em: 1.6; --cor: var(--din-base, #F5F2EE);
+  text-shadow: 0 0 24px rgba(255, 255, 255, .30); }
+.din-w.r-serifAcc { --em: 1.6; --cor: var(--cap-accent, #ff3b30); }
+
+/* a figure: serif ROMANA (o "2" da referência é um didone reto), no accent */
+.din-fig {
+  font-family: var(--din-serif, 'Playfair Display', Georgia, serif);
+  font-weight: 700;
+  line-height: 0.9;
+  opacity: 0;
+  color: var(--cap-accent, #ff3b30);
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .92)) drop-shadow(0 10px 28px rgba(13, 33, 55, .85));
+  font-size: calc(var(--cap-size, 76px) * var(--fig-em, 3.4));
+  white-space: pre;
+  transform-origin: right center;
+}
+
+/* a cascata: caracteres soltos da serif; o JS os escalona */
+.din-w .ch { display: inline-block; opacity: 0; transform-origin: left bottom; }

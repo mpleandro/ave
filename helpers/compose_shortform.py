@@ -90,7 +90,7 @@ PENCIL_D = ("M 30 78 C 26 40, 120 20, 190 24 C 262 28, 300 52, 288 82 "
 
 
 def style_files(style_id: str, style: dict) -> list[str]:
-    if style_id in ("scatter", "stacked", "editorial"):
+    if style_id in ("scatter", "stacked", "editorial", "dinamico"):
         return [f"{style_id}.css", f"{style_id}.js"]
     return ["karaoke.css", "karaoke.js"] if style["animated"] else ["static.css"]
 
@@ -205,6 +205,50 @@ def editorial_markup(cues: list[dict], st: dict, duration: float) -> str:
             f'    <div class="edt-cue clip" data-start="{s:.3f}" '
             f'data-duration="{e - s:.3f}" data-exit="{c.get("exit", "abrupt")}" '
             f'data-track-index="{TRACK["caption"]}">' + "".join(linhas) + "</div>")
+    return "\n".join(blocks)
+
+
+def dinamico_markup(cues: list[dict], st: dict, duration: float) -> str:
+    """Blocos do estilo DINÂMICO: um clip por deixa, bloco central diagramado
+    inteiro e revelado palavra a palavra (data-at absoluto). A sans carrega
+    data-lit — o instante em que ACENDE, decidido pelo diretor. Toda serif
+    vira caracteres soltos (.ch): a cascata precisa de um nó por caractere.
+    A figure viaja como nó irmão da coluna, com o corpo (--fig-em) decidido
+    AQUI pelo comprimento do texto — o CSS não mede string."""
+    blocks: list[str] = []
+    for c in cues:
+        s = c["startMs"] / 1000
+        if s >= duration:
+            continue
+        e = min(c["endMs"] / 1000, duration)
+        linhas: list[str] = []
+        for ln in c["lines"]:
+            spans: list[str] = []
+            lead_serif = ln and ln[0]["role"] in ("serif", "serifAcc")
+            for w in ln:
+                at = w["fromMs"] / 1000
+                lit = f' data-lit="{w["litMs"] / 1000:.3f}"' if "litMs" in w else ""
+                if w["role"] in ("serif", "serifAcc"):
+                    corpo = "".join(f'<i class="ch">{esc(ch)}</i>' for ch in w["text"]) + " "
+                else:
+                    corpo = esc(w["text"]) + " "
+                spans.append(f'<span class="din-w r-{w["role"]}" data-at="{at:.3f}"'
+                             f'{lit}>{corpo}</span>')
+            cls = "din-line lead-serif" if lead_serif else "din-line"
+            linhas.append(f'<div class="{cls}">' + "".join(spans) + "</div>")
+        fig_html = ""
+        has_fig = ""
+        if c.get("figure"):
+            fg = c["figure"]
+            fig_em = st.get("figEmShort", 3.4) if len(fg["text"]) <= 2 else st.get("figEmLong", 2.1)
+            fig_html = (f'<div class="din-fig" style="--fig-em:{fig_em}" '
+                        f'data-at="{fg["fromMs"] / 1000:.3f}">{esc(fg["text"])}</div>')
+            has_fig = " has-fig"
+        blocks.append(
+            f'    <div class="din-cue clip{has_fig}" data-start="{s:.3f}" '
+            f'data-duration="{e - s:.3f}" data-exit="{c.get("exit", "abrupt")}" '
+            f'data-track-index="{TRACK["caption"]}">' + fig_html
+            + '<div class="din-col">' + "".join(linhas) + "</div></div>")
     return "\n".join(blocks)
 
 
@@ -459,6 +503,10 @@ def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
         dim = o.get("dim")
         dim_val = 0.9 if dim is True else (float(dim) if dim else 0.0)
         vin, stag = _bo_ritmo(d)
+        # override por janela: quando a cadência precisa casar com a FALA
+        # (etiquetas entrando no ritmo da enumeração falada), o autor manda
+        vin = float(o.get("in", vin))
+        stag = float(o.get("stagger", stag))
         scrim_attr = ""
         if dim_val > 0:
             blocks.append(f'  <div id="boscrim{i}" class="ave-bo-scrim" '
@@ -659,14 +707,22 @@ def sfx_blocks(events: list[tuple[float, str]], proj: Path,
 
     warns, seen, planned = [], set(), []
     for at, kind in events:
-        spec = VARIANTS["sfx"].get(kind)
+        # A DEIXA PODE TRAZER O ARQUIVO DO USUÁRIO. O catálogo do repo é o
+        # vocabulário comum; a biblioteca de quem edita (~/.avelin/sfx.json)
+        # é dele, e obrigá-lo a virar `kind` no repo compartilhado seria pedir
+        # que o gosto de um vire dependência de todos.
+        if isinstance(kind, dict):
+            spec = {"file": kind["file"], "volume": float(kind.get("volume", 0.3))}
+        else:
+            spec = VARIANTS["sfx"].get(kind)
         if not spec:
             continue
         f = proj / "sfx" / spec["file"]
         if not f.exists():
-            if kind not in seen:
-                warns.append(f"  aviso: efeito '{spec['file']}' não encontrado — {kind} mudo")
-                seen.add(kind)
+            nome = spec["file"]
+            if nome not in seen:
+                warns.append(f"  aviso: efeito '{nome}' não encontrado — deixa muda")
+                seen.add(nome)
             continue
         info = probe(str(f))
         if info["quiet"] and spec["file"] not in seen:
@@ -1288,7 +1344,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     # inicial do arquivo continua sendo medida em sfx_blocks.
     for c in (data.get("sfxCues") or []):
         at = float(c.get("at", 0))
-        if at < duration and c.get("kind"):
+        if at >= duration:
+            continue
+        if c.get("file"):
+            events.append((at, {"file": c["file"], "volume": c.get("volume", 0.3)}))
+        elif c.get("kind"):
             events.append((at, c["kind"]))
 
     # Perseguição do olhar: quando ligada, ela ABSORVE o zoom — o caminho já
@@ -1398,6 +1458,19 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
                      f' --edt-lh:{st.get("lineHeight", 1.0)};'
                      f' --edt-serif:{st.get("serifFamily", "serif")}"'
                      f" data-motion='{mo_attr}'>")
+    elif style_id == "dinamico":
+        cap_css = ('<link rel="stylesheet" href="styles/dinamico.css">\n'
+                   '<script src="styles/dinamico.js"></script>')
+        # os números do movimento viajam no dado (variants.styles.dinamico.motion)
+        mo_attr = json.dumps(st.get("motion") or {}, separators=(",", ":"))
+        container = (f'<div class="ave-din" style="--cap-scale:1;{fam_var}'
+                     f' --cap-accent:{accent or "#ff3b30"}; --cap-size:{st["size"]}px;'
+                     f' --din-top:{st.get("offsetY", 0.47) * 100:.1f}%;'
+                     f' --din-lh:{st.get("lineHeight", 1.0)};'
+                     f' --din-dim:{st.get("dimColor", "#8F8F8F")};'
+                     f' --din-fig-shrink:{st.get("figShrink", 0.85)};'
+                     f' --din-serif:{st.get("serifFamily", "serif")}"'
+                     f" data-motion='{mo_attr}'>")
     elif st.get("css") == "pop":
         # Os TRÊS estilos de estouro compartilham a folha e o script: a curva é
         # a mesma (medida do CapCut, idêntica byte a byte entre eles) e o que
@@ -1439,6 +1512,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         parts.append("  AVE_SCATTER.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif style_id == "editorial":
         parts.append("  AVE_EDITORIAL.buildTimeline(document.getElementById('root'), gsap, tl);")
+    elif style_id == "dinamico":
+        parts.append("  AVE_DINAMICO.buildTimeline(document.getElementById('root'), gsap, tl);")
     elif st.get("css") == "pop":
         parts.append("  AVE_POP.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif st.get("css") == "revelar":
@@ -1724,7 +1799,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {sfx_html}
 
   {container}
-{data["_stackedMarkup"] if style_id == "stacked" else (data.get("_editorialMarkup", "") if style_id == "editorial" else (scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty, splits)))}
+{data["_stackedMarkup"] if style_id == "stacked" else (data.get("_editorialMarkup", "") if style_id == "editorial" else (data.get("_dinamicoMarkup", "") if style_id == "dinamico" else (scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty, splits))))}
   </div>
 </div>
 
@@ -1832,6 +1907,11 @@ def main() -> None:
     # que só encosta na borda da janela continua existindo fora dela.
     bo_spans = [(float(o.get("start", 0)), float(o.get("end", 0)))
                 for o in (data.get("brollOverlays") or [])]
+    # gráfico sob medida que ESCURECE a tela também cala a legenda: os dois
+    # disputariam o mesmo quadro. Explícito por entrada (`muteCaptions`) —
+    # um gráfico de canto não tem por que silenciar nada.
+    bo_spans += [(float(g.get("start", 0)), float(g.get("end", 0)))
+                 for g in (data.get("brollGraphics") or []) if g.get("muteCaptions")]
 
     def fora_broll(ms_a: float, ms_b: float) -> bool:
         mid = (ms_a + ms_b) / 2000.0
@@ -1880,6 +1960,22 @@ def main() -> None:
             (w["fromMs"] / 1000, "callout" if w["role"] == "num" else "soloWord")
             for c in ecues for ln in c["lines"] for w in ln
             if w["role"] in ("punch", "num") and w["fromMs"] / 1000 < duration]
+    elif style_id == "dinamico":
+        cues_path = args.cues or (args.captions.parent / "caption-dinamico.json")
+        if not cues_path.exists():
+            sys.exit("o dinâmico precisa do caption-dinamico.json — rode antes:\n"
+                     f"  uv run python helpers/caption_style_dinamico.py --transcript "
+                     f"<edit>/transcripts/cut.json -o {cues_path}")
+        dcues = json.loads(cues_path.read_text())
+        dcues = [c for c in dcues
+                 if fora_broll(c.get("startMs", 0), c.get("endMs", c.get("startMs", 0)))]
+        data["_dinamicoMarkup"] = dinamico_markup(dcues, st, duration)
+        # só a FIGURE soa: um acento serif por deixa clicando a cada ~1.5s
+        # viraria metrônomo, não pontuação
+        data["_soloCues"] = [
+            (c["figure"]["fromMs"] / 1000, "callout")
+            for c in dcues
+            if c.get("figure") and c["figure"]["fromMs"] / 1000 < duration]
     elif cfg.get("enabled", True):
         budget = (cfg.get("safeWidth") if tuned_for else None) or st["maxW"]
         cues = build_cues(words, st, budget)
@@ -1897,6 +1993,15 @@ def main() -> None:
         print(f"{args.output}")
         print(f"  estilo editorial (animado) · {st['family']} + serif @ {st['size']}px")
         print(f"  {len(words)} palavras → {n} deixas com papéis")
+        print(f"  duração {duration:.3f}s (stream de vídeo)")
+        return
+
+    if style_id == "dinamico":
+        n = data.get("_dinamicoMarkup", "").count("din-cue")
+        figs = data.get("_dinamicoMarkup", "").count("din-fig")
+        print(f"{args.output}")
+        print(f"  estilo dinâmico (animado) · {st['family']} + serif @ {st['size']}px")
+        print(f"  {len(words)} palavras → {n} deixas acumulativas ({figs} com figure)")
         print(f"  duração {duration:.3f}s (stream de vídeo)")
         return
 
