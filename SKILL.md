@@ -31,6 +31,7 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
 7. **Verify your own output before showing it** — numbers first, images only where the numbers flag (see Self-eval).
 8. **Spend tokens where taste lives.** Machine data (raw transcripts, captions.json, track.json, template code) is for programs, not for reading. Batch visual checks into one montage instead of N images.
 9. **Decisão de ofício é sua — você decide e INFORMA.** Ritmo, duração de um gráfico, curva de aceleração, onde um overlay entra e sai, qual quadro do B-roll usar, quanto acelerar uma tela gravada: escolha, execute, e diga em uma linha **o que fez e por quê**. Não pare para perguntar. O usuário pede diferente se quiser diferente — essa é a via, não a pergunta prévia. Isto NÃO afasta o item 4 nem a Hard Rule 8: **a estratégia do corte** (quais tomadas, o que entra, o que sai, o que o vídeo diz) continua confirmada antes de executar. A linha é: *o que o vídeo diz* se confirma; *como ele diz* se decide.
+10. **Resposta ao usuário é simples, objetiva e direta — SEMPRE.** O chat não é relatório técnico: diga o que fez, o que precisa dele e onde olhar, em poucas linhas. Sem jargão, sem nome de helper, sem número de instrumento, sem parágrafo longo — o detalhe técnico só entra se o usuário pedir. Combina com o item 9: decida, execute, informe em uma linha.
 
 ## Hard Rules (production correctness — non-negotiable)
 
@@ -291,26 +292,27 @@ Um vídeo que já mora dentro de um projeto (`base.mp4`, `cut.mp4`, `final.mp4`)
 **abre aquele projeto** — não cria um `edit/edit` nem pede Fase 1 num trabalho
 pronto.
 
-### O primeiro envio — `awaitingStart` e a tela de carregamento
+### O primeiro envio — direto para a tela de carregamento
 
-Soltar o vídeo **monta o projeto e para aí**. O `state.json` nasce com
-`"awaitingStart": true`, e o editor mostra a tela de início: a fonte, o formato,
-um briefing opcional e o botão **Gerar cortes**. Nada é pedido a você antes
-disso — largar um arquivo não é o mesmo que mandar cortá-lo.
+Soltar o vídeo **monta o projeto e já dispara a Fase 1**. Não existe tela
+entre o drop e o processamento: a que perguntava formato e briefing foi
+removida. O corte **segue o aspect ratio do material de origem** — vertical
+corta como short-form, horizontal como longform — e formato ou briefing
+diferentes o usuário pede no chat, a qualquer momento.
 
-**`preview_request.json` — o botão chegando até você.** É o `/ave <pasta>` sem o
-terminal: o editor escreve o arquivo **no submit**, o watcher te avisa, e o
-aviso já traz as duas respostas que você pararia para perguntar:
+**`preview_request.json` — o drop chegando até você.** É o `/ave <pasta>` sem o
+terminal: o servidor escreve o arquivo ao criar o projeto, e o watcher te avisa:
 
 ```json
 {"type": "new-project", "videosDir": "…", "source": "…", "sources": ["…"],
- "brief": "Reels de lançamento, tom direto, 45s", "format": "short|long|auto"}
+ "brief": "", "format": "short|long|auto"}
 ```
 
-`format: "auto"` = o usuário deixou a escolha com você; decida pelo material e
-confirme numa frase. `brief` vazio = converse. **Quem transcreve, corta e gradua
-é você** — faça o caminho normal da Fase 1 do começo, e depois apague o arquivo.
-Sem sessão sua rodando, o projeto fica criado e esperando.
+`format: "auto"` (o caso normal) = **siga o aspect ratio da fonte** — meça com
+ffprobe, informe numa frase, não pergunte. `brief` vazio = converse. **Quem
+transcreve, corta e gradua é você** — faça o caminho normal da Fase 1 do
+começo, e depois apague o arquivo. Sem sessão sua rodando, o projeto fica
+criado e esperando.
 
 **Enquanto você trabalha, a tela dele é um carregamento** — etapas, relógio e
 uma linha de recado que sai do `message` do `state.json`. Essa linha é a única
@@ -319,9 +321,10 @@ coisa que ele tem para saber que a máquina não travou, então **atualize o
 silêncios", "corrigindo a cor"): o editor casa esse texto com a etapa que
 destaca. A tela sai sozinha quando o vídeo do `state.json` existir.
 
-**Não invente `awaitingStart`.** Quem o liga é o editor, ao criar o projeto;
-quem o desliga é o submit. Escrevê-lo à mão num projeto em andamento manda o
-usuário de volta para uma tela de "começar" um trabalho que já começou.
+**Não invente `awaitingStart`.** Quem o liga é o servidor, ao criar o projeto;
+ele mesmo o desliga milissegundos depois, ao disparar a Fase 1. Escrevê-lo à
+mão num projeto em andamento faz o servidor **recortar** o trabalho na próxima
+vez que o projeto for aberto — é o flag que diz "nunca começou".
 
 O estado do APLICATIVO (não do projeto) vive em `~/.avelin/`: `projects.json`
 (os recentes) e `current.json` (o projeto aberto agora, que o watcher segue).
@@ -334,7 +337,7 @@ o que distingue "lento" de "travado" numa espera de minutos.
 **Keep state.json fresh** — bump `phase` and `message` at each milestone (cut rendered, cut approved, Phase 2 rendered…). The UI polls and hot-reloads by itself; waveform + filmstrip regenerate automatically when preview.mp4 changes.
 
 **O `message` NÃO é decorativo: é o que a tela de carregamento destaca.** Entre
-o clique e o primeiro render passam oito etapas e vários minutos em que o
+o drop e o primeiro render passam oito etapas e vários minutos em que o
 usuário não tem vídeo nenhum para olhar — o único sinal de vida é essa linha, e
 o editor casa o texto dela com a etapa que acende. **Atualize a cada etapa**, com
 palavras que caiam nas faixas do `F1_STEPS` (app.js):

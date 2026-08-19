@@ -252,23 +252,112 @@ palavra, o desvio aparece na tela — nesse caso prefira o Groq.
    pronto para editar", pode seguir; se faltar algo, a linha aberta diz o quê e
    o comando que resolve.
 4. **Solte o vídeo** na área pontilhada (ou clique para escolher o arquivo).
-   Isso só monta o projeto — nada é cortado ainda.
-5. Na tela que abre, escolha o **formato** (ou deixe a IA sugerir), escreva um
-   **briefing** se quiser, e clique em **Gerar cortes**.
-6. A tela vira um **carregamento** com as etapas — transcrever, escolher as
+   Isso monta o projeto e **já começa o corte**, no aspect ratio do seu vídeo —
+   vertical vira short-form, horizontal vira longform. Quer outro formato ou
+   tem um briefing? É só dizer no chat, a qualquer momento.
+5. A tela vira um **carregamento** com as etapas — transcrever, escolher as
    tomadas, cortar os silêncios, corrigir a cor. Costuma levar de 2 a 10
    minutos. Pode deixar a aba aberta: a linha do tempo aparece sozinha quando o
    corte ficar pronto.
-7. Assista, marque o que quiser mudar e **aprove a Fase 1**. Só depois disso
+6. Assista, marque o que quiser mudar e **aprove a Fase 1**. Só depois disso
    entram legendas, gráficos e trilha.
-
-O botão só fica travado quando falta algo obrigatório — e nesse caso a própria
-tela lista o que é.
 
 Tudo o que for gerado vai para uma subpasta `edit/` — seus arquivos originais
 não são tocados.
 
 ---
+
+## O que dá para pedir — o mapa de capacidades
+
+Use esta lista como cardápio **enquanto edita**: tudo aqui se pede em
+português, no chat, sem decorar comando nenhum.
+
+### Fase 1 — o corte limpo
+
+- **Transcrição automática** de tudo que foi falado (Groq; fontes longas via
+  ElevenLabs; 100% local via whisper.cpp se você preferir). Nada é transcrito
+  duas vezes — fica em cache.
+- **Papel de cada fonte medido, não chutado**: o Avelin descobre sozinho o que
+  é segunda câmera (e o sync entre elas), o que é arquivo duplicado e o que não
+  tem voz — e só pergunta o que não dá para medir.
+- **Seleção das melhores tomadas** e corte nos silêncios — nunca no meio de uma
+  palavra.
+- **Caça aos defeitos que o texto esconde**: gaguejo e frase refeita que a
+  transcrição engole, palavra trocada, trecho falado baixo demais para ouvir.
+- **Ritmo sob controle**: pausas e respiros encurtados no perfil que você
+  escolher (conservador, equilibrado ou agressivo), preservando a pausa
+  dramática.
+- **J-cut automático** — a voz da próxima tomada entra antes da imagem, como
+  num editor profissional.
+- **Correção de cor** com detecção automática de LOG/HDR (Apple Log, HLG, PQ) e
+  comparação de looks lado a lado para você escolher.
+- **Masterização de voz** opcional: EQ, compressão, de-esser, nivelamento de
+  trecho falado baixo.
+- **Editor visual no navegador**: linha do tempo com filmstrip e waveform,
+  aparar e remover tomadas, marcar correções com anotação, aprovar a Fase 1.
+
+### Fase 2 — legendas, gráficos e câmera (depois de aprovar o corte)
+
+- **Legendas em dez estilos** (karaokê, empilhado, disperso e mais) e
+  **headlines em onze layouts** — pintadas com as SUAS cores e fontes,
+  inclusive as instaladas na sua máquina.
+- **Câmera dinâmica**: zoom nos cortes, aproximação lenta, perseguição do
+  olhar, flash de transição.
+- **Short-form**: inserts que tomam a tela, tela dividida, palavras em
+  destaque, gráficos sob medida.
+- **Longform**: B-roll, lower-thirds, cards de capítulo, callouts — e de brinde
+  os capítulos do YouTube e a legenda `.srt`.
+- **Efeitos sonoros** por evento, com nível e ataque medidos para nunca sumirem
+  sob a fala.
+- **Imagens e vídeos ilustrativos** buscados no Pexels, na Wikimedia e no
+  Google (marcas e pessoas específicas).
+
+### Fase 3 — trilha sonora
+
+- Música gerada por IA (Treblo) ou um arquivo seu — mixada com a voz e entregue
+  a −14 LUFS, o padrão das plataformas.
+
+### Material que está na internet (yt-dlp)
+
+- **Editar direto de um link**: YouTube, Drive e afins viram fonte como
+  qualquer outra — inclusive só um trecho (*"baixa do minuto 12 ao 25"*).
+- **Extrair B-rolls de vídeos online**: peça *"preciso de B-rolls de X desse
+  vídeo"* — o Avelin baixa, assiste, encontra os momentos certos e entrega os
+  clipes cortados no formato do seu projeto. **Atenção aos direitos**: vídeo de
+  terceiros geralmente não é licenciado para reuso; para material seguro, o
+  caminho é o Pexels/Wikimedia, que já estão integrados.
+- **Replicar um estilo de edição**: aponte um vídeo de referência e peça
+  *"edita no estilo desse aqui"*. O Avelin desmonta a edição — ritmo de corte,
+  estrutura do roteiro, padrão de legenda, zooms, relação som-corte — e aplica
+  a receita no seu material bruto.
+
+---
+
+## Motion Kits — o gosto aprendido dos Broll Overlays
+
+O formato de edição **Broll Overlay** (animações de ênfase por cima do vídeo)
+veste um **Motion Kit**: paleta, papéis tipográficos, formas (raios, molduras,
+pills, anéis), sombras e os NÚMEROS do movimento (staggers, durações, easings).
+A divisão de camadas é a mesma de todo o resto do Avelin:
+
+- **O repositório entrega o mecanismo e um kit default** —
+  `assets/motion/default.json`, vermelho (`#ff3b30`) sobre preto, tipografia
+  genérica. É o que você recebe ao clonar.
+- **O SEU kit vive fora do clone**, em `~/.avelin/motion/kit.json` — como as
+  preferências e a marca. Ele nasce de um **aprendizado**: aponte para a IA uma
+  pasta de referências suas (landing pages, CSS, SVGs, screenshots, um
+  designkit.md) e peça para destilar o kit. Cada usuário tem o seu; o kit não
+  sobe em push nem morre em `git clean`.
+- **As cores herdam da sua marca** (`~/.avelin/brand.json`): accent e cor
+  profunda da marca vencem o que o kit declarar. O kit manda na FORMA e no
+  MOVIMENTO; a marca, na COR. Sem marca salva, vale o que está no kit — e no
+  default, isso é o vermelho/preto.
+
+Para inspecionar o kit ativo já resolvido:
+
+```bash
+uv run python helpers/motion_kit.py --mostrar
+```
 
 ## Atualizar
 
