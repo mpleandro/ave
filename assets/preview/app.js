@@ -104,7 +104,7 @@ const PORTED = {
   headlines: new Set(['', 'outline', 'card', 'realce', 'misto',
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
                       'relevo', 'grifo', 'contorno_duplo']),
-  edits: new Set(['limpa', 'split', 'split2', 'brollOverlay']),
+  edits: new Set(['limpa', 'split', 'split2', 'brollOverlay', 'caixinha']),
 };
 
 const STYLE_CATALOG = {
@@ -165,6 +165,25 @@ const STYLE_CATALOG = {
         <rect x="16" y="62.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
         <rect x="30" y="62.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
         <rect x="40" y="62.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
+    {
+      /* CAIXINHA DE PERGUNTAS — o adesivo do Instagram como gancho do vídeo.
+         A miniatura mostra o gesto do formato: faixa escura com a chamada,
+         corpo branco com a pergunta, e a pessoa falando atrás. */
+      id: 'caixinha',
+      name: 'Caixinha',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="62" r="13" fill="rgba(255,255,255,.16)"/>
+        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
+        <rect x="9" y="17" width="48" height="30" rx="5" fill="#fff"/>
+        <path d="M9 22a5 5 0 015-5h38a5 5 0 015 5v4H9z" fill="#26262b"/>
+        <rect x="19" y="20" width="28" height="2.6" rx="1.3" fill="rgba(255,255,255,.75)"/>
+        <rect x="14" y="31" width="38" height="3" rx="1.5" fill="rgba(0,0,0,.72)"/>
+        <rect x="14" y="37" width="30" height="3" rx="1.5" fill="rgba(0,0,0,.55)"/>
+        <rect x="33" y="49" width="24" height="10" rx="5" fill="rgb(var(--orange-rgb) / .85)"/>
       </svg>`,
     },
     {
@@ -2239,7 +2258,7 @@ function updateSummary() {
  * faria o painel prometer que a lista está completa. */
 const LAYERS = [
   { id: 'elementos', name: 'Elementos visuais', sub: 'Figurinhas, imagens, formas e gráficos',
-    ico: 'inserts', groups: ['edits'] },
+    ico: 'inserts', caixaText: true, groups: ['edits'] },
   { id: 'headline', name: 'Headline', sub: 'Título, cores, fontes e layout',
     ico: 'text', headlineText: true, hlColors: true, fonts: true, groups: ['headlines'] },
   { id: 'legendas', name: 'Legendas', sub: 'Estilo, cores e fontes',
@@ -2486,6 +2505,57 @@ function buildLayerRows() {
     el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
     el('div', 'opt-grid', g).id = `opt-${gid}`;
   }
+  /* A CAIXINHA DE PERGUNTAS pede o único dado do formato que não se mede: o
+     texto. Aparece DEPOIS da grade de tipos de edição e só quando ela está
+     escolhida — campos de um formato que não foi escolhido são ruído em toda
+     abertura da aba. A resposta é opcional: nem todo vídeo mostra a resposta
+     escrita; muitos só a falam. */
+  if (L.caixaText && S.style.edit === 'caixinha') {
+    const g = el('div', 'dep-group', body);
+    el('span', 'group-title', el('div', 'group-head', g)).textContent = 'Caixinha de perguntas';
+    /* OS TETOS VÊM DO `variants.json`, não de constantes aqui — a mesma régua
+       que o compositor usa. 60 na faixa escura, 72 no corpo branco: é o que
+       cabe legível no adesivo a 1080 de largura. O campo TRAVA na digitação e
+       mostra o quanto falta, em vez de deixar escrever e cortar depois. */
+    const lim = (LIVE.variants && LIVE.variants.caixinha) || {};
+    const LIM_CH = lim.limiteChamada || 60;
+    const LIM_PG = lim.limitePergunta || 72;
+    const contador = (campo, teto) => {
+      const marca = el('span', 'cx-count', g);
+      const pinta = () => {
+        const n = campo.value.length;
+        marca.textContent = `${n}/${teto}`;
+        marca.classList.toggle('no-limite', n >= teto);
+      };
+      campo.addEventListener('input', pinta);
+      pinta();
+      return marca;
+    };
+    const chamada = el('input', 'hl-text cx-input', g);
+    chamada.id = 'caixaChamada';
+    chamada.type = 'text';
+    chamada.maxLength = LIM_CH;
+    chamada.placeholder = 'chamada do adesivo — ex.: mande sua dúvida 🤎';
+    chamada.value = (S.style.caixaChamada || '').slice(0, LIM_CH);
+    contador(chamada, LIM_CH);
+    const perg = el('textarea', 'hl-text', g);
+    perg.id = 'caixaPergunta';
+    perg.rows = 2;
+    perg.maxLength = LIM_PG;
+    perg.placeholder = 'a pergunta que veio da caixinha';
+    perg.value = (S.style.caixaPergunta || '').slice(0, LIM_PG);
+    contador(perg, LIM_PG);
+    const resp = el('textarea', 'hl-text', g);
+    resp.id = 'caixaResposta';
+    resp.rows = 2;
+    resp.placeholder = 'resposta curta que aparece escrita (opcional — deixe vazio se só falar)';
+    resp.value = S.style.caixaResposta || '';
+    el('span', 'group-note', g).textContent =
+      'a caixinha entra no gancho, junto com você falando; se ela sai depois de '
+      + 'lida ou fica até o fim é decidido no chat, com os tempos medidos do corte';
+  }
+
+
 
   /* CORES E FONTES DEPOIS DO LAYOUT, e não antes.
      A ordem anterior pedia a cor de destaque antes de existir um layout que a
@@ -2706,6 +2776,11 @@ document.addEventListener('input', (e) => {
 
 async function sendStyle() {
   S.style.note = $('setupNote').value.trim();
+  for (const [id, chave] of [['caixaPergunta', 'caixaPergunta'],
+                             ['caixaResposta', 'caixaResposta'],
+                             ['caixaChamada', 'caixaChamada']]) {
+    if ($(id)) S.style[chave] = $(id).value;
+  }
   const rerender = !S.state.awaitingStyle;
   const payload = {
     // a save with Fase 2 already on disk is a RE-RENDER request, not a first
@@ -2730,6 +2805,10 @@ async function sendStyle() {
     fontAccentUsed: !!(hlStyle(S.style.headline) || {}).fontRole,
     capDy: S.style.capDy || 0,   // deslocamento GLOBAL da legenda, px de ref 1080
     headlineText: (S.style.headlineText || '').trim(),
+    // a caixinha de perguntas: o único dado do formato que não se mede
+    caixaPergunta: (S.style.caixaPergunta || '').trim(),
+    caixaResposta: (S.style.caixaResposta || '').trim(),
+    caixaChamada: (S.style.caixaChamada || '').trim(),
     // whether the picked styles actually paint it — so the skill does not go
     // hunting for an accent in a look that has none
     accentUsed: accentUsed(),

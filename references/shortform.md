@@ -268,6 +268,30 @@ Não portado: **Zoom Switch**. É o único num formato diferente (binário do Ly
 Studio, `.lsanim`, com aberração cromática e desfoque gaussiano). Aproximar é
 possível; entregar a aproximação com o nome do original, não.
 
+### A LEGENDA NUNCA CAI NO ROSTO (regra medida, não estética)
+
+O `offsetY` de fábrica de cada estilo é uma média de material nenhum. Medido no
+PV (2026-08-19): o `dinamico` nasce a **47%** da altura e o queixo do
+apresentador vive a **51,6%** — legenda em cima da boca, e o usuário viu antes
+de qualquer instrumento acusar.
+
+`helpers/caption_safe.py <edit> [--aplicar]` mede e resolve:
+
+- mede a **linha do queixo** (Haar frontal, ~40 amostras ao longo do corte) —
+  não o centro do rosto: o que a legenda não pode invadir é a borda de baixo da
+  cabeça, e ela desce quando a pessoa se inclina;
+- usa o **percentil 90, nunca o máximo**: um quadro de detecção duvidosa
+  empurraria a legenda para o rodapé no vídeo inteiro;
+- respeita o **rodapé da plataforma** (~13% no Reels/TikTok/Shorts): a legenda
+  cabe ENTRE o queixo e a interface do app;
+- quando os dois limites se cruzam (rosto baixo demais no quadro), **diz que não
+  há posição boa** em vez de escolher em silêncio — o conserto ali é reenquadrar.
+
+`phase2.py` roda isso sozinho antes de compor, e só para os estilos de **bloco
+central** (`dinamico`, `editorial`, `stacked`, `scatter`). Karaokê e as estáticas
+nascem ancoradas no rodapé, longe da cabeça, e não precisam. **Um `offsetY`
+escrito à mão no edit-data vence a medição** — a régua serve a quem não decidiu.
+
 ### The accent colour (`accent` in preview_style.json)
 
 O accent é o mesmo da headline e da legenda; o padrão DO PRODUTO é o
@@ -570,6 +594,55 @@ instead of in the middle. Swapping the zoom/focus pair between them breaks both.
 whichever layout is up: 738 for `top` (text on the seam under the art), ~920 for
 `bottom` (text in the gap between chin and seam). Left at the `top` value, the
 headline lands across the speaker's mouth. Render one hook still after switching.
+
+## Style: "Caixinha" (`edit: "caixinha"`) — a caixinha de perguntas como gancho
+
+O adesivo do Instagram entrando no começo do vídeo, junto com a pessoa falando.
+Formato de resposta a seguidor: a pergunta na tela dá o contexto que a narração
+não precisa gastar.
+
+**A fidelidade aqui é com o APP, não com a marca.** Os outros elementos vestem o
+Motion Kit de quem edita; este não pode — uma caixinha com a cara da marca deixa
+de ser a caixinha e vira cartão genérico. Faixa escura com a chamada, corpo
+branco com a pergunta, cantos muito arredondados, inclinação de ~1,6° e entrada
+com sobra de escala: o gesto é **adesivo sendo colado**. Só a RESPOSTA usa o
+accent do projeto — ela é a voz de quem edita, não do app.
+
+Dado em `edit-data.json` (o texto vem dos campos da aba Estilo):
+
+```json
+"questionBox": {"chamada": "mande sua dúvida 🤎",
+                "pergunta": "como posso melhorar o engajamento…",
+                "resposta": "consistência > frequência",
+                "start": 0.0, "end": 8.4, "top": 300}
+```
+
+Três regras de operação, todas decididas pelo usuário (2026-08-19):
+
+1. **Quanto tempo ela fica é PERGUNTA POR VÍDEO**, não padrão. `end` ausente
+   significa ficar até o fim (e então NÃO há animação de saída: despedir-se de
+   algo que acaba junto com o vídeo lê como falha de render). Para sair depois
+   de lida, meça no transcrito do corte onde a pergunta termina de ser
+   respondida e leve as duas opções ao `AskUserQuestion` com os tempos.
+2. **Tetos de caractere: 60 na faixa escura, 72 no corpo branco** (do usuário,
+   2026-08-19; em `variants.json → caixinha.limiteChamada/limitePergunta`). É o
+   que cabe legível a 1080 de largura — passar disso encolhe a fonte ou estoura
+   a caixa. O campo da aba TRAVA na digitação e mostra `n/teto`; o compositor
+   aplica a mesma régua ao dado escrito à mão, cortando na última palavra
+   inteira e avisando. Régua num lugar só: a interface lê o mesmo
+   `variants.json` que o render.
+3. **A pergunta e a resposta são digitadas na aba Estilo** — é o único dado do
+   formato que não se mede. A resposta é opcional: muitos vídeos só a falam.
+4. **Zona alta por padrão, e PERGUNTE se cobrir o rosto.**
+   `caption_safe.caixa_bate_no_rosto()` mede o topo da cabeça (p10 — a cabeça
+   mais alta do corte, não a média) e devolve `bate` + `sugestaoTopPx`. Se
+   bater, a pergunta ao usuário já vai com a alternativa: pergunta sem saída é
+   aviso disfarçado.
+
+**De-conflito:** a caixinha e a headline disputam a zona alta — com ela ligada, o
+hook de texto sai ou desce. E a legenda não pode nascer atrás dela: a mesma
+medição da faixa segura resolve, tomando o rodapé da caixinha como limite de
+cima em vez do queixo.
 
 ## Style: "Broll Overlay" (`edit: "brollOverlay"`) — ênfase POR CIMA do vídeo
 

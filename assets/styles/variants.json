@@ -1007,5 +1007,32 @@
     }
   ],
   "_bundled_readme": "Família com `file` NÃO vem do Google: o arquivo viaja em assets/styles/fonts/ e a composição emite um @font-face apontando para styles/fonts/<file>. Existe porque nem toda família do catálogo do Google é servida pelo caminho que o cache do HyperFrames usa, e a falha aparecia só na composição — a prévia funcionava, porque o navegador carrega direto do Google.",
-  "_capcut_readme": "Estilos MEDIDOS dos pacotes do CapCut instalado (helpers/capcut_captions.py). Os NÚMEROS são leitura de arquivo, não escolha: o estouro é 0→120%→100% em 403ms com dois beziers, e a varredura é 0→100% em 1733ms com um. TRÊS NOMES DO CAPCUT, UMA CURVA: 'Multiline Combo', 'Multi-Line' e 'Bounce Out' têm keyframes idênticos byte a byte — verificado por diff. O que os separa é o AGRUPAMENTO (`grupo`), ou seja o que estoura junto. Por isso três entradas compartilham pop.css/pop.js em vez de existirem três cópias."
+  "_capcut_readme": "Estilos MEDIDOS dos pacotes do CapCut instalado (helpers/capcut_captions.py). Os NÚMEROS são leitura de arquivo, não escolha: o estouro é 0→120%→100% em 403ms com dois beziers, e a varredura é 0→100% em 1733ms com um. TRÊS NOMES DO CAPCUT, UMA CURVA: 'Multiline Combo', 'Multi-Line' e 'Bounce Out' têm keyframes idênticos byte a byte — verificado por diff. O que os separa é o AGRUPAMENTO (`grupo`), ou seja o que estoura junto. Por isso três entradas compartilham pop.css/pop.js em vez de existirem três cópias.",
+  "caixinha": {
+    "_note": "Caixinha de perguntas do Instagram. A geometria imita a INTERFACE do app, não a marca de quem edita: um adesivo que não se parece com o adesivo lê como cartão genérico e perde a graça do formato. Só a resposta usa o accent do projeto — ela é fala de quem edita.",
+    "largura": 820,
+    "raio": 30,
+    "faixaAltura": 96,
+    "faixaFundo": "#26262b",
+    "faixaCor": "#e9e9ea",
+    "faixaTamanho": 30,
+    "faixaTracking": 0.01,
+    "corpoFundo": "#ffffff",
+    "corpoCor": "#1c1c1e",
+    "corpoTamanho": 46,
+    "corpoEntrelinha": 1.28,
+    "corpoPadding": 44,
+    "sombra": "0 26px 60px -18px rgba(0,0,0,.55)",
+    "inclinacao": -1.6,
+    "topoPadrao": 300,
+    "resposta": {
+      "tamanho": 42,
+      "raio": 26,
+      "padding": "26px 34px",
+      "recuo": 90
+    },
+    "limiteChamada": 60,
+    "limitePergunta": 72,
+    "_limites": "Tetos de caracteres do usuário (2026-08-19): 60 na faixa escura, 72 no corpo branco. São o que cabe legível no adesivo em 1080 de largura — passar disso encolhe a fonte ou estoura a caixa, e as duas saídas estragam o formato. Valem na INTERFACE (o campo trava) e no COMPOSITOR (dado escrito à mão também obedece)."
+  }
 }

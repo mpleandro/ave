@@ -418,6 +418,15 @@ def extract_segment(
         if vf:
             cmd += ["-vf", vf]
         cmd += ["-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
+        # QUADRO-CHAVE A CADA SEGUNDO, e é AQUI que precisa estar: sob J-cut
+        # (o padrão) os segmentos são concatenados com `-c copy`, então o corte
+        # final herda EXATAMENTE os quadros-chave que cada segmento trouxer.
+        # Sem isto, um trecho de 15s sai com um quadro-chave só e o motor da
+        # Fase 2 — que renderiza saltando para quadros avulsos — recebe o
+        # quadro-chave anterior no lugar do pedido: a imagem CONGELA por
+        # trechos e o render termina limpo, sem acusar nada. Medido em
+        # 2026-08-19: intervalos de 6,43s num corte de 24s.
+        cmd += ["-g", "30", "-keyint_min", "30", "-sc_threshold", "0"]
         # Every path above lands on Rec.709 (tonemap for HDR, wide_gamut_chain for
         # BT.2020 SDR, passthrough for the rest), so tag it explicitly. Without this
         # the segments can inherit the source's tags and downstream decoders
@@ -1380,6 +1389,14 @@ def build_final_composite(
         "-map", "0:a",
         "-c:v", "libx264", "-preset", "fast", "-crf", "18",
         "-pix_fmt", "yuv420p",
+        # QUADRO-CHAVE A CADA SEGUNDO. O motor da Fase 2 renderiza SALTANDO para
+        # quadros avulsos, e com GOP longo o decodificador entrega o último
+        # quadro-chave em vez do pedido: a imagem CONGELA por trechos e nada
+        # acusa — o render termina limpo. Medido em 2026-08-19: o linter do
+        # HyperFrames flagrou intervalo de 6,43s neste corte
+        # ("sparse keyframes … causes seek failures and frame freezing").
+        # Custa alguns por cento de tamanho e paga com seek confiável.
+        "-g", "30", "-keyint_min", "30", "-sc_threshold", "0",
         # keep the Rec.709 tags the segments carry — this pass re-encodes video
         "-colorspace", "bt709", "-color_primaries", "bt709",
         "-color_trc", "bt709", "-color_range", "tv",

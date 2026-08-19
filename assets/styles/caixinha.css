@@ -1,0 +1,68 @@
+/* CAIXINHA DE PERGUNTAS — o adesivo do Instagram como gancho do vídeo.
+ *
+ * A FIDELIDADE AQUI É COM O APP, NÃO COM A MARCA. Os outros elementos do Ave
+ * vestem o Motion Kit de quem edita; este não pode: uma caixinha que não se
+ * parece com a caixinha lê como cartão genérico e perde o formato inteiro.
+ * Por isso as cores da caixa são fixas (faixa escura, corpo branco) e só a
+ * RESPOSTA usa o accent do projeto — ela é a voz de quem edita, não do app.
+ *
+ * Números em `variants.json → caixinha`, escritos pelo compositor em variáveis.
+ */
+
+.ave-caixa {
+  position: absolute; left: 0; right: 0;
+  top: var(--cx-top, 300px);
+  display: flex; flex-direction: column; align-items: center;
+  gap: 22px;
+  pointer-events: none;
+}
+
+.ave-caixa .cx-card {
+  width: var(--cx-w, 820px);
+  border-radius: var(--cx-radius, 30px);
+  overflow: hidden;
+  box-shadow: var(--cx-shadow, 0 26px 60px -18px rgba(0, 0, 0, .55));
+  opacity: 0;                       /* a entrada é do JS */
+  transform-origin: 50% 40%;
+}
+
+.ave-caixa .cx-faixa {
+  height: var(--cx-bar-h, 96px);
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  background: var(--cx-bar-bg, #26262b);
+  color: var(--cx-bar-fg, #e9e9ea);
+  font-family: var(--cx-font), system-ui, sans-serif;
+  font-size: var(--cx-bar-size, 30px); font-weight: 600;
+  letter-spacing: .01em;
+}
+
+.ave-caixa .cx-corpo {
+  background: var(--cx-body-bg, #fff);
+  color: var(--cx-body-fg, #1c1c1e);
+  font-family: var(--cx-font), system-ui, sans-serif;
+  font-size: var(--cx-body-size, 46px);
+  line-height: var(--cx-body-lh, 1.28);
+  font-weight: 500;
+  text-align: center;
+  padding: var(--cx-body-pad, 44px);
+}
+/* a pergunta entra palavra a palavra — como texto sendo lido, não como bloco */
+.ave-caixa .cx-w { display: inline-block; opacity: 0; }
+
+/* A RESPOSTA é um balão à direita, abaixo da caixa: a conversa continuando.
+   Só ela usa o accent — o resto é interface do app. */
+.ave-caixa .cx-resposta {
+  align-self: flex-end;
+  margin-right: var(--cx-reply-inset, 90px);
+  max-width: calc(var(--cx-w, 820px) - 60px);
+  background: var(--cx-accent, #ff3b30);
+  color: #fff;
+  font-family: var(--cx-font), system-ui, sans-serif;
+  font-size: var(--cx-reply-size, 42px);
+  font-weight: 700;
+  line-height: 1.24;
+  border-radius: var(--cx-reply-radius, 26px);
+  padding: var(--cx-reply-pad, 26px 34px);
+  box-shadow: var(--cx-shadow, 0 26px 60px -18px rgba(0, 0, 0, .55));
+  opacity: 0;
+}

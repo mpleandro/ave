@@ -456,6 +456,101 @@ def _bo_vars(kit: dict, data: dict) -> str:
     )
 
 
+def caixinha_markup(data: dict, duration: float, events: list, accent: str) -> tuple[str, str]:
+    """A CAIXINHA DE PERGUNTAS do Instagram, como gancho do vídeo.
+
+    Dado em `edit-data.json`:
+        "questionBox": {"chamada": "mande sua dúvida 🤎",
+                        "pergunta": "…", "resposta": "…" (opcional),
+                        "start": 0.0, "end": 8.4 | null (fica até o fim),
+                        "top": 300, "respostaAt": 4.2}
+
+    Duas decisões de construção que o formato exige:
+
+    · a caixa NÃO veste o Motion Kit — a fidelidade é com a interface do app,
+      e um adesivo com a cara da marca de quem edita deixa de ser o adesivo;
+    · `end` ausente (ou ≥ duração) significa FICAR ATÉ O FIM, e nesse caso não
+      há animação de saída: despedir-se de algo que acaba junto com o vídeo lê
+      como falha de render, não como escolha.
+    """
+    q = data.get("questionBox") or {}
+    pergunta = (q.get("pergunta") or "").strip()
+    if not pergunta:
+        return "", ""
+    cx0 = VARIANTS.get("caixinha", {})
+
+    def _cabe(txt: str, teto: int, onde: str) -> str:
+        """O TETO VALE AQUI TAMBÉM, e não só no campo da aba.
+
+        O campo trava a digitação, mas o dado também chega escrito à mão (dado
+        de projeto, uma sessão minha, um edit-data editado). Passar do teto
+        encolheria a fonte ou estouraria a caixa, e as duas saídas estragam o
+        formato — então corta na última palavra inteira e DIZ que cortou.
+        """
+        if len(txt) <= teto:
+            return txt
+        corte = txt[:teto].rsplit(" ", 1)[0].rstrip(",;:") or txt[:teto]
+        print(f"  aviso: {onde} tem {len(txt)} caracteres (teto {teto}) — "
+              f"cortado em “{corte}…”", file=sys.stderr)
+        return corte + "…"
+
+    pergunta = _cabe(pergunta, int(cx0.get("limitePergunta", 72)), "a pergunta da caixinha")
+    cx = VARIANTS.get("caixinha", {})
+    s = float(q.get("start", 0.0))
+    fim_dado = q.get("end")
+    fica_ate_o_fim = fim_dado in (None, "", 0) or float(fim_dado) >= duration - 0.05
+    e = duration if fica_ate_o_fim else min(float(fim_dado), duration)
+    d = max(0.1, e - s)
+
+    # O ESPAÇO VAI FORA DO SPAN. Dentro dele o navegador o engole: `.cx-w` é
+    # `inline-block`, e espaço no fim de uma caixa inline-block colapsa — as
+    # palavras saem grudadas ("Comoo McDonald'sganha"). Separador entre caixas
+    # é texto entre elas, não conteúdo delas.
+    palavras = " ".join(f'<span class="cx-w">{esc(w)}</span>' for w in pergunta.split())
+    chamada = esc(_cabe((q.get("chamada") or "mande sua dúvida").strip(),
+                        int(cx0.get("limiteChamada", 60)), "a chamada da caixinha"))
+    resposta = (q.get("resposta") or "").strip()
+    resp_html, resp_attr = "", ""
+    if resposta:
+        # a resposta entra DEPOIS da pergunta ser lida; sem instrução, um respiro
+        # proporcional ao tamanho dela (≈45ms por palavra, piso de 1,2s)
+        resp_at = float(q.get("respostaAt", s + max(1.2, 0.34 + 0.045 * len(pergunta.split()) + 0.6)))
+        resp_html = f'\n    <div class="cx-resposta">{esc(resposta)}</div>'
+        resp_attr = f' data-reply-at="{resp_at:.3f}"'
+        events.append((resp_at, "callout"))
+
+    events.append((s, "element"))   # o adesivo colando
+    r = cx.get("resposta", {})
+    estilo = (f'--cx-top:{q.get("top", cx.get("topoPadrao", 300))}px;'
+              f' --cx-w:{cx.get("largura", 820)}px; --cx-radius:{cx.get("raio", 30)}px;'
+              f' --cx-bar-h:{cx.get("faixaAltura", 96)}px;'
+              f' --cx-bar-bg:{cx.get("faixaFundo", "#26262b")};'
+              f' --cx-bar-fg:{cx.get("faixaCor", "#e9e9ea")};'
+              f' --cx-bar-size:{cx.get("faixaTamanho", 30)}px;'
+              f' --cx-body-bg:{cx.get("corpoFundo", "#fff")};'
+              f' --cx-body-fg:{cx.get("corpoCor", "#1c1c1e")};'
+              f' --cx-body-size:{cx.get("corpoTamanho", 46)}px;'
+              f' --cx-body-lh:{cx.get("corpoEntrelinha", 1.28)};'
+              f' --cx-body-pad:{cx.get("corpoPadding", 44)}px;'
+              f' --cx-shadow:{cx.get("sombra", "0 26px 60px -18px rgba(0,0,0,.55)")};'
+              f' --cx-accent:{accent};'
+              f' --cx-reply-size:{r.get("tamanho", 42)}px;'
+              f' --cx-reply-radius:{r.get("raio", 26)}px;'
+              f' --cx-reply-pad:{r.get("padding", "26px 34px")};'
+              f' --cx-reply-inset:{r.get("recuo", 90)}px;'
+              f' --cx-font:{VARIANTS["styles"]["karaoke"]["cssFamily"]}')
+    html = (f'  <div class="ave-caixa clip" data-start="{s:.3f}" data-duration="{d:.3f}"'
+            f' data-track-index="{TRACK["overlay"]}" data-tilt="{cx.get("inclinacao", -1.6)}"'
+            f' data-exit="{"0" if fica_ate_o_fim else "1"}"{resp_attr}'
+            f' style="{estilo}">\n'
+            f'    <div class="cx-card">\n'
+            f'      <div class="cx-faixa">{chamada}</div>\n'
+            f'      <div class="cx-corpo">{palavras}</div>\n'
+            f'    </div>{resp_html}\n  </div>')
+    janela = f"{s:.3f}-{e:.3f}"
+    return html, janela
+
+
 def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
     """Janelas de ênfase POR CIMA do a-roll — o formato "Broll Overlay".
 
@@ -1313,7 +1408,8 @@ def camera_parts(data, duration):
     return js, style, blocks
 
 
-def render_html(data, timed, st, style_id, video, duration, orphans, penalty) -> str:
+def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vdur=None) -> str:
+    vdur = duration if vdur is None else vdur
     accent = data.get("accent") or "#FF6B1A"
     # A COR DO TEXTO tambem e escolha, nao constante. Ficava branca fixa no
     # CSS: o usuario podia escolher o destaque e nao a fonte, o que e metade
@@ -1437,7 +1533,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         # controle de cor da aba Estilo nao pode valer para uns estilos e nao
         # para outros. O CORPO sai de captions.color.
         container = (f'<div class="ave-stacked" style="--stk-scale:1;'
-                     f' --stk-offset-y:{cfg.get("stackedOffsetY", st["offsetY"])};'
+                     f' --stk-offset-y:{cfg.get("stackedOffsetY", cfg.get("offsetY", st["offsetY"]))};'
                      f' --stk-color:{cap_color};'
                      + (f' --stk-family:{hl_css_family(cap_fam)};' if cap_fam else "")
                      + f' --stk-orange:{accent or st["orange"]}">')
@@ -1446,7 +1542,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
                    '<script src="styles/scatter.js"></script>')
         container = (f'<div class="ave-scatter" style="--scat-scale:1;'
                      f' --scat-size:{size}; --scat-gap:{st["gap"]};'
-                     f' --scat-offset-y:{cfg.get("scatterOffsetY", st["offsetY"])}">')
+                     f' --scat-offset-y:{cfg.get("scatterOffsetY", cfg.get("offsetY", st["offsetY"]))}">')
     elif style_id == "editorial":
         cap_css = ('<link rel="stylesheet" href="styles/editorial.css">\n'
                    '<script src="styles/editorial.js"></script>')
@@ -1454,6 +1550,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         mo_attr = json.dumps(st.get("motion") or {}, separators=(",", ":"))
         container = (f'<div class="ave-edt" style="--cap-scale:1;{fam_var}'
                      f' --cap-accent:{accent or "#ff3b30"}; --cap-size:{st["size"]}px;'
+                     f' --edt-top:{cfg.get("offsetY", st.get("offsetY", 0.5)) * 100:.1f}%;'
                      f' --edt-left:{st.get("safeLeftPx", 90)}px;'
                      f' --edt-lh:{st.get("lineHeight", 1.0)};'
                      f' --edt-serif:{st.get("serifFamily", "serif")}"'
@@ -1465,7 +1562,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         mo_attr = json.dumps(st.get("motion") or {}, separators=(",", ":"))
         container = (f'<div class="ave-din" style="--cap-scale:1;{fam_var}'
                      f' --cap-accent:{accent or "#ff3b30"}; --cap-size:{st["size"]}px;'
-                     f' --din-top:{st.get("offsetY", 0.47) * 100:.1f}%;'
+                     f' --din-top:{cfg.get("offsetY", st.get("offsetY", 0.47)) * 100:.1f}%;'
                      f' --din-lh:{st.get("lineHeight", 1.0)};'
                      f' --din-dim:{st.get("dimColor", "#8F8F8F")};'
                      f' --din-fig-shrink:{st.get("figShrink", 0.85)};'
@@ -1663,6 +1760,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     # Broll Overlay ANTES do corte de efeitos: as janelas emitem os próprios
     # eventos de som, e eles têm de existir quando sfx_blocks olhar a lista.
     bo_html = broll_markup(data, duration, events, bo_kit)
+    cx_html, cx_janela = caixinha_markup(data, duration, events, accent or "#ff3b30")
 
     proj = Path(data.get("_proj", "."))
     # O interruptor da aba Estilo. Desligado, nenhum efeito entra — antes disso
@@ -1728,6 +1826,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 
     bo_css = '<link rel="stylesheet" href="styles/broll-overlay.css">' if bo_html else ""
     bo_tag = '<script src="styles/broll-overlay.js"></script>' if bo_html else ""
+    cx_css = '<link rel="stylesheet" href="styles/caixinha.css">' if cx_html else ""
+    cx_tag = '<script src="styles/caixinha.js"></script>' if cx_html else ""
+    if cx_html:
+        parts.append("  AVE_CAIXA.buildTimeline(document.getElementById('root'), gsap, tl);")
+        needs_tl = True
     if bo_html:
         parts.append("  AVE_BROLL.buildTimeline(document.getElementById('root'), gsap, tl);")
         needs_tl = True
@@ -1756,6 +1859,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {track_tag}
 {split_tag}
 {bo_tag}
+{cx_tag}
 {insert_tag}
 {wa_tag}
 {cap_css}
@@ -1763,6 +1867,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {extra_css}
 {split_css}
 {bo_css}
+{cx_css}
 {insert_css}
 {ov_css}
 {wa_css}
@@ -1779,15 +1884,16 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 
   <div id="vidwin">
     <video id="a-roll" class="clip" src="{video}" muted playsinline
-           data-start="0" data-duration="{duration:.3f}" data-track-index="{TRACK['aroll']}"></video>
+           data-start="0" data-duration="{vdur:.3f}" data-track-index="{TRACK['aroll']}"></video>
   </div>
   <!-- Áudio como trilha própria, do mesmo arquivo. Medido: drift zero em 78s e
        em 786s. O `id` NÃO é opcional: sem ele o renderer não descobre o
        elemento e o vídeo sai MUDO, sem erro em lugar nenhum além do linter. -->
-  <audio id="a-roll-audio" src="{video}" data-start="0" data-duration="{duration:.3f}"
+  <audio id="a-roll-audio" src="{video}" data-start="0" data-duration="{vdur:.3f}"
          data-track-index="{TRACK['audio']}" data-volume="1"></audio>
 
 {hook_block}
+{cx_html}
 {split_block}
 {bo_html}
 {chr(10).join(flash_blocks)}
@@ -1852,6 +1958,8 @@ def main() -> None:
         files += ["split.css", "split.js"]
     if data.get("brollOverlays"):
         files += ["broll-overlay.css", "broll-overlay.js"]
+    if (data.get("questionBox") or {}).get("pergunta"):
+        files += ["caixinha.css", "caixinha.js"]
     if data.get("inserts"):
         files += ["insert.css", "insert.js"]
     if (data.get("elements") or {}).get("tracking"):
@@ -1875,10 +1983,20 @@ def main() -> None:
         shutil.copy2(STYLES_DIR / f, proj / "styles" / f)
 
     src_video = proj / args.video
-    duration = (video_duration(src_video) if src_video.exists()
-                else float(data["durationSec"]))
+    vdur = (video_duration(src_video) if src_video.exists()
+            else float(data["durationSec"]))
+    duration = vdur
     declared = float(data.get("durationSec", duration))
-    if abs(declared - duration) > 0.5:
+    # CARTÃO DE ENCERRAMENTO: um `durationSec` MAIOR que o vídeo estende a
+    # composição além do corte — os segundos extras são tela livre para um
+    # gráfico de fechamento (data do evento, logo, CTA). O a-roll continua com
+    # a duração do PRÓPRIO arquivo (`vdur`): esticá-lo faria o renderer pedir
+    # quadros que não existem, e o fim congelaria em vez de dar lugar ao cartão.
+    if declared > vdur + 0.05:
+        duration = declared
+        print(f"  encerramento: composição vai a {duration:.2f}s "
+              f"({duration - vdur:.2f}s depois do corte)")
+    elif abs(declared - duration) > 0.5:
         print(f"  aviso: durationSec ({declared:.2f}s) diverge do stream de vídeo "
               f"({duration:.2f}s) — usando o stream", file=sys.stderr)
     if args.end:
@@ -1912,6 +2030,14 @@ def main() -> None:
     # um gráfico de canto não tem por que silenciar nada.
     bo_spans += [(float(g.get("start", 0)), float(g.get("end", 0)))
                  for g in (data.get("brollGraphics") or []) if g.get("muteCaptions")]
+    # A CAIXINHA na zona baixa ocupa a faixa da legenda — os dois ali viram
+    # texto sobre texto. Medido no C0005: sobram 190px entre o queixo (1210px)
+    # e a legenda (1400px), e o adesivo tem ~300px. Quem carrega o texto na
+    # janela é ele. Na zona ALTA não há conflito e nada é silenciado.
+    _qb = data.get("questionBox") or {}
+    if _qb.get("pergunta") and _qb.get("muteCaptions", True) and float(_qb.get("top", 300)) > 900:
+        bo_spans.append((float(_qb.get("start", 0.0)),
+                         float(_qb.get("end") or duration)))
 
     def fora_broll(ms_a: float, ms_b: float) -> bool:
         mid = (ms_a + ms_b) / 2000.0
@@ -1986,7 +2112,7 @@ def main() -> None:
     data["_proj"] = str(proj)
     data["_video"] = args.video
     args.output.write_text(render_html(data, timed, st, style_id, args.video,
-                                       duration, orphans, penalty))
+                                       duration, orphans, penalty, vdur))
 
     if style_id == "editorial":
         n = data.get("_editorialMarkup", "").count("edt-cue")

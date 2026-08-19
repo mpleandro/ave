@@ -159,6 +159,18 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         data.setdefault("hook", {})["enabled"] = False
     if pick.get("edit"):
         data["editStyle"] = pick["edit"]
+    # CAIXINHA DE PERGUNTAS: o texto digitado na aba vira o dado do adesivo.
+    # `end` fica ausente de propósito — quanto tempo ela permanece é decisão
+    # POR VÍDEO (escolha do usuário, 2026-08-19), feita no chat com os tempos
+    # medidos do corte; ausente significa "até o fim", que é o padrão seguro.
+    if (pick.get("caixaPergunta") or "").strip():
+        cx = data.setdefault("questionBox", {})
+        cx["pergunta"] = pick["caixaPergunta"].strip()
+        if (pick.get("caixaChamada") or "").strip():
+            cx["chamada"] = pick["caixaChamada"].strip()
+        if (pick.get("caixaResposta") or "").strip():
+            cx["resposta"] = pick["caixaResposta"].strip()
+        cx.setdefault("start", 0.0)
     for k, v in (pick.get("elements") or {}).items():
         data.setdefault("elements", {})[k] = v
     if pick.get("observation"):
@@ -327,6 +339,23 @@ def main() -> None:
             progress.step(edit, detail="rastreando o rosto")
             run([sys.executable, str(SKILL / "helpers" / "face_track.py"),
                  str(cut), "-o", str(track)])
+
+    # A LEGENDA NÃO PODE CAIR NO ROSTO — regra do usuário (2026-08-19), medida.
+    # O `offsetY` de fábrica de cada estilo é uma média de material nenhum: no PV
+    # o `dinamico` nasce a 47% e o queixo do apresentador está a 51,6%, ou seja,
+    # texto na boca. `caption_safe.py` mede o queixo (p90, não o máximo: um quadro
+    # de detecção duvidosa jogaria a legenda no rodapé) e escreve `captions.offsetY`.
+    # Só age quando o estilo é de BLOCO CENTRAL; karaokê e estáticas já nascem
+    # ancoradas no rodapé, longe da cabeça. Valor posto à mão vence a medição.
+    caps = data.get("captions") or {}
+    if caps.get("enabled", True) and caps.get("style") in ("dinamico", "editorial", "stacked", "scatter") \
+            and "offsetY" not in caps:
+        print("  medindo a faixa segura da legenda…")
+        progress.step(edit, detail="medindo a faixa segura da legenda")
+        run([sys.executable, str(SKILL / "helpers" / "caption_safe.py"), str(edit), "--aplicar"],
+            allow_fail=True)
+        # relê o arquivo: quem escreveu a medida foi o helper, noutro processo
+        data = load(data_path, data) or data
 
     if data.get("captions", {}).get("style") == "stacked":
         cues = pub / "caption-cues.json"

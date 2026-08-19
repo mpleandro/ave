@@ -22,7 +22,7 @@
   position: absolute;
   left: var(--edt-left, 90px);
   right: 60px;
-  top: 50%;
+  top: var(--edt-top, 50%);
   transform: translateY(-50%);
   display: flex; flex-direction: column;
   align-items: flex-start;
