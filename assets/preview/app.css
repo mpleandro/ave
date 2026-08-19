@@ -28,7 +28,7 @@
      stacked captions). NOT --orange: that is app chrome, and the two drifting
      apart is the point — the user picks this one, the UI keeps its own. JS
      overrides it on #styleSetup from the pick. */
-  --hl-accent: #ff5200;
+  --hl-accent: #ff3b30;
 
   /* MARCADOR DE AJUSTE — o único matiz fora do kit da Avelin, e de propósito.
      Um pedido de correção não pode se parecer com um controle normal: se ele
@@ -312,17 +312,49 @@ main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding
 .gate-note em { color: rgb(var(--orange-rgb)); font-style: normal; font-weight: 600; }
 .gate-note code { font-size: 11px; opacity: .85; }
 
-/* RECOLHER a linha do tempo. `display:none` no miolo, NUNCA `max-height` com
-   `overflow:hidden`: a máscara da calha corre em `position:sticky` dentro do
-   `.track-label`, e um ancestral com overflow cria um contexto de rolagem novo
-   que a deixa órfã. É a mesma razão pela qual o painel de camadas também
-   esconde o corpo em vez de animar altura. */
-.timeline-panel.collapsed #timeline,
-.tx-panel.collapsed .tx-body { display: none; }
-.timeline-panel.collapsed,
-.tx-panel.collapsed { flex: 0 0 auto; min-height: 0; }
-.btn.caret { font-size: 13px; line-height: 1; transition: transform .15s ease; }
-.btn.caret[aria-expanded="false"] { transform: rotate(-90deg); }
+/* ---------- MODO da linha do tempo: compacta ⇄ expandida ----------
+   Compacta é o PADRÃO: só vídeo + waveform geral, colados como um clip de NLE
+   — a leitura rápida que o usuário pediu. Expandida devolve marcações,
+   legendas, J-cut e efeitos. Tudo por `display:none` de TRILHAS, nunca
+   `max-height` com `overflow:hidden`: a máscara da calha corre em
+   `position:sticky` dentro do `.track-label`, e um ancestral com overflow cria
+   um contexto de rolagem novo que a deixa órfã. A calha fica nos DOIS modos —
+   `LABEL_W` é constante no JS e toda a matemática de zoom/fit depende dela. */
+.timeline.compact #trkNotes,
+.timeline.compact #trkCaptions,
+.timeline.compact #trkSfx,
+.timeline.compact #insertTracks,   /* trilhas dinâmicas da Fase 2 (Texto, Elementos) */
+.timeline.compact .jcut-track { display: none; }
+.timeline.compact .track { margin-bottom: 2px; }
+/* a waveform vira a tira de baixo do "clip": rente ao vídeo e rasa */
+.timeline.compact #laneAudio { height: 24px; }
+/* sem as faixas A1/A2 não há o que o acordeão do J-cut abrir */
+.timeline.compact #jcutToggle { pointer-events: none; opacity: .5; }
+
+/* Compacta, a timeline DEVOLVE a altura que não usa: o painel encolhe ao
+   conteúdo (vídeo + waveform ocupam ~130px) e quem cresce é o painel de
+   camadas do render — legendas, headlines e afins ganham a tela que o vazio
+   ocupava. O teto de 46vh existe para as camadas nunca engolirem a timeline;
+   com ela compacta, não há o que engolir. */
+.timeline-panel.compacta { flex: 0 0 auto; min-height: 0; }
+.timeline-panel.compacta .timeline { min-height: 0; }
+.layers.tl-compacta { max-height: 72vh; }
+
+/* O botão do modo, na calha da régua. `position:relative` para pintar ACIMA
+   da máscara sticky da calha, como os .tl-chip. */
+.tl-modebtn {
+  position: relative; z-index: 2;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 8px;
+  background: var(--glass); border: 1px solid var(--stroke);
+  border-radius: 7px; color: var(--dim);
+  font-family: inherit; font-size: 10px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase;
+  cursor: pointer; transition: filter .15s;
+}
+.tl-modebtn:hover { filter: brightness(1.35); color: var(--text); }
+.tl-modebtn .caret { display: inline-block; transition: transform .15s ease; }
+.tl-modebtn[aria-expanded="false"] .caret { transform: rotate(-90deg); }
 
 /* ---------- portrait layout: tall player right, editor left ----------
    A 9:16 clip is postage-stamp sized when stacked above a full-width timeline.
@@ -1030,7 +1062,7 @@ kbd {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--swatch-fill, #ff5200);
+  background: var(--swatch-fill, #ff3b30);
   box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.45), 0 0 0 2.5px rgba(255, 255, 255, 0.75);
 }
 .swatch.custom input[type='color'] {
@@ -2062,3 +2094,13 @@ button.tl-chip:disabled { cursor: default; }
 
 .start-note { margin-top: 20px; font-size: 11.5px; line-height: 1.6; color: var(--dim); }
 .start-elapsed { color: var(--orange-soft); }
+
+/* Aviso inline da barra de ação. Nasceu quando o alerta da headline deixou de
+   ser um confirm() pós-clique e passou a viver na tela, ao lado do botão. */
+.warn-inline { color: #ffb454; font-size: 12px; white-space: nowrap; }
+
+/* O botão de envio no MODO APROVAR (Fase 1, nada alterado). Verde e sem o
+   ícone de IA: aprovar não gasta token nem renderiza — é a assinatura do
+   usuário no corte. Volta ao laranja de "Enviar" à primeira alteração. */
+#setupGo.aprovar { background: #22a06b; border-color: #22a06b; }
+#setupGo.aprovar:hover { background: #27b478; }

@@ -42,7 +42,9 @@ ENV = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
 # Estilos que já existem de verdade. A aba Estilo oferece mais do que isto; um
 # pedido fora desta lista precisa falhar com nome, não renderizar outra coisa.
 PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica", "scatter", "stacked"}
-PORTED_HEADLINES = {"outline", "card", "realce", "misto"}
+PORTED_HEADLINES = {"outline", "card", "realce", "misto",
+                    "bloco", "etiqueta", "manuscrito", "gigante",
+                    "relevo", "grifo", "contorno_duplo"}
 
 LOUDNORM = "loudnorm=I=-14:TP=-1:LRA=11"
 
@@ -305,6 +307,18 @@ def main() -> None:
     # vez de exigir que alguém lembre da ordem.
     # A perseguição do olhar precisa do rastreio de rosto. Gerado aqui quando
     # falta, em vez de a composição sair sem o efeito e ninguém notar.
+    # TELA DIVIDIDA: MEDIR O ROSTO, sempre — antes era o único caso em que não se
+    # media. O `variants.json` traz um par zoom/foco herdado do projeto de
+    # origem, calibrado para uma cabeça começando em y=455; num take com o
+    # cabelo em y=38 a faixa cobria testa e olhos. E a cabeça se move entre
+    # tomadas (~170px medidos), então nem um valor por PROJETO serve: é por
+    # janela. Sem rosto detectável cada janela cai no padrão, dito no relatório.
+    if data.get("splitInserts"):
+        progress.step(edit, detail="medindo o enquadramento da tela dividida")
+        run([sys.executable, str(SKILL / "helpers" / "split_focus.py"),
+             str(edit), "--aplicar"], allow_fail=True)
+        data = load(pub / "edit-data.json", data) or data
+
     if (data.get("elements") or {}).get("tracking") and not data.get("splitInserts"):
         track = pub / "track.json"
         if not track.exists():

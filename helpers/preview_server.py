@@ -50,6 +50,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import progress  # noqa: E402
 
+
+def helper_python() -> str:
+    """O interpretador que os helpers precisam — não necessariamente este.
+
+    O servidor é iniciado com `python3` (é o que o painel do harness executa), e
+    até aqui ele repassava `sys.executable` para tudo que disparava. Só que os
+    helpers dependem de pacotes que moram no `.venv` da skill: o `phase2.py`
+    morria em um segundo com `ModuleNotFoundError: No module named 'fontTools'`,
+    o erro ia para /dev/null, e a interface anunciava "✓ Enviado". O usuário viu
+    um botão que não funciona; o que havia era um interpretador sem as
+    dependências.
+
+    Por isso a escolha do python é DO DESTINO, não da origem. Se o venv existe,
+    é ele; se não, cai em `sys.executable`, que é o comportamento antigo — assim
+    uma instalação sem venv continua funcionando como funcionava.
+    """
+    venv = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "python"
+    return str(venv) if venv.exists() else sys.executable
+
 APP_DIR = Path(__file__).resolve().parent.parent / "assets" / "preview"
 # A CAMADA DE ESTILO COMPARTILHADA — as mesmas folhas que o render usa.
 # Servi-las aqui é o que permite a prévia desenhar a legenda de verdade em vez
@@ -746,7 +765,23 @@ class Handler(BaseHTTPRequestHandler):
         Só o que é mecânico dispara. As marcações escritas continuam sendo
         pedidos em texto — ninguém deve executá-las sem ler.
         """
-        if not getattr(self.server, "auto_apply", False):
+        # EXECUTAR É O PADRÃO, e a razão é que o consentimento já foi colhido.
+        #
+        # Isto exigia `--auto`, e o lançamento documentado no SKILL.md não passa
+        # a flag. Então o clique gravava o pedido, devolvia `applying: false` e
+        # NADA rodava: a entrega dependia de uma sessão do Claude estar atachada
+        # ao `watch_edits.py` para ler a notificação e executar. Quando não há
+        # sessão — e não há, na maior parte do tempo em que alguém mexe no
+        # editor — o botão é um no-op com toast de sucesso.
+        #
+        # O medo original era gastar tokens e minutos sem querer. Mas a tela já
+        # pergunta antes ("O pedido vai para a IA e consome tokens, além de
+        # alguns minutos de render. Tem certeza?"), e honrar um "sim" não é
+        # atropelar ninguém — é o contrário de fingir que se atendeu.
+        #
+        # `--no-auto` restaura o comportamento de só gravar o pedido, para quem
+        # trabalha com uma sessão de IA no circuito e prefere que ela decida.
+        if getattr(self.server, "auto_apply", True) is False:
             return False
         # A APROVAÇÃO encadeia duas coisas, e nenhuma delas é a Fase 2.
         #
@@ -765,16 +800,71 @@ class Handler(BaseHTTPRequestHandler):
             self._open_style_tab()
             return self._encode_full_res()
         script = "apply_edits.py" if name == "preview_edits.json" else "phase2.py"
+        return self._spawn_helper(script)
+
+    def _spawn_helper(self, script: str) -> bool:
+        """Dispara um helper em segundo plano — e VÊ como ele terminou.
+
+        O que havia aqui era `stdout=DEVNULL, stderr=DEVNULL` seguido de
+        `return True`. As duas metades erram junto: `Popen` bem-sucedido só diz
+        que o processo COMEÇOU, e com a saída no lixo ninguém descobre que ele
+        morreu. Resultado medido neste projeto: o `phase2.py` quebrava em um
+        segundo por dependência faltando, a interface respondia "✓ Enviado — a
+        IA foi avisada", e o usuário concluía, com razão, que o botão não
+        funcionava.
+
+        Agora a saída vai para um log ao lado do projeto e uma thread espera o
+        processo. Falha vira `progress.fail()`, que é o canal que a interface já
+        lê a cada poll — o mesmo que o `progress.py` criou justamente para que
+        "processando…" não ficasse na tela para sempre quando algo morre.
+
+        A thread é daemon e o filho tem sessão própria: se o servidor cair, o
+        trabalho continua; só o relato se perde.
+        """
+        logs = self.root / ".preview_cache"
         try:
-            subprocess.Popen(
-                [sys.executable, str(Path(__file__).resolve().parent / script),
+            logs.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logs = self.root
+        log = logs / f"run-{Path(script).stem}.log"
+        try:
+            fh = open(log, "w")
+        except OSError:
+            fh = subprocess.DEVNULL
+        try:
+            proc = subprocess.Popen(
+                [helper_python(), str(Path(__file__).resolve().parent / script),
                  str(self.root)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                stdout=fh, stderr=subprocess.STDOUT,
                 start_new_session=True,
             )
-            return True
         except OSError:
+            if fh not in (None, subprocess.DEVNULL):
+                fh.close()
             return False
+
+        root, nome = self.root, Path(script).stem
+
+        def aguardar() -> None:
+            código = proc.wait()
+            if fh not in (None, subprocess.DEVNULL):
+                try:
+                    fh.close()
+                except OSError:
+                    pass
+            if código == 0:
+                return
+            cauda = ""
+            try:
+                cauda = log.read_text(errors="replace").strip().splitlines()[-1][:200]
+            except (OSError, IndexError):
+                pass
+            progress.fail(root, f"{nome} falhou (código {código})"
+                                + (f": {cauda}" if cauda else "")
+                                + f" — log em {log.name}")
+
+        threading.Thread(target=aguardar, daemon=True).start()
+        return True
 
     def _download(self) -> None:
         """Exportar: o entregue, com nome que sobrevive fora desta pasta.
@@ -1355,9 +1445,13 @@ def main() -> None:
                     help="abre já neste <edit> dir (a skill passa; sem isto, "
                          "o editor abre vazio)")
     ap.add_argument("--port", type=int, default=4820)
-    ap.add_argument("--auto", action="store_true",
-                    help="salvar no editor já refaz o corte / a Fase 2, "
-                         "sem depender de alguém rodar um comando depois")
+    # PADRÃO LIGADO. Ver o comentário em `_maybe_auto_apply`: com o disparo
+    # opcional, o botão de enviar era um no-op sempre que não havia sessão de IA
+    # atachada, que é a maior parte do tempo.
+    ap.add_argument("--auto", action="store_true", default=True,
+                    help="(padrão) salvar no editor já refaz o corte / a Fase 2")
+    ap.add_argument("--no-auto", action="store_false", dest="auto",
+                    help="só grava o pedido e espera uma sessão de IA executar")
     # ABRIR NO NAVEGADOR. Existe para quem NÃO tem o painel de preview do
     # harness — agente no terminal, máquina nova, sessão por SSH local. Sem
     # isto, a ferramenta visual sobe e o usuário fica com uma URL para colar à

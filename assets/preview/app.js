@@ -101,10 +101,10 @@ const ICON = {
 const PORTED = {
   captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked',
                      'pop', 'popLinha', 'popBloco', 'revelar']),
-  headlines: new Set(['outline', 'card', 'realce', 'misto',
+  headlines: new Set(['', 'outline', 'card', 'realce', 'misto',
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
                       'relevo', 'grifo', 'contorno_duplo']),
-  edits: new Set(['limpa', 'split', 'split2']),
+  edits: new Set(['limpa', 'split', 'split2', 'brollOverlay']),
 };
 
 const STYLE_CATALOG = {
@@ -167,6 +167,30 @@ const STYLE_CATALOG = {
         <rect x="40" y="62.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
       </svg>`,
     },
+    {
+      /* BROLL OVERLAY — animações HyperFrames POR CIMA do vídeo, para ênfase.
+         O mock mostra o gesto: quadro escurecido (scrim) com um elemento de
+         destaque no centro. As janelas vivem em `brollOverlays[]` do
+         edit-data; o conteúdo nasce de uma conversa (sugestões da IA sobre o
+         transcrito + escolha do usuário), nunca de um catálogo fixo. */
+      id: 'brollOverlay',
+      name: 'Broll Overlay',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="48" r="13" fill="rgba(255,255,255,.10)"/>
+        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.10)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(0,0,0,.55)"/>
+        <rect x="10" y="44" width="46" height="20" rx="4" fill="var(--bg1)" stroke="rgb(var(--orange-rgb) / .8)"/>
+        <rect x="15" y="50" width="24" height="4" rx="2" fill="rgb(var(--orange-rgb) / .9)"/>
+        <rect x="15" y="57" width="34" height="3" rx="1.5" fill="rgba(255,255,255,.6)"/>
+        <path d="M46 50l6 4-6 4z" fill="rgb(var(--orange-rgb) / .9)"/>
+        <rect x="12" y="74" width="42" height="11" rx="5.5" fill="var(--bg1)" stroke="rgb(var(--blue-rgb) / .65)"/>
+        <rect x="16" y="78.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
+        <rect x="30" y="78.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+        <rect x="40" y="78.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
+      </svg>`,
+    },
   ],
   // No names on purpose: the sample headline IS the label. Ids and geometry
   // mirror HL_STYLES in the template's Main.tsx — keep the two in step.
@@ -182,6 +206,33 @@ const STYLE_CATALOG = {
     {id: 'relevo', name: 'Relevo', hl: 'relevo'},
     {id: 'grifo', name: 'Grifo', hl: 'grifo'},
     {id: 'contorno_duplo', name: 'Contorno duplo', hl: 'contorno_duplo'},
+    /* SEM HEADLINE precisa ser uma ESCOLHA, não a ausência de uma.
+     *
+     * Até aqui as onze opções eram todas estilos e `outline` vinha marcada por
+     * padrão, então `S.style.headline` era sempre verdadeiro e não existia
+     * estado para "não quero headline". Quem não queria uma deixava o texto em
+     * branco — e o envio batia no aviso "Falta o texto da headline" em TODO
+     * projeto novo, sem saída a não ser cancelar o próprio aviso.
+     *
+     * O render já se comportava assim: `phase2.py` desliga o hook quando não há
+     * texto. Esta opção só torna dizível o que o produto já fazia.
+     *
+     * ÚLTIMA e não primeira: `defaultStyle()` lê `headlines[0]`, e promover
+     * "Nenhum" a padrão marcaria como alterado todo projeto salvo com o padrão
+     * antigo — a alteração fantasma que `styleState()` existe para evitar. */
+    {
+      id: '',
+      name: 'Nenhum',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="52" r="13" fill="rgba(255,255,255,.16)"/>
+        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
+        <rect x="14" y="16" width="38" height="4.4" rx="2.2" fill="rgba(255,255,255,.10)"/>
+        <rect x="20" y="23.5" width="26" height="4.4" rx="2.2" fill="rgba(255,255,255,.10)"/>
+        <path d="M17 14.5L49 30" stroke="rgba(255,255,255,.34)" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>`,
+    },
   ],
   captions: [
     {id: 'karaoke', name: 'Karaokê', demo: 'karaoke'},
@@ -1253,7 +1304,13 @@ function refreshHeader() {
  */
 function styleState() {
   if (!setupApplies()) return '';
-  if (S.state.awaitingStyle) return 'unset';
+  /* `awaitingStyle` NÃO dispensa a comparação — só muda o que o empate quer
+   * dizer. Enquanto ele devolvia 'unset' de saída, a barra anunciava "Estilo
+   * ainda não escolhido" por mais opções que a pessoa marcasse: a tela negava
+   * a escolha que ela acabara de fazer, e isso lê como clique que não pegou.
+   * Agora 'unset' quer dizer "ninguém mexeu, os padrões valem" e 'changed'
+   * quer dizer "mexeu" — nos dois casos `styleDirty()` segue verdadeiro,
+   * porque é enviando o estilo que o projeto sai de `awaitingStyle`. */
   const def = defaultStyle();
   const cur = S.state.style || {};
   /* AUSENTE é igual ao PADRÃO. Sem isto, toda chave nova (o `capColor` foi a
@@ -1285,6 +1342,7 @@ function styleState() {
       const vb = k in b ? !!b[k] : d;
       return va === vb;
     });
+  if (S.state.awaitingStyle) return ok ? 'unset' : 'changed';
   return ok ? '' : 'changed';
 }
 const styleDirty = () => styleState() !== '';
@@ -1325,12 +1383,13 @@ function refreshActionBar() {
      (sem passar pelo proxy) continua precisando de aprovação, e escondia o
      botão exatamente de quem não tinha outro jeito de aprovar. O proxy segue
      governando as CAMADAS DO RENDER, que é onde ele importa. */
+  /* A BARRA DE APROVAÇÃO FOI UNIFICADA NO BOTÃO DE ENVIO. Duas barras no mesmo
+     canto respondiam à mesma pergunta ("o que eu faço agora?") com dois lugares
+     diferentes — e o pedido do usuário foi direto: sem mudanças o botão diz
+     "Aprovar corte"; com mudanças, "Enviar". O arquivo continua o mesmo
+     (`preview_approval.json`) e a nota vai no campo único. */
   const ap = $('approveBar');
-  if (ap) {
-    ap.classList.toggle('hidden', !(
-      !has && !S.processing && !S.approved
-      && S.videoDuration > 0 && (S.state.phase || 1) === 1));
-  }
+  if (ap) ap.classList.add('hidden');
 
   if (!(S.videoDuration > 0) || S.processing) return;
 
@@ -1341,6 +1400,18 @@ function refreshActionBar() {
   go.disabled = !temAlgo;
   $('btnDiscard').classList.toggle('hidden', !has);
 
+  const podeAprovar = !temAlgo && !S.approved
+    && S.videoDuration > 0 && (S.state.phase || 1) === 1;
+  go.dataset.mode = podeAprovar ? 'approve' : '';
+  go.classList.toggle('aprovar', podeAprovar);
+  if (podeAprovar) {
+    $('actionCount').textContent = 'Fase 1 pronta para aprovação';
+    go.disabled = false;
+    go.innerHTML = 'Aprovar corte';
+    go.title = 'Libera o corte final e as camadas do render — mudou algo, o botão vira Enviar';
+    $('actionWhat').textContent = '';
+    return;
+  }
   if (!temAlgo) {
     $('actionCount').textContent = 'Nada a enviar';
 
@@ -1382,6 +1453,14 @@ function refreshActionBar() {
    * A frase longa competia com o número — que é a informação que se lê de
    * relance — e repetia o que o próprio rótulo do botão já diz. */
   $('actionWhat').textContent = '';
+
+  /* O aviso que substituiu o modal. `actionWhat` estava vazio desde que a
+     CONSEQUÊNCIA virou `title` do botão — e um alerta não é uma consequência:
+     é uma coisa errada agora, que precisa estar na tela antes do clique. */
+  if (styleDirty() && S.style.headline && !(S.style.headlineText || '').trim()) {
+    $('actionWhat').innerHTML = '<span class="warn-inline">⚠ headline sem texto — '
+      + 'vai sair sem headline</span>';
+  }
 
   const caro = style || ins || cuts;
   $('setupGo').innerHTML = `<span class="btn-ai">${ICON.ai}</span>`
@@ -1508,10 +1587,19 @@ async function applyState(data) {
      destaque), então o edit-data não os conhece. Como só existem depois de
      compor, ficam atrás do mesmo portão da legenda. */
   S.sfx = [];
-  if ((S.state.phase || 1) >= 2) {
-    const alvo = S.state.sfxEvents || 'hyperframes/sfx-events.json';
+  /* FASE 2 NÃO É O MESMO QUE JÁ COMPÔS. O portão era só `phase >= 2`, e o
+     caminho padrão `hyperframes/sfx-events.json` é escrito pelo compositor —
+     então todo projeto que entra na Fase 2 e ainda não renderizou pedia um
+     arquivo que não existe e levava um 404 no console a cada carga. O try/catch
+     escondia a consequência, não a causa: um erro de rede visível que não é
+     erro nenhum ensina a ignorar o console.
+     Agora só se busca quando há composição de fato — `sfxEvents` publicado pelo
+     servidor, ou um `finalVideo` que prova que o compositor já rodou. */
+  const alvoSfx = S.state.sfxEvents
+    || (S.state.finalVideo ? 'hyperframes/sfx-events.json' : null);
+  if ((S.state.phase || 1) >= 2 && alvoSfx) {
     try {
-      S.sfx = await (await fetch(`/media/${alvo}?v=${Date.now()}`)).json();
+      S.sfx = await (await fetch(`/media/${alvoSfx}?v=${Date.now()}`)).json();
     } catch (e) { /* ainda não compôs */ }
   }
 
@@ -1617,6 +1705,16 @@ function buildInsertsDraft() {
   });
   (d.behind || []).forEach((b, i) => {
     list.push({ kind: 'behind', label: `BEHIND ${b.kind === 'words' ? (b.words || []).map((w) => w.t).join(' ') : (b.src || '').split('/').pop()}`, start: +b.start, end: +b.start + +b.dur, ref: i });
+  });
+  (d.brollOverlays || []).forEach((o, i) => {
+    const rot = o.kind === 'media'
+      ? (o.src || 'mídia').split('/').pop()
+      : (o.text || o.value || (o.items || []).join(' · ') || o.kind || 'overlay');
+    list.push({
+      kind: 'broll',
+      label: `${o.dim ? 'OVERLAY● ' : 'OVERLAY '}${rot}`,
+      start: +o.start, end: +o.end, ref: i,
+    });
   });
   // held single words in the caption's own visual language (a keyword the viewer
   // must type, an emphasis beat) — text, so they ride the text track next to the
@@ -1783,6 +1881,9 @@ function renderNotes() {
 
 function toggleMark() {
   const t = renderedToDraft(video.currentTime || 0);
+  // marcar no modo compacto criaria o pino numa trilha invisível — expande
+  // antes, para o IN já nascer na frente dos olhos
+  if ($('timeline').classList.contains('compact')) setTlMode(false);
   if (S.pendingIn == null) {
     S.pendingIn = t;
     renderNotes();
@@ -1865,7 +1966,7 @@ const ACCENT_USERS = {
   get captions() { return ACCENT_USERS_FALLBACK.captions; },
 };
 /* AVELIN-OVERLAY */ if (window.AVELIN_LOCAL) window.AVELIN_LOCAL.install({STYLE_CATALOG, CAP_BUILDERS, ACCENT_USERS});
-const ACCENT_DEFAULT = '#ff5200';
+const ACCENT_DEFAULT = '#ff3b30';
 
 function applyAccent() {
   const p = $('layersPanel');
@@ -2161,6 +2262,27 @@ const onProxy = () => /(^|\/)preview_proxy\.mp4$/.test(S.state.video || '');
 const setupApplies = () => !!(S.state.awaitingStyle || S.state.style) && !onProxy();
 
 function renderSetup() {
+  /* O REBUILD NÃO PODE ROUBAR O CURSOR. Esta função recria o painel inteiro —
+     inclusive o textarea da headline e o campo hex — e é chamada no debounce da
+     própria digitação: sem isto, cada pausa de 260ms destruía o elemento
+     focado e o usuário perdia o ponteiro de texto no meio da frase (reportado
+     em 2026-08-18). Captura o foco ANTES de reconstruir e o devolve, com a
+     seleção, no frame seguinte — cobre qualquer caminho de retorno abaixo. */
+  const af = document.activeElement;
+  if (af && af.id && $('layersPanel') && $('layersPanel').contains(af)) {
+    const sel = (af.selectionStart != null && af.selectionEnd != null)
+      ? [af.selectionStart, af.selectionEnd] : null;
+    const afId = af.id;
+    requestAnimationFrame(() => {
+      const novo = $(afId);
+      if (novo && document.activeElement !== novo) {
+        novo.focus({ preventScroll: true });
+        if (sel && novo.setSelectionRange) {
+          try { novo.setSelectionRange(sel[0], sel[1]); } catch (e) { /* input sem seleção */ }
+        }
+      }
+    });
+  }
   /* SEM PROJETO NA TELA, esta função não tem sobre o que decidir — e decidir
      assim mesmo estraga a tela inicial. Ela é chamada por caminhos ASSÍNCRONOS
      (a fonte local que terminou de carregar, o resize), e qualquer um deles
@@ -2274,6 +2396,14 @@ function renderSetup() {
   updateSummary();
   LIVE.key = null; // o estilo pode ter mudado — força o redesenho da prévia
   renderLive();
+  /* E A BARRA DE AÇÃO, que até aqui ninguém redesenhava depois de uma troca de
+     estilo. O comentário lá em cima já dizia que o rótulo do envio pertence ao
+     `refreshActionBar` "que é quem sabe tudo o que mudou" — só que nenhum
+     caminho o chamava ao escolher uma opção. O defeito ficou escondido enquanto
+     `styleState()` respondia 'unset' de saída: o texto não mudava porque não
+     tinha como mudar. Com a comparação honesta, marcar uma opção e ver a barra
+     insistir em "Estilo ainda não escolhido" seria o mesmo sintoma de antes. */
+  refreshActionBar();
 }
 
 /* Monta a faixa de camadas e o corpo do inspetor. Reconstrói do zero a cada
@@ -2601,7 +2731,14 @@ async function sendStyle() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return (await res.json()).ok;
+  /* `applying` diz se o servidor REALMENTE disparou o trabalho, e o toast
+     depende disso. Enquanto só se lia `ok`, um pedido que ficou parado no disco
+     esperando uma sessão de IA saía anunciado como "✓ Enviado — a IA foi
+     avisada": verdade pela metade, e a metade falsa é a que o usuário usa para
+     decidir se pode fechar a aba. */
+  const j = await res.json();
+  S.lastApplying = !!j.applying;
+  return !!j.ok;
 }
 
 // Declarado ANTES de renderClips porque ela lê o arrasto em curso para
@@ -3539,26 +3676,32 @@ $('btnApprove').addEventListener('click', async () => {
 $('btnUndo').innerHTML = ICON.undo;
 $('btnUndo').addEventListener('click', undoLast);
 
-/* Recolher a linha do tempo. A escolha é lembrada, como a do J-cut: quem
-   trabalha em tela baixa recolhe UMA vez, não a cada recarga. Vale para os dois
-   modos — o switch troca qual painel está visível, e o estado recolhido é do
-   PAINEL, não do modo, senão alternar transcrição/timeline reabriria sozinho. */
-function setTlCollapsed(on) {
-  $('timelinePanel').classList.toggle('collapsed', on);
-  $('txPanel').classList.toggle('collapsed', on);
-  const b = $('tlToggle');
-  b.setAttribute('aria-expanded', String(!on));
-  b.title = on ? 'Expandir a linha do tempo' : 'Recolher a linha do tempo';
-  try { localStorage.setItem('avelin.tlCollapsed', on ? '1' : '0'); } catch (e) { /* privado */ }
-  // a régua e a waveform desenham em canvas dimensionado pelo layout: reabrir
-  // sem remedir deixa os dois com a largura que tinham quando sumiram
-  if (!on) requestAnimationFrame(() => { fitZoom(); renderAll(); });
+/* MODO da linha do tempo: compacta (vídeo + waveform geral) ⇄ expandida (com
+   marcações, legendas, J-cut, efeitos). Compacta é o PADRÃO — a leitura de
+   clip único, estilo NLE — e a escolha é lembrada, como a do J-cut. Substitui
+   o recolher da barra, que escondia o painel inteiro: o que se alterna é a
+   densidade, não a existência da timeline. */
+$('tlMode').innerHTML = '<span class="caret">⌄</span><span>Camadas</span>';
+function setTlMode(compact) {
+  $('timeline').classList.toggle('compact', compact);
+  // compacta, a timeline devolve a altura que não usa: o painel encolhe ao
+  // conteúdo e o de camadas do render pode crescer além do teto usual
+  $('timelinePanel').classList.toggle('compacta', compact);
+  $('layersPanel').classList.toggle('tl-compacta', compact);
+  const b = $('tlMode');
+  b.setAttribute('aria-expanded', String(!compact));
+  b.title = compact ? 'Expandir as camadas (marcações, legendas, J-cut, efeitos)'
+                    : 'Recolher para vídeo + áudio';
+  try { localStorage.setItem('avelin.tlMode', compact ? 'compact' : 'full'); } catch (e) { /* privado */ }
+  // a régua e a waveform desenham em canvas dimensionado pelo layout: trocar a
+  // densidade muda a altura da pista de áudio, então remede e redesenha
+  requestAnimationFrame(() => { fitZoom(); renderAll(); });
 }
-$('tlToggle').addEventListener('click', () =>
-  setTlCollapsed(!$('timelinePanel').classList.contains('collapsed')));
+$('tlMode').addEventListener('click', () =>
+  setTlMode(!$('timeline').classList.contains('compact')));
 try {
-  if (localStorage.getItem('avelin.tlCollapsed') === '1') setTlCollapsed(true);
-} catch (e) { /* privado */ }
+  setTlMode(localStorage.getItem('avelin.tlMode') !== 'full');
+} catch (e) { setTlMode(true); }
 
 // transport
 $('btnPlay').innerHTML = ICON.play;
@@ -3717,7 +3860,9 @@ async function sendTimeline() {
     }));
   }
   const res = await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  if (!(await res.json()).ok) return false;
+  const j = await res.json();
+  S.lastApplying = !!j.applying;   // ver o comentário em sendStyle
+  if (!j.ok) return false;
   S.savedPending = true;
   S.notes = [];
   S.pendingIn = null;
@@ -3741,26 +3886,48 @@ async function sendTimeline() {
    diferentes, e um arquivo só faria uma sobrescrever a outra. O que se unifica
    é o GESTO, não o formato. */
 $('setupGo').addEventListener('click', async () => {
+  /* MODO APROVAR (Fase 1, nada alterado). Mesmo contrato da barra antiga:
+     `preview_approval.json` próprio, para a aprovação nunca apagar marcação
+     não lida. A nota sai do campo único. */
+  if ($('setupGo').dataset.mode === 'approve') {
+    const btn = $('setupGo');
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'approve-cut',
+                               note: ($('setupNote').value || '').trim(),
+                               video: S.state.video || null }),
+      });
+      if (!(await r.json()).ok) throw new Error('save');
+      S.approved = true;
+      $('setupNote').value = '';
+      refreshActionBar();
+      toast('Corte aprovado — renderizando o final e liberando a Fase 2', 4000);
+    } catch (e) {
+      btn.disabled = false;
+      toast('não consegui salvar a aprovação — tente de novo', 3000);
+    }
+    return;
+  }
   /* DUAS PERGUNTAS ANTES DE GASTAR. O clique dispara trabalho de IA que custa
      tokens e minutos, e até aqui ele era indistinguível de qualquer outro botão
      da tela. */
   const caroAgora = styleDirty() || edlDirty() || insertsDirty();
 
-  // headline com estilo e sem texto sai como nada — e o usuário só descobre
-  // assistindo o render pronto
-  const precisaHl = styleDirty() && S.style.headline && !(S.style.headlineText || '').trim();
-  if (precisaHl) {
-    if (confirm('Falta o texto da headline. Preencher agora?')) {
-      activeLayer = 'headline';
-      $('layersPanel').classList.remove('collapsed');
-      if (S.view !== 'tl') setView('tl');
-      renderSetup();
-      const ta = $('headlineText');
-      if (ta) { ta.focus(); ta.scrollIntoView({ block: 'center' }); }
-      return;
-    }
-  }
-
+  /* O AVISO DA HEADLINE SAIU DAQUI, e essa é a correção de verdade.
+     
+     Ele era um `confirm()` disparado DEPOIS do clique, em que OK — a resposta
+     reflexa — abortava o envio. A primeira tentativa de conserto foi reescrever
+     a pergunta para dizer "OK = escrever agora (nada é enviado)". O editor do
+     projeto leu essa versão já corrigida e caiu na mesma armadilha, o que
+     resolve a dúvida: o problema nunca foi a redação, é pedir uma decisão
+     inesperada no meio de outra. Reflexo não se conserta com texto melhor.
+     
+     O aviso agora é PERMANENTE na barra de ação (`refreshActionBar`), visível
+     ENQUANTO a pessoa escolhe e não depois que ela decidiu. O clique voltou a
+     ter um único diálogo: o de custo, que é o que ela foi buscar. E com a opção
+     "Nenhum" na grade, quem não quer headline nem vê o aviso. */
   // o aviso de custo é sobre RENDER. Um pedido escrito não renderiza nada
   // sozinho — cobrar a confirmação de minutos ali seria mentir sobre o preço.
   if (caroAgora && !confirm(
@@ -3789,7 +3956,9 @@ $('setupGo').addEventListener('click', async () => {
     S.style.note = '';
   }
   refreshActionBar();
-  toast(ok ? '✓ Enviado — a IA foi avisada' : 'Erro ao enviar — o servidor está de pé?', 5000);
+  toast(!ok ? 'Erro ao enviar — o servidor está de pé?'
+    : S.lastApplying ? '✓ Enviado — trabalhando, acompanhe na barra de progresso'
+    : 'Pedido salvo — aguardando uma sessão da IA executar', 5000);
 });
 
 /* ESTADO DE PROCESSAMENTO. O clique dispara trabalho que acontece FORA do
@@ -4918,12 +5087,25 @@ if ($('depsToggle')) {
    dizendo que já tinha transcrito e escolhido as tomadas, o que é mentira e
    some com a única informação que o usuário quer. Sem casar nada, a primeira
    fica correndo: transcrever é sempre o começo. */
+/* AS ETAPAS QUE O PIPELINE REALMENTE TEM HOJE.
+ *
+ * A lista antiga cobria cinco e o trabalho passou a ter oito: medir o papel das
+ * fontes, auditar o transcrito e medir os respiros entraram depois e não
+ * casavam com nenhuma linha. O efeito na tela é pior que faltar uma linha — o
+ * destaque fica parado na etapa anterior enquanto a máquina trabalha, e um
+ * indicador que não anda é indistinguível de um travado.
+ *
+ * A ORDEM importa: `forEach` deixa vencer o ÚLTIMO que casar, então uma
+ * mensagem que fala de duas etapas cai na mais adiantada — que é a certa. */
 const F1_STEPS = [
+  { label: 'Medindo as fontes', re: /papel d|fonte|multicam|source_roles|medindo o material/i },
   { label: 'Transcrevendo o áudio', re: /transcri|whisper|scribe/i },
+  { label: 'Conferindo a transcrição', re: /audit|conferindo|densidade|reinício|repetiç/i },
   { label: 'Escolhendo as melhores tomadas', re: /tomada|\btake|decupa|estratégia|\bedl\b/i },
-  { label: 'Cortando os silêncios', re: /cortando|silêncio|montando o corte|renderiz/i },
+  { label: 'Medindo os respiros', re: /respiro|ar morto|pausa|ritmo/i },
   { label: 'Corrigindo a cor', re: /correção de cor|graduaç|color.?grade|\bgrade\b/i },
-  { label: 'Montando a linha do tempo', re: /proxy|linha do tempo|pronto para/i },
+  { label: 'Cortando e montando', re: /cortando|silêncio|montando o corte|renderiz|encod/i },
+  { label: 'Conferindo o corte', re: /proxy|linha do tempo|verific|conferindo o corte|pronto para|aprovaç/i },
 ];
 
 let startFmt = 'auto';
@@ -4936,6 +5118,19 @@ function startMode() {
   if (S.videoDuration > 0) return '';
   if (S.state.awaitingStart) return 'ready';
   if (S.state.startedAt) return 'working';
+  /* SEM VÍDEO E COM ALGUÉM FALANDO É TRABALHO EM CURSO.
+   *
+   * `startedAt` era a única porta para a tela de etapas, e ele só é escrito
+   * quando o projeto nasce pelo botão "Gerar cortes" do editor. Um projeto
+   * criado por fora — que é o caminho do `/ave <pasta>` e de qualquer sessão
+   * que monte o `state.json` na mão — caía no `#emptyState`: "aguardando o
+   * primeiro render", parado, enquanto oito etapas rodavam do outro lado.
+   *
+   * O `message` é a prova de que alguém está dirigindo: ele não existe sozinho.
+   * Então ele basta para mostrar as etapas. O relógio é que depende do
+   * `startedAt` — sem ele mostra-se o progresso sem o tempo decorrido, que é
+   * melhor que não mostrar nada. */
+  if ((S.state.message || '').trim() && (S.state.phase || 1) === 1) return 'working';
   return '';
 }
 

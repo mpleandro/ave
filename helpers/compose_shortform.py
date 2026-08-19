@@ -38,20 +38,36 @@ HOLD = 0.6  # sobra depois da última palavra antes de a deixa sair
 # na costura — ele existe para dar base ao texto que fica SOBRE a arte.
 TRACK = {
     "aroll": 0,
-    "split": 1,      # arte + costura
-    "insert": 2,
-    "bespoke": 3,
+    # B-ROLL EM VÍDEO NA FAIXA, em track PRÓPRIA e logo abaixo da janela.
+    #
+    # Duas razões, ambas do renderer. Primeiro, ele recusa vídeo cronometrado
+    # dentro de outro elemento cronometrado ("the framework cannot manage
+    # playback of nested media — video will be FROZEN in renders"), então o
+    # clipe sai da janela e vira irmão de topo. Segundo, irmão de topo na MESMA
+    # track que a janela dá "overlapping_clips_same_track", porque os dois
+    # ocupam o mesmo intervalo por construção.
+    #
+    # Abaixo de `split` e não acima: a costura mora na janela e existe para dar
+    # base à legenda que senta sobre a arte. Com o vídeo por cima, a costura
+    # sumiria e o texto perderia o fundo.
+    "splitmedia": 1,
+    "split": 2,      # arte (imagem) + costura
+    "insert": 3,
+    "bespoke": 4,
     # Grão, vazamento de luz, poeira: cobre a IMAGEM inteira (vídeo, inserções
     # e gráficos sob medida) e para ANTES da legenda. Sujar o texto é sujar a
     # única coisa da tela que não pode ficar suja.
-    "overlay": 4,
-    "caption": 5,
-    "wordaccent": 6,
-    "hook": 7,       # acima da legenda: os dois disputam a costura
-    "flash": 8,      # por cima de tudo que é imagem
-    "soundtrack": 9,
-    "sfx": 10,
-    "audio": 11,
+    "overlay": 5,
+    "caption": 6,
+    "wordaccent": 7,
+    "hook": 8,       # acima da legenda: os dois disputam a costura
+    "flash": 9,      # por cima de tudo que é imagem
+    "soundtrack": 10,
+    "sfx": 11,
+    # FORA da faixa do SFX. `SFX_LAYERS` numera 12–14 à mão logo abaixo, e o
+    # áudio do a-roll ocupa a duração inteira: dividir track com um efeito curto
+    # daria "overlapping_clips_same_track" em todo projeto com som.
+    "audio": 16,
 }
 
 # Camadas de efeito. Com um índice só os efeitos eram obrigados a NUNCA se
@@ -265,6 +281,11 @@ def split_windows(data: dict, H: int, duration: float) -> list[dict]:
             # baixas.
             "zoom": float(it.get("zoom", lay["zoom"])),
             "focusY": float(it.get("focusY", lay["focusY"])),
+            # COMO A ARTE PREENCHE A FAIXA. O port perdeu esta opção: o CSS
+            # fixava `object-fit: cover`, e uma foto larga entrava cortada dos
+            # dois lados sem que houvesse como pedir o contrário. `cover`
+            # continua o padrão — só deixou de ser a única resposta.
+            "fit": (it.get("fit") or "cover"),
             "captionBottom": lay["captionBottom"],
             "seam": lay["seam"],
             "centre": (lay.get("centreOffset") or {}),
@@ -272,12 +293,176 @@ def split_windows(data: dict, H: int, duration: float) -> list[dict]:
     return out
 
 
+VIDEO_EXT = (".mp4", ".mov", ".webm", ".m4v")
+
+
+def split_art(i: int, w: dict) -> str:
+    """A arte da faixa — `<video>` quando é vídeo, `<img>` quando é imagem.
+
+    O port para HyperFrames trouxe só a metade `<img>`, e com isso b-roll em
+    vídeo era estruturalmente impossível: o arquivo entrava numa tag que não
+    sabe tocar, e saía como um quadro parado. Em todo o compositor existia UMA
+    tag `<video>`, e era o a-roll.
+
+    O clock local sai de graça aqui. O `data-media-start` do HyperFrames é o
+    ponto de entrada DA MÍDIA, independente de onde a janela cai na linha do
+    tempo — que é exatamente o que impede o defeito clássico de inserção
+    congelada: passar o tempo absoluto da composição para um clipe curto faz o
+    seek passar do fim e o quadro travar no último frame.
+
+    O `id` não é enfeite: sem ele o renderer não descobre o elemento (mesma
+    razão documentada no `<audio>` do a-roll).
+
+    Devolve (dentro_da_janela, irmão_de_topo): imagem vai dentro, vídeo vai
+    fora. Ver o comentário no `split_markup`.
+    """
+    src = w.get("src")
+    if not src:
+        return "", ""
+    geo = f'top:{w["artTop"]}px; height:{w["band"]}px; object-fit:{w.get("fit", "cover")}'
+    if str(src).lower().endswith(VIDEO_EXT):
+        # `clip` + `data-*` põem o vídeo sob o relógio do renderer. Por isso ele
+        # NÃO leva a classe `ave-split-art`: aquela nasce `display:none` e é
+        # acesa pelo split.js, e as duas gerências brigariam pelo mesmo estilo.
+        return "", (f'<video id="splitart{i}" class="ave-split-media clip" src="{src}" '
+                    f'muted playsinline data-start="{w["start"]:.3f}" '
+                    f'data-duration="{w["end"] - w["start"]:.3f}" data-media-start="0" '
+                    f'data-track-index="{TRACK['splitmedia']}" style="{geo}"></video>')
+    return f'<img class="ave-split-art" src="{src}" alt="" style="{geo}">', ""
+
+
+def _bo_ritmo(dur: float) -> tuple[float, float]:
+    """O RITMO da janela decide a entrada — não uma constante.
+
+    Janela curta é acento no meio de fala rápida: entra seca. Janela longa é um
+    momento de respiro: a animação pode se dar ao luxo de chegar. Os números
+    são (entrada, cadência-entre-filhos) em segundos; mudar a régua é aqui,
+    nunca em keyframe."""
+    if dur < 2.2:
+        return 0.18, 0.07
+    if dur > 4.5:
+        return 0.42, 0.16
+    return 0.30, 0.11
+
+
+def _bo_cores(data: dict) -> dict:
+    """As cores do B-roll são MARCA, não projeto: vêm de ~/.avelin/brand.json
+    (perguntadas uma vez e salvas — protocolo do usuário, 2026-08-18), com
+    override opcional por `brollColors` no edit-data. Fallback: o accent do
+    projeto e o azul-noite padrão."""
+    cores = dict(data.get("brollColors") or {})
+    if "deep" not in cores or "accent" not in cores:
+        try:
+            b = json.loads((Path.home() / ".avelin" / "brand.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            b = {}
+        cores.setdefault("accent", b.get("accent") or data.get("accent") or "#ff3b30")
+        cores.setdefault("deep", b.get("deep") or "#0D2137")
+    return cores
+
+
+def broll_markup(data: dict, duration: float, events: list) -> str:
+    """Janelas de ênfase POR CIMA do a-roll — o formato "Broll Overlay".
+
+    Quatro tipos (`kind`): `words` (frase cinética), `stat` (número que conta),
+    `labels` (etiquetas em sequência), `media` (mp4/png pronto). `dim` liga o
+    scrim — um DIV preto sobre o vídeo, NUNCA opacity no próprio vídeo
+    (opacidade <1 cria contexto de empilhamento e mata blend; medido). `pos`:
+    full/top/bottom, com o bottom acabando antes da faixa de legenda.
+
+    Ordem no DOM: depois do split, antes do flash e das legendas — o scrim
+    escurece o a-roll e as legendas continuam legíveis por cima. Janelas nunca
+    durante o hook (o check acusaria texto sob elemento opaco) e nunca
+    sobrepostas entre si (a mídia divide track com o split). Cada janela emite
+    seu próprio SFX: whoosh cheio quando escurece, suave quando cavalga."""
+    wins = [w for w in (data.get("brollOverlays") or [])
+            if float(w.get("start", 0)) < duration
+            and float(w.get("end", 0)) > float(w.get("start", 0))]
+    if not wins:
+        return ""
+    cores = _bo_cores(data)
+    blocks: list[str] = []
+    for i, o in enumerate(wins):
+        s = float(o["start"])
+        e = min(float(o["end"]), duration)
+        d = e - s
+        pos = o.get("pos", "full")
+        if pos not in ("full", "top", "bottom"):
+            pos = "full"
+        dim = o.get("dim")
+        dim_val = 0.9 if dim is True else (float(dim) if dim else 0.0)
+        vin, stag = _bo_ritmo(d)
+        scrim_attr = ""
+        if dim_val > 0:
+            blocks.append(f'  <div id="boscrim{i}" class="ave-bo-scrim" '
+                          f'data-dim="{dim_val:.2f}"></div>')
+            scrim_attr = f' data-bo-scrim="boscrim{i}"'
+        kind = o.get("kind", "words")
+        inner = ""
+        if kind == "words":
+            palavras = (o.get("text") or "").split()
+            # o destaque cai na palavra mais longa quando ninguém escolheu —
+            # heurística barata que acerta o substantivo na maioria das frases
+            acc = set(o.get("accentWords") or (
+                [max(range(len(palavras)), key=lambda k: len(palavras[k]))]
+                if palavras else []))
+            spans = "".join(
+                f'<span class="bo-w{" acc" if k in acc else ""}">{esc(p)}</span>'
+                for k, p in enumerate(palavras))
+            inner = f'<div class="ave-bo-words">{spans}</div>'
+        elif kind == "stat":
+            num = o.get("count")
+            num_attr = f' data-count="{num}"' if num is not None else ""
+            pref = (f'<span class="bo-fix">{esc(str(o["prefix"]))}</span>'
+                    if o.get("prefix") else "")
+            suf = (f'<span class="bo-fix">{esc(str(o["suffix"]))}</span>'
+                   if o.get("suffix") else "")
+            lab = (f'<div class="bo-label">{esc(str(o["label"]))}</div>'
+                   if o.get("label") else "")
+            inner = (f'<div class="ave-bo-stat"><div class="bo-value">{pref}'
+                     f'<span class="bo-num"{num_attr}>{esc(str(o.get("value", "")))}</span>'
+                     f'{suf}</div>{lab}</div>')
+            events.append((s + vin * 0.4, "callout"))
+        elif kind == "labels":
+            itens = o.get("items") or []
+            inner = ('<div class="ave-bo-labels">'
+                     + "".join(f'<div class="bo-item">{esc(str(t))}</div>' for t in itens)
+                     + '</div>')
+            for k in range(min(len(itens), 5)):
+                events.append((s + k * max(stag, 0.14), "tick"))
+        elif kind == "media":
+            src = o.get("src", "")
+            aspect = o.get("aspect", "16 / 9")
+            if str(src).lower().endswith(VIDEO_EXT):
+                m = (f'<video id="bomedia{i}" class="clip" src="{src}" muted playsinline '
+                     f'data-start="{s:.3f}" data-duration="{d:.3f}" '
+                     f'data-media-start="{float(o.get("mediaStart", 0)):.3f}" '
+                     f'data-track-index="{TRACK["splitmedia"]}"></video>')
+            else:
+                m = f'<img src="{src}" alt="">'
+            inner = f'<div class="ave-bo-media" style="aspect-ratio:{aspect}">{m}</div>'
+        else:
+            print(f"  aviso: brollOverlay #{i} de kind '{kind}' desconhecido — pulado",
+                  file=sys.stderr)
+            continue
+        events.append((s, "hook" if dim_val > 0 else "element"))
+        # `clip` + track são exigência do motor para elemento com timing — sem
+        # eles o check barra (timed_element_missing_clip_class, medido). As
+        # janelas não se sobrepõem entre si, então dividem um track só.
+        blocks.append(
+            f'  <div id="bo{i}" class="ave-bo-win pos-{pos} clip"{scrim_attr} '
+            f'data-start="{s:.3f}" data-duration="{d:.3f}" '
+            f'data-track-index="{TRACK["overlay"]}" '
+            f'data-in="{vin}" data-stagger="{stag}" '
+            f'style="--bo-deep:{cores["deep"]};--bo-accent:{cores["accent"]}">'
+            f'{inner}</div>')
+    return "\n".join(blocks)
+
+
 def split_markup(wins: list[dict], style_id: str = "") -> str:
     blocks = []
     for i, w in enumerate(wins):
-        art = (f'<img class="ave-split-art" src="{w["src"]}" alt="" '
-               f'style="top:{w["artTop"]}px; height:{w["band"]}px">'
-               if w["src"] else "")
+        art, art_irmao = split_art(i, w)
         # o degradê cobre a parte de baixo da arte, que é onde a legenda encosta
         seam = (f'<div class="ave-split-seam" '
                 f'style="top:{w["artTop"] + w["band"] - 220}px; height:280px"></div>'
@@ -289,6 +474,16 @@ def split_markup(wins: list[dict], style_id: str = "") -> str:
             f'data-vid-top="{w["vidTop"]}" data-vid-height="{w["vidHeight"]}"'
             f'{w.get("centreAttr", "")}>'
             f'{art}{seam}</div>')
+        # O VÍDEO SAI DE DENTRO DA JANELA, e não é organização: é requisito do
+        # renderer. O linter do HyperFrames reprova com todas as letras —
+        # "video_nested_in_timed_element: the framework cannot manage playback
+        # of nested media — video will be FROZEN in renders" — porque a janela
+        # também tem `data-start`. Dois relógios sobre o mesmo elemento e o de
+        # fora vence, congelando o clipe no primeiro quadro. Como irmão de topo
+        # ele tem relógio próprio; a geometria não muda, porque a janela não é
+        # `position`ada e a arte já se posicionava contra o #root.
+        if art_irmao:
+            blocks.append(art_irmao)
     return "\n".join("  " + b for b in blocks)
 
 
@@ -1099,13 +1294,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
                    '<script src="styles/pop.js"></script>')
         container = (f'<div class="ave-pop grupo-{st.get("grupo", "palavra")}"'
                      f' style="--cap-scale:1;{fam_var} --cap-color:{cap_color};'
-                     f' --cap-accent:{accent or "#ff5200"};'
+                     f' --cap-accent:{accent or "#ff3b30"};'
                      f' --cap-size:{size}; --cap-bottom:{bottom}">')
     elif st.get("css") == "revelar":
         cap_css = ('<link rel="stylesheet" href="styles/revelar.css">\n'
                    '<script src="styles/revelar.js"></script>')
         container = (f'<div class="ave-rev" style="--cap-scale:1;{fam_var}'
-                     f' --cap-color:{cap_color}; --cap-accent:{accent or "#ff5200"};'
+                     f' --cap-color:{cap_color}; --cap-accent:{accent or "#ff3b30"};'
                      f' --cap-size:{size}; --cap-bottom:{bottom}">')
     elif st["animated"]:
         cap_css = ('<link rel="stylesheet" href="styles/karaoke.css">\n'
@@ -1276,6 +1471,10 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         print(f"  aviso: gráfico sob medida '{gid}' sem arquivo em "
               f"compositions/{gid}.html — não vai aparecer", file=sys.stderr)
 
+    # Broll Overlay ANTES do corte de efeitos: as janelas emitem os próprios
+    # eventos de som, e eles têm de existir quando sfx_blocks olhar a lista.
+    bo_html = broll_markup(data, duration, events)
+
     proj = Path(data.get("_proj", "."))
     # O interruptor da aba Estilo. Desligado, nenhum efeito entra — antes disso
     # os efeitos eram consequência automática de haver um evento, e não havia
@@ -1338,6 +1537,12 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         parts.append("  AVE_SPLIT.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
         needs_tl = True
 
+    bo_css = '<link rel="stylesheet" href="styles/broll-overlay.css">' if bo_html else ""
+    bo_tag = '<script src="styles/broll-overlay.js"></script>' if bo_html else ""
+    if bo_html:
+        parts.append("  AVE_BROLL.buildTimeline(document.getElementById('root'), gsap, tl);")
+        needs_tl = True
+
     extra_css = ""
     if cam_js and flash_blocks:
         extra_css = '<link rel="stylesheet" href="styles/camera.css">'
@@ -1361,12 +1566,14 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {cam_tag}
 {track_tag}
 {split_tag}
+{bo_tag}
 {insert_tag}
 {wa_tag}
 {cap_css}
 {hook_css}
 {extra_css}
 {split_css}
+{bo_css}
 {insert_css}
 {ov_css}
 {wa_css}
@@ -1393,6 +1600,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 
 {hook_block}
 {split_block}
+{bo_html}
 {chr(10).join(flash_blocks)}
 {insert_html}
 {wa_html}
@@ -1453,6 +1661,8 @@ def main() -> None:
         files.append("headline.css")
     if data.get("splitInserts"):
         files += ["split.css", "split.js"]
+    if data.get("brollOverlays"):
+        files += ["broll-overlay.css", "broll-overlay.js"]
     if data.get("inserts"):
         files += ["insert.css", "insert.js"]
     if (data.get("elements") or {}).get("tracking"):

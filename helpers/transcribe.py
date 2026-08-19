@@ -79,6 +79,17 @@ from pathlib import Path
 import requests
 
 
+# O ÚNICO botão da API que mexe no defeito central: o Whisper limpa gaguejo e
+# repetição porque isso melhora o WER dele — e edição precisa do oposto, ver a
+# fala como foi dita. Não existe "disable normalization" na API; o que existe é
+# o `prompt`, que ENVIESA o decoder pelo estilo do texto inicial. Um prompt em
+# português cheio de reticência, muleta e repetição aumenta a chance de a
+# gagueira sobreviver à transcrição. Não é garantia (a engolida de "isso explica
+# muito" aconteceu COM texto limpo de prompt nenhum) — é um viés a favor, de
+# custo zero, somado à varredura acústica que continua sendo a rede de verdade.
+DISFLUENCY_PROMPT_PT = ("é... é... quer dizer, tipo assim, eu eu acho que... "
+                        "não, pera, deixa eu refazer. isso, isso mesmo, é isso.")
+
 GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 DEFAULT_MODEL = "whisper-large-v3"
 
@@ -409,6 +420,9 @@ def call_groq(
         ("timestamp_granularities[]", "segment"),
         ("temperature", "0"),
     ]
+    # ver DISFLUENCY_PROMPT_PT no topo — só em pt, onde o texto do viés existe
+    if language == "pt":
+        data.append(("prompt", DISFLUENCY_PROMPT_PT))
     if language:
         data.append(("language", language))
 
@@ -479,9 +493,103 @@ def call_elevenlabs(
     raise RuntimeError(last_err)
 
 
+MIN_WORD_SPAN = 0.04   # nunca encolher uma palavra abaixo disto ao aparar
+
+
+def _apply_measured_spacing(words: list[dict], silences: list[tuple[float, float]]) -> list[dict]:
+    """Reescreve os tokens `spacing` a partir do silêncio MEDIDO NO ÁUDIO.
+
+    O `_to_scribe_words` abaixo deriva `spacing` de `s > prev_end` — o gap entre
+    palavras do próprio Whisper. Esse número é SEMPRE 0.00: o Whisper entrega
+    timeline contígua e absorve a pausa na DURAÇÃO da palavra anterior. Medido
+    num take de 60s desta série: 10 tokens `spacing` para 14 silêncios reais, e
+    os 8 ausentes eram justamente os que caíam dentro de uma palavra. O
+    `pack_transcripts` — a única coisa que o editor lê — não tinha como mostrá-los,
+    e seis defeitos de fala foram para o corte final por isso.
+
+    O TRABALHO DIFÍCIL É QUE O SILÊNCIO CAI DENTRO DA PALAVRA, não entre duas.
+    Medido: 11 dos 23 silêncios do take. `'porque'` ocupa 4.28–7.02 e tem um
+    buraco de 1,40s em 4.39–5.79 — a palavra falada está em 6.08–7.02, mas nada
+    no transcrito diz isso. Não dá para inserir um `spacing` ali sem decidir de
+    que LADO da pausa a palavra fica.
+
+    A decisão aqui é por MAIORIA DE FALA: a palavra fica do lado do buraco que
+    tem mais áudio dentro do span declarado. Em `'porque'` isso dá 0.11s à
+    esquerda contra 0.94s à direita → a palavra vai para a direita, que é o
+    correto. Confere também em `'trabalho.'` (0.46 vs 0.14 → esquerda) e
+    `'sistema'` (0.44 vs 0.33 → esquerda).
+
+    **É heurística, e o upgrade é alinhamento forçado** (stable-ts / WhisperX
+    wav2vec2), que resolve o lado por acústica em vez de por duração. Para
+    MOSTRAR o buraco ao editor esta aproximação basta; para pôr a BORDA DO CORTE
+    exatamente ali, não — por isso a borda continua saindo do `speech_regions.py`.
+
+    Palavra inteiramente contida num silêncio não é aparada: aí o transcrito e o
+    detector se contradizem, e apagar fala por causa de um limiar de dB é o único
+    erro irreversível desta função.
+    """
+    kept = [dict(w) for w in words if w.get("type") == "word"]
+    if not kept or not silences:
+        return words
+
+    for a, b in silences:
+        for w in kept:
+            s, e = float(w["start"]), float(w["end"])
+            if e <= a or s >= b:
+                continue
+            left, right = a - s, e - b
+            if left <= 0 and right <= 0:
+                continue                      # palavra dentro do silêncio: não se toca
+            if right > left:
+                if b < e - MIN_WORD_SPAN + 1e-9:
+                    w["start"] = b
+            else:
+                if a > s + MIN_WORD_SPAN - 1e-9:
+                    w["end"] = a
+
+    # A ORDEM DE LEITURA É A DA LISTA, NUNCA A DO RELÓGIO. Os tempos do Whisper
+    # não são monotônicos — medido neste material: 'hambúrguer' 40.10–40.48 se
+    # sobrepõe a 'É' 40.02–40.96, e 'coloco' 33.68–34.18 a 'As' 33.68–34.46.
+    # Ordenar por tempo aqui reescreveu a frase como "não é um negócio de É
+    # hambúrguer um negócio de". O texto do ASR está certo; o relógio dele não.
+    out: list[dict] = []
+    usados = [False] * len(silences)
+    fluxo = 0.0                      # fim do último token emitido
+    for w in kept:
+        ws = float(w["start"])
+        pend = [
+            (i, a, b) for i, (a, b) in enumerate(silences)
+            if not usados[i] and a >= fluxo - 1e-6 and b <= ws + 1e-6
+        ]
+        for i, a, b in sorted(pend, key=lambda t: t[1]):
+            a = max(a, fluxo)
+            if b - a > 1e-3:
+                out.append({"text": " ", "start": round(a, 3), "end": round(b, 3),
+                            "type": "spacing", "speaker_id": w.get("speaker_id", "speaker_0")})
+                fluxo = b
+            usados[i] = True
+        out.append(w)
+        fluxo = max(fluxo, float(w["end"]))
+    for i, (a, b) in enumerate(silences):
+        if usados[i]:
+            continue
+        a = max(a, fluxo)
+        if b - a > 1e-3:
+            out.append({"text": " ", "start": round(a, 3), "end": round(b, 3),
+                        "type": "spacing", "speaker_id": "speaker_0"})
+            fluxo = b
+    return out
+
+
 def _to_scribe_words(groq_words: list[dict], offset: float) -> list[dict]:
     """Convert Groq word list to Scribe-schema entries, inserting 'spacing'
     entries for inter-word gaps so downstream silence detection works.
+
+    NOTE: the gap-derived spacing here is a FALLBACK only. Whisper's timeline is
+    contiguous, so `s > prev_end` fires almost never — `_apply_measured_spacing`
+    overwrites this from the audio and is what actually makes silence visible.
+    This path stays so a failed measurement degrades to the old behaviour instead
+    of to no spacing at all.
     """
     out: list[dict] = []
     prev_end: float | None = None
@@ -628,6 +736,32 @@ def _transcribe_audio(
         if not detected_lang:
             detected_lang = payload.get("language") or payload.get("language_code") or ""
 
+    medido = False
+    # O SILÊNCIO SAI DO ÁUDIO, NÃO DO TRANSCRITO. Só o Scribe mede pausa por
+    # conta própria; Whisper (Groq ou whisper.cpp) entrega timeline contígua e
+    # esconde a pausa dentro da duração da palavra. Ver `_apply_measured_spacing`.
+    if backend != "elevenlabs" and words:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from speech_regions import measured_silences  # noqa: PLC0415
+            sil = measured_silences(audio_path)
+            if sil:
+                before = sum(1 for w in words if w.get("type") == "spacing")
+                words = _apply_measured_spacing(words, sil)
+                # CARIMBA A PROCEDÊNCIA. Sem isto só o caminho de REPARO marcava
+                # o transcrito como medido, e o `portao_fase1.py` reprovava um
+                # arquivo recém-transcrito que já tinha a pausa certa — não há
+                # como distinguir medido de cego olhando os números, porque
+                # palavra dentro de frase contínua encosta na seguinte dos dois
+                # jeitos. Quem sabe é quem mediu.
+                medido = True
+                if verbose:
+                    after = sum(1 for w in words if w.get("type") == "spacing")
+                    print(f"    silêncio medido no áudio: {before} → {after} pausas", flush=True)
+        except Exception as exc:  # medição é upgrade, não requisito
+            if verbose:
+                print(f"    aviso: silêncio não medido ({exc}); usando gaps do Whisper", flush=True)
+
     if backend == "elevenlabs":
         backend_tag = f"elevenlabs/{ELEVENLABS_MODEL}"
     elif backend == "whispercpp":
@@ -640,6 +774,7 @@ def _transcribe_audio(
         "text": " ".join(text_parts).strip(),
         "words": words,
         "_transcription_backend": backend_tag,
+        **({"_spacing_source": "measured/silencedetect"} if medido else {}),
     }
 
 
@@ -739,6 +874,66 @@ def transcribe_one(
     return out_path
 
 
+def repair_spacing(video: Path, edit_dir: Path) -> int:
+    """Reescreve os `spacing` de um transcrito já gravado, medindo o áudio.
+
+    Não re-transcreve: as PALAVRAS do Whisper continuam as mesmas, só a
+    informação de pausa é refeita. Todo transcrito Whisper gerado antes desta
+    correção nasceu cego a pausa (ver `_apply_measured_spacing`), e re-subir
+    áudio para consertar isso seria pagar de novo por um texto que já está certo.
+
+    O original vira `<nome>.prev.json` na primeira vez — nunca sobrescreve um
+    backup existente, senão rodar duas vezes apaga o estado original de verdade.
+    """
+    tdir = edit_dir / "transcripts"
+    tpath = tdir / f"{video.stem}.json"
+    if not tpath.exists():
+        print(f"transcrito não encontrado: {tpath}", file=sys.stderr)
+        return 1
+
+    data = json.loads(tpath.read_text())
+    words = data.get("words") or []
+    if not words:
+        print(f"transcrito sem palavras: {tpath}", file=sys.stderr)
+        return 1
+
+    backend = str(data.get("_transcription_backend") or "")
+    if backend.startswith("elevenlabs"):
+        print(f"{tpath.name}: backend Scribe já mede pausa no áudio — nada a fazer.")
+        return 0
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from speech_regions import measured_silences  # noqa: PLC0415
+
+    sil = measured_silences(video)
+    if not sil:
+        print("nenhum silêncio detectado no áudio — nada a fazer.", file=sys.stderr)
+        return 1
+
+    before = sum(1 for w in words if w.get("type") == "spacing")
+    fixed = _apply_measured_spacing(words, sil)
+    after = sum(1 for w in fixed if w.get("type") == "spacing")
+
+    # O backup NÃO pode morar em transcripts/: o pack_transcripts faz glob de
+    # *.json ali e trataria o backup como uma segunda fonte, duplicando o take
+    # inteiro no takes_packed.md.
+    bdir = tdir / ".backups"
+    bdir.mkdir(exist_ok=True)
+    backup = bdir / f"{video.stem}.prev.json"
+    if not backup.exists():
+        backup.write_text(tpath.read_text(), encoding="utf-8")
+    data["words"] = fixed
+    data["_spacing_source"] = "measured/silencedetect"
+    tpath.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    big = sum(1 for a, b in sil if b - a >= 0.5)
+    print(f"{tpath.name}: pausas {before} → {after}  ({len(sil)} silêncios medidos, "
+          f"{big} deles ≥0.5s = quebra de frase no takes_packed.md)")
+    print(f"  original preservado em {backup.relative_to(edit_dir)}")
+    print("  agora rode: pack_transcripts.py --edit-dir <edit>")
+    return 0
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Transcribe a video with Groq Whisper")
     ap.add_argument("video", type=Path, help="Path to video file")
@@ -786,6 +981,15 @@ def main() -> None:
              "local, no API key, no upload cap — needs whisper.cpp built and a "
              "ggml model downloaded).",
     )
+    ap.add_argument(
+        "--repair-spacing",
+        action="store_true",
+        help="Não transcreve: relê o transcrito que já está em <edit>/transcripts/ e "
+             "REESCREVE os tokens `spacing` a partir do silêncio medido no áudio. "
+             "Todo transcrito Whisper gravado antes desta correção tem a pausa "
+             "escondida dentro da duração da palavra e é invisível ao "
+             "pack_transcripts. Sem re-upload, sem custo de API.",
+    )
     args = ap.parse_args()
 
     video = args.video.resolve()
@@ -793,6 +997,9 @@ def main() -> None:
         sys.exit(f"video not found: {video}")
 
     edit_dir = (args.edit_dir or (video.parent / "edit")).resolve()
+
+    if args.repair_spacing:
+        sys.exit(repair_spacing(video, edit_dir))
     # Local transcription must not require a cloud key — that's the whole point.
     api_key = "" if args.backend == "whispercpp" else load_api_key()
     elevenlabs_key = load_elevenlabs_key()

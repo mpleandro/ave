@@ -268,7 +268,11 @@ possível; entregar a aproximação com o nome do original, não.
 
 ### The accent colour (`accent` in preview_style.json)
 
-O accent é o mesmo da headline e da legenda; o padrão é `#ff5200`. The user picks it on the Estilo tab and it
+O accent é o mesmo da headline e da legenda; o padrão DO PRODUTO é o
+vermelho `#ff3b30` — é o que um usuário novo recebe ao instalar a Avelin.
+A marca de QUEM edita mora em `~/.avelin/brand.json` (fora do repo) e
+vence o default em todo projeto novo; o laranja `#FF5200` é a marca
+PESSOAL do dono desta instalação, não o padrão do produto. The user picks it on the Estilo tab and it
 arrives as a hex — set it on **`hook.accent`** and **`captions.accent`** in
 edit-data.json so headline and caption stay the same colour. `preview_style.json`
 also carries `accentUsed`: when it is `false`, the picked styles have no accent
@@ -348,7 +352,7 @@ still there as a montage over real footage if a still is useful.)
     blur on the highlighted word only reads because everything else is still.
 - **`"stacked"`**: words stacked tight, mixing per line — Poppins bold-italic
   (white→gray gradient) / Poppins regular (smaller) / Playfair serif bold-italic
-  in ORANGE `#ff5200` / Poppins bold. Emphasis words appear solo; key ones get a
+  in the ACCENT colour (default `#ff3b30`; brand/pick overrides) / Poppins bold. Emphasis words appear solo; key ones get a
   hand-drawn green pencil ellipse. **Baked SFX** (no extra step, no Premiere): a
   **click** on every solo word, a **scratch** when a word is circled.
 
@@ -407,6 +411,40 @@ pick, then render ONE still for design approval before the full render.
 **De-conflict:** the hook owns the upper zone for its window — push any insert
 that wants the same zone to after `hook.endSec` (e.g. move a 2.5s cutaway to
 ~4.1s).
+
+### Riser no gancho — pergunte: sim / não / SEMPRE
+
+Regra nascida no edvid e confirmada no ave (Fome de Poder v2): o gancho leva um
+**riser de SFX que RESOLVE na virada** — a headline estática sozinha não cria
+expectativa sonora; o riser transforma os primeiros segundos numa contagem para
+alguma coisa. Riser que termina ANTES da virada vira som solto; que termina
+DEPOIS atropela o acento que já existe ali.
+
+Protocolo (decidido pelo usuário em 2026-08-18):
+
+1. Com hook ligado e `elements.sfx` on, **consulte**
+   `~/.avelin/preferencias.json` → `regras.shortform.hook_riser`. Valor
+   `"sempre"` → aplica sem perguntar. Ausente → **pergunte** (AskUserQuestion)
+   com as opções **sim / não / sempre**; resposta "sempre" grava a chave (edite
+   o JSON preservando o resto) e aplica.
+2. A **virada** é onde o riser crava o pico. Candidatos, do mais sutil ao mais
+   forte: primeiro corte de take dentro do hook · saída da headline
+   (`hook.endSec`) · primeiro acento pós-hook (flash/split/gráfico). Se houver
+   mais de um candidato plausível, pergunte junto. (Este usuário escolheu o
+   primeiro corte dentro do hook no Fome de Poder v2.)
+3. **Como aplicar:** deixa manual em `edit-data.json` —
+   `"sfxCues": [{"at": <t>, "kind": "intro"}]` (kind `intro` = `riser-short.mp3`,
+   2,325s, vol 0,28, **pico no fim do arquivo**). O bloco final sai como
+   `start = at − lead`, com o lead MEDIDO pelo `probe()` do `sfx.py` (para o
+   riser-short: 0,864 — NÃO meça você com silencedetect, o limiar é outro).
+   Para cravar o fim do arquivo na virada: `at = t_virada − duração + lead`
+   (riser-short: `at = t_virada − 1.461`). **Confira no `sfx-events.json`**
+   que o compose grava: `start + dur` do bloco do riser tem de ser a virada —
+   foi assim que um `at` calculado com silêncio de -40dB saiu 0,5s cedo. Para
+   subidas longas há `kind: "tension"` (`riser-tension.mp3`, 9,1s) — corte o
+   começo do arquivo se precisar resolver antes.
+4. Confira no render: energia subindo nas janelas anteriores à virada
+   (`volumedetect` em janelas de 0,3s) e pico dentro de ±2 frames dela.
 
 ## Flash na transição (`elements.flashCut`)
 
@@ -497,6 +535,66 @@ instead of in the middle. Swapping the zoom/focus pair between them breaks both.
 whichever layout is up: 738 for `top` (text on the seam under the art), ~920 for
 `bottom` (text in the gap between chin and seam). Left at the `top` value, the
 headline lands across the speaker's mouth. Render one hook still after switching.
+
+## Style: "Broll Overlay" (`edit: "brollOverlay"`) — ênfase POR CIMA do vídeo
+
+Animações HyperFrames que cavalgam o a-roll para dar ênfase — com ou sem
+escurecer a tela. O conteúdo NÃO vem de catálogo: nasce de uma conversa sobre o
+corte aprovado. O protocolo, na ordem (decidido pelo usuário em 2026-08-18):
+
+1. **Cores primeiro, UMA vez na vida.** Leia `~/.avelin/brand.json`
+   (`deep` + `accent`). Ausentes → é a PRIMEIRA pergunta (AskUserQuestion),
+   e a resposta é SALVA lá — nunca mais se pergunta, a menos que o usuário
+   peça outra cor. Override pontual por `brollColors` no edit-data.
+2. **Sugestões vêm do corte, não da imaginação.** Com o pick `brollOverlay`
+   salvo, leia o transcrito do corte aprovado, escolha os 2–4 MOMENTOS que
+   merecem ênfase (números falados, conceito-chave, virada, enumeração) e
+   mande **AskUserQuestion — uma pergunta por momento**, com 2–3 sugestões
+   concretas ("o número 20 MIL contando", "JOGO DO TERRENO em letras grandes
+   escurecendo a tela") + o Other para ele ditar. O servidor já terá rodado a
+   Fase 2 base (o auto-run no salvar); depois das respostas escreva
+   `brollOverlays[]` e rode `phase2.py` de novo — é o mesmo ciclo do rerender.
+3. **Janelas cravadas em corte ou pausa medida**, nunca no meio de palavra —
+   as bordas saem do `jcut_timeline`/`speech_regions`, como todo corte. Nunca
+   durante o hook (o `check` acusa texto sob elemento opaco) e nunca
+   sobrepostas entre si (a mídia divide track com o split).
+4. **Posição respeita o rosto.** `pos: full` implica `dim` (a tela escurece,
+   o rosto pode sumir); `top`/`bottom` sem dim exigem MEDIR a cabeça no frame
+   (como no split: extraia um quadro, leia topo do cabelo e queixo) — o
+   elemento não tapa o rosto. `bottom` acaba antes da faixa de legenda; a área
+   útil do Instagram já está nas classes `pos-*` do CSS.
+5. **O ritmo é medido, não configurado.** `_bo_ritmo()` no compose: janela
+   <2,2s entra em 0,18s; >4,5s em 0,42s; o meio em 0,30s. Cadência dos filhos
+   idem. Não invente keyframes por projeto — ajuste a régua no compose se o
+   material pedir.
+6. **Todo overlay soa.** Whoosh cheio na entrada de janela escurecida, suave
+   nas que cavalgam; `stat` estala um pop quando o número assenta; `labels`
+   clicam um a um. Já emitido pelo `broll_markup` — não acrescente à mão.
+
+O schema, em `edit-data.json`:
+
+```json
+"brollOverlays": [
+  {"kind": "words",  "text": "JOGO DO TERRENO", "start": 21.5, "end": 24.0,
+   "dim": true, "pos": "full", "accentWords": [2]},
+  {"kind": "stat",   "value": "20", "count": 20, "prefix": "R$", "suffix": " mil",
+   "label": "por mês", "start": 25.0, "end": 28.2, "pos": "top"},
+  {"kind": "labels", "items": ["mil", "dois mil", "20 mil"],
+   "start": 29.0, "end": 31.0, "pos": "bottom"},
+  {"kind": "media",  "src": "broll_x.mp4", "aspect": "16 / 9",
+   "start": 32.0, "end": 34.0, "dim": 0.75}
+]
+```
+
+- `dim`: `true` = scrim 0.9; número = opacidade do scrim. É um DIV preto sobre
+  o vídeo — **nunca** `opacity` no a-roll (mata blend, cria stacking context).
+- `accentWords`: índices pintados no accent; sem ele, a palavra mais longa.
+- `count` ausente no `stat` → o valor entra pronto, sem contagem.
+- `media`: mesmo relógio do split (`data-media-start`), vídeo mudo, e o
+  arquivo mora na RAIZ do projeto (`hyperframes/`).
+- As legendas pintam POR CIMA do scrim (ordem do DOM) — fala nunca some.
+- Look em `assets/styles/broll-overlay.css`, tempo em `broll-overlay.js`
+  (construtor `AVE_BROLL`, mesmo idioma do insert/split).
 
 ## Behind-the-subject (element between person and background)
 

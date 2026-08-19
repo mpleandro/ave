@@ -71,3 +71,21 @@ templates/
 #
 # Se um dia entrar aqui algo pesado (textura 4K, pacote de filme inteiro), o
 # corte e por TAMANHO, arquivo a arquivo — nao voltar a ignorar a pasta toda.
+
+# Preferência aprendida e fixtures de regressão: DE CADA USUÁRIO, nunca do repo.
+#
+# Mesma razão do `templates/` acima, e mais forte. Uma fixture aponta para um
+# vídeo na máquina de alguém, com a voz e as palavras dessa pessoa, e descreve o
+# que ELA considera defeito — material, fala e critério são os três dela. E o
+# ponto em que um respiro incomoda muda de canal para canal: régua importada de
+# outro criador não testa nada útil.
+#
+# O repo entrega o mecanismo (`helpers/preferencias.py`, `tests/regressao.py`) e
+# um exemplo anônimo. O resto nasce na máquina de quem usa:
+#   · preferências  ~/.avelin/preferencias.json  (fora do clone, sobrevive a
+#                   `git clean -xdf` — histórico de meses não pode morrer num
+#                   comando de manutenção)
+#   · fixtures      tests/fixtures/*.json        (criadas com `regressao.py --criar`)
+prefs/
+tests/fixtures/*.json
+!tests/fixtures/exemplo.json

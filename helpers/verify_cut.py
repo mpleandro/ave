@@ -30,6 +30,8 @@ from pathlib import Path
 
 POP_DB = -8.0     # junction window louder than this → suspected pop
 HOT_DB = -6.0     # pre/post window louder than this → suspected clipped word
+# Tolerância da emenda J-cut. Ver o comentário em `lap` abaixo.
+JCUT_TOL = 0.010
 # A range this far under the median range reads as "I can't hear that bit" on a
 # phone speaker. Deliberately looser than voice_levels' 5dB source threshold:
 # by this point a gain has been applied and the remaining gap is intentional
@@ -197,8 +199,21 @@ def main() -> None:
             # must start BEFORE the outgoing take's audio ends.
             a_in, prev_end = aud_seams[i]
             lap = prev_end - a_in
-            if lap <= 0:
+            # ENCOSTO PERFEITO NÃO É BURACO. `lap <= 0` classificava como GAP o
+            # caso em que o áudio de entrada começa EXATAMENTE onde o de saída
+            # termina — vão de zero, som contínuo, nada reaberto. Num corte
+            # limpo de 13 trechos isso deu 11 flags: dez "GAP-0ms" e um
+            # "encavalado 0ms", os dois lados do mesmo epsilon de ponto
+            # flutuante. Um portão que reprova corte bom é um portão que o
+            # usuário aprende a desligar, e aí ele não pega mais o corte ruim.
+            #
+            # 10ms é bem abaixo dos 30ms de fade que o render já aplica nas
+            # bordas: o que passar disso é inaudível por construção, e o que for
+            # respiro reaberto de verdade tem ordem de 100ms.
+            if lap < -JCUT_TOL:
                 verdicts.append(f"GAP-{abs(lap) * 1000:.0f}ms")
+            elif abs(lap) <= JCUT_TOL:
+                verdicts.append("justaposto")
             else:
                 verdicts.append(f"encavalado {lap * 1000:.0f}ms")
         else:

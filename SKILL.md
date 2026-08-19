@@ -56,6 +56,30 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
     Pular esse passo entrega gaguejo no vídeo e legenda fora do tempo, e o usuário descobre assistindo.
 16. **Pediu vídeo "transparente"? AVALIE O OVERLAY ANTES DE ESCOLHER.** Toda vez que o usuário quiser um vídeo transparente, ou tirar o fundo de uma gravação de tela, decida entre `mix-blend-mode: screen` (o escuro some de graça — só serve para arte CLARA) e alfa de verdade em VP9 `yuva420p` (a arte tem escuro que importa: texto escuro, sombra, contorno). **Olhe a arte e prove antes de renderizar** — compor `1-(1-a)*(1-b)` sobre um quadro real do corte custa segundos e responde o que uma render responderia em minutos. Screen apaga TODO pixel escuro, não só o fundo. A tabela de decisão, as armadilhas e a receita da matte estão em `references/shortform.md`, seção "Quero o vídeo transparente".
 
+
+17. **INÍCIO DE REGIÃO ACÚSTICA NÃO É INÍCIO DE FRASE NOVA.** A retomada engolida
+    mora no COMEÇO da região seguinte, escondida dentro do carimbo esticado da
+    primeira palavra — medido DUAS vezes no mesmo take: "isso explica muito"
+    dentro do carimbo de `'porque'` (4.28→7.02) e "um sistema" dentro do de
+    `'eficiente'` (16.80→18.62). Um range que começa logo depois de uma pausa
+    que segue tentativa truncada ou repetida NÃO pode confiar na fronteira:
+    transcreva a CABEÇA da região isolada (2–3s, local) antes de fixar o start.
+    Errar isto recola a repetição que o corte existia para remover.
+18. **DETECTOR ACUSOU + RE-VERIFICAÇÃO DISCORDOU = INCERTO → O USUÁRIO DECIDE.**
+    O modelo nunca resolve sozinho — nem por "alucinação do detector", nem por
+    "anáfora deliberada". As duas auto-resoluções foram tentadas NO MESMO DIA e
+    as duas estavam erradas: o "um sistema ×2" foi acusado duas vezes, descartado
+    duas vezes, e era real das duas. Divergência entre instrumentos vira pergunta
+    com timestamp clicável, nunca veredito. (Vale igual para o
+    `precisa_julgamento` do `detect_restarts`: recomende — "parece anáfora" — e
+    deixe a decisão com quem gravou.)
+19. **O USUÁRIO APONTOU DEFEITO? MEÇA ANTES DE EXPLICAR.** Extraia a janela
+    apontada e transcreva/ouça ISOLADA antes de qualquer resposta — nunca releia
+    o transcrito para responder sobre o áudio (o transcrito é a parte que mente,
+    ver Regras 15 e 17). E cada defeito apontado vira fixture
+    (`tests/regressao.py --criar`): o vídeo que te corrigiu é a régua dos
+    próximos.
+
 ## Execution medium — ffmpeg pipeline (default) vs Adobe Premiere (MCP)
 
 The default engine is the ffmpeg/HyperFrames pipeline below. **If the user wants the
@@ -130,6 +154,13 @@ Phase 1:
 - **`pack_transcripts.py --edit-dir <dir>`** — transcripts → `takes_packed.md` (phrase-level, breaks on ≥0.5s silence). **The** reading view: 1/10 the tokens of raw JSON.
 - **`transcript_audit.py <edit> [--recheck]`** — ONDE A TRANSCRIÇÃO MENTE, e é o portão que faltava antes do EDL. O Whisper **engole repetição**: o locutor gagueja, refaz a frase, e sai UMA passada limpa — o parágrafo lê perfeito e o `takes_packed.md` não tem como avisar. Também **troca palavra por palavra** ("trabalhar" → "avaliar", ambas plausíveis). Nenhum detector de TEXTO pega isso porque o texto está bem. Este pega por **densidade acústica** (região de fala com poucas palavras dentro = fala não transcrita; é física, não linguagem) e por **discordância entre as duas passadas** que o projeto já faz de graça. `--recheck` transcreve só a janela suspeita, isolada — sem contexto em volta o modelo não tem para onde suavizar e a repetição reaparece. Medido na série "170 Questões": achou 2 das 3 gaguejadas que o usuário só viu assistindo, uma delas com **0 palavras em 0,80s de fala**.
 - **`cut_transcript.py <edit> -o transcripts/cut_mapped.json`** — o transcrito do CORTE por mapeamento do EDL, não por transcrever de novo. É o que a Fase 2 usa para legenda (veja a Hard Rule 15).
+- **`transcribe.py <video> --edit-dir <edit> --repair-spacing`** — REESCREVE a pausa de um transcrito já gravado, medindo o áudio. Não re-transcreve, não sobe nada: as palavras do Whisper ficam, só a informação de silêncio é refeita. **Todo transcrito Whisper anterior a esta correção nasceu cego a pausa** — o adaptador reconstruía o token `spacing` do gap entre palavras do próprio Whisper (`s > prev_end`), e esse número é sempre 0.00 porque a timeline dele é contígua e a pausa vira DURAÇÃO da palavra anterior. Medido num take de 60s: 10 tokens `spacing` para 14 silêncios reais, os 8 ausentes exatamente os que caíam dentro de uma palavra; o `takes_packed.md` foi de 7 para 16 frases depois do reparo. Rode em qualquer projeto antigo antes de reaproveitar o transcrito.
+- **`detect_restarts.py <edit> [--edl] [--json]`** — FRASE REFEITA, por n-grama repetido em janela curta. Quatro delas foram para um corte final estando escritas, em português, no `takes_packed.md` que o editor leu. Três regras, nesta ordem: **truncada** (a primeira versão morre em palavra funcional — "é um negócio DE") → remove sozinho; **idêntica** → fica a última; **semântica** → PERGUNTA. `--edl` roda sobre o corte e pega repetição que atravessa emenda. Todo hit semântico sai marcado `precisa_julgamento`: repetição também é anáfora ("com um sistema impecável" / "Um sistema eficiente"), e separar as duas é significado, não string — é o único ponto do pipeline onde julgar é o trabalho certo.
+- **`perguntar.py <edit> [--contexto NOME] [--teto N]`** — o que perguntar ao usuário, e o que NÃO perguntar. **A pergunta nunca mostra um número** ("hesitação de 0,38s abaixo do limiar" descreve o instrumento, não a escolha): mostra o áudio, com timestamp para clicar no editor que já está no ar, e a consequência. **Uma pergunta por classe, não por ocorrência** — sete respiros viram uma pergunta com três exemplos. Consulta o `preferencias.py`: confiança alta aplica calado, média aplica e informa, baixa pergunta.
+- **`preferencias.py [--mostrar|--aprender <edit>|--consultar F C|--reset]`** — o que ESTE usuário costuma querer, aprendido das decisões dele. Mora em `~/.avelin/preferencias.json`, **fora do clone** (preferência de meses não pode morrer num `git clean`). O limiar é o ponto médio entre o maior vão que ele MANTEVE e o menor que ele REMOVEU; faixas que se cruzam derrubam a confiança em vez de inventar um número. `--aprender` lê o `preview_edits.json` — o que ele corrigiu à mão depois da entrega, que é o sinal mais forte que existe e estava sendo descartado. Confiança governa autonomia (<5 pergunta, 5–15 informa, >15 calado), e contradizer um limiar confiante derruba a confiança: discordar do usuário custa autonomia à ferramenta, nunca o contrário.
+- **`verify_takes.py <edit> [--video preview_proxy.mp4]`** — **OUVE o corte pronto** e acusa frase repetida, sem confiar em transcrito nenhum. Existe porque o `detect_restarts.py` lê o TEXTO e o Whisper **engole a segunda passada**: quatro repetições chegaram ao usuário num corte cujo `takes_packed.md` mostrava duas frases emendando perfeitamente, enquanto o áudio dizia *"Isso explica muito, isso explica muito, porque você ganha"*. Re-transcrever o corte inteiro NÃO resolve — com contexto o modelo suaviza de novo (verificado: a passada completa sobre o render saiu limpa). O que funciona é **janela curta e ISOLADA**, em várias larguras (2,4/4,0/6,0s), ficando com a menor em que cada achado apareceu. Roda local com mlx-whisper — grátis, offline, ~1min num corte de 40s. Exit 1 se achar algo.
+
+- **`portao_fase1.py <edit> [--pular-render]`** — **O PORTÃO. Exit 1 = o corte não vai para aprovação.** Checa, nesta ordem: `spacing` medido (sem ele a seleção de tomada foi às cegas e o resto é teatro), reinício sobrevivente, `quote` × conteúdo real do range, e `verify_cut` sobre o render. Existe porque os auditores já existiam quando dez defeitos de fala chegaram ao usuário — não faltava ferramenta, faltava obrigação. A diferença entre recomendação e portão é o exit code.
 - **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is.
 - **`voice_levels.py <video> [--edit-dir <dir>] [--edl edl.json] [--drop-db 5]`** — the source of truth for speech LEVEL. Learns the noise floor (Ridler-Calvard intermeans, not a percentile) and the speaker's own median from the recording itself, then flags every phrase, sub-phrase run, and EDL range sitting ≥5 dB under that median and sizes a `gain_db` for each. Catches the failure nothing else sees: a whispered aside or a trailing-off sentence where every word is present, the transcript is perfect, `speech_regions` says "speech", `verify_cut` finds no pop and no dead air — and the viewer still hits a passage they cannot hear. **Run it in Phase 1 before writing the EDL.**
 - **`detect_color.py <video> [--json]`** — resolves NORMAL vs LOG from the file instead of asking. Tier 1 metadata (HLG/PQ declare themselves; Apple Log's signature is ProRes 10-bit 4:2:2 + BT.2020 primaries + EMPTY transfer; vendor tags when present), Tier 2 image statistics when the metadata is silent — which is common, since a Sony shooting S-Log3 to H.264 often declares plain bt709 and any transcode drops the tags. Returns the profile, a **confidence**, the evidence, and the `grade` to apply (measured from the footage for non-Apple LOG). Only `confidence: low` should send you back to the user.
@@ -157,6 +188,7 @@ Every edit session gets the same interactive interface in the user's preview pan
    {"project": "Nome — C0000", "phase": 1, "video": "preview_proxy.mp4", "edl": "edl.json",
     "captions": "hyperframes/captions.json", "editData": "hyperframes/edit-data.json",
     "finalVideo": "final.mp4", "fps": 24, "message": "Fase 1 — cortando",
+    "startedAt": 1787000000,
     "sourceDurations": {"C0000": 1038.5},
     "awaitingStyle": false,
     "style": {"edit": "split", "captions": "karaoke",
@@ -166,7 +198,7 @@ Every edit session gets the same interactive interface in the user's preview pan
 2. Ensure `.claude/launch.json` has the config (adjust `--root` per session). The
    server takes the port by flag only, so pass the harness-assigned `$PORT` and
    set `autoPort` — port 4820 is often held by another session:
-   `{"name": "avelin-preview", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "exec python3 <skill>/helpers/preview_server.py --root '<edit>' --port \"$PORT\""], "autoPort": true, "port": 4820}`
+   `{"name": "avelin-preview", "runtimeExecutable": "sh", "runtimeArgs": ["-c", "exec \"$([ -x <skill>/.venv/bin/python ] && echo <skill>/.venv/bin/python || echo python3)\" <skill>/helpers/preview_server.py --root '<edit>' --port \"$PORT\""], "autoPort": true, "port": 4820}`
 3. `preview_start` with name `avelin-preview`.
 4. **Arm the watcher IN THE SAME TURN as `preview_start`** — never later, never
    "when the user starts editing":
@@ -294,7 +326,32 @@ usuário de volta para uma tela de "começar" um trabalho que já começou.
 O estado do APLICATIVO (não do projeto) vive em `~/.avelin/`: `projects.json`
 (os recentes) e `current.json` (o projeto aberto agora, que o watcher segue).
 
+**`startedAt` (epoch em segundos) liga o RELÓGIO da tela de etapas.** Escreva-o
+quando o trabalho da Fase 1 começar. Sem ele o usuário ainda vê as etapas — a
+interface não depende mais só desse campo — mas perde o tempo decorrido, que é
+o que distingue "lento" de "travado" numa espera de minutos.
+
 **Keep state.json fresh** — bump `phase` and `message` at each milestone (cut rendered, cut approved, Phase 2 rendered…). The UI polls and hot-reloads by itself; waveform + filmstrip regenerate automatically when preview.mp4 changes.
+
+**O `message` NÃO é decorativo: é o que a tela de carregamento destaca.** Entre
+o clique e o primeiro render passam oito etapas e vários minutos em que o
+usuário não tem vídeo nenhum para olhar — o único sinal de vida é essa linha, e
+o editor casa o texto dela com a etapa que acende. **Atualize a cada etapa**, com
+palavras que caiam nas faixas do `F1_STEPS` (app.js):
+
+| etapa | escreva algo com |
+|---|---|
+| medir as fontes | "medindo as fontes" / "papel da fonte" |
+| transcrever | "transcrevendo" |
+| auditar | "conferindo a transcrição" |
+| escolher tomadas | "escolhendo as tomadas" / "estratégia" / "EDL" |
+| respiros | "medindo os respiros" / "ritmo" |
+| cor | "correção de cor" / "graduação" |
+| cortar | "cortando" / "renderizando" |
+| conferir | "conferindo o corte" / "proxy" |
+
+Uma mensagem fora dessas faixas deixa o destaque parado na etapa anterior, e um
+indicador que não anda lê como travado.
 
 The timeline shows one track per KIND: markers, captions, video, audio (the mix),
 **A1 / A2** (the J-cut takes), **text** overlays (hook), **images** (inserts + any
@@ -377,6 +434,14 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   `zoomAuto` (automação de zoom in), `zoomCuts` (zoom in/out nos cortes),
   `flashCut` (flash na transição), `musicAI` (trilha sonora com IA), plus a
   free-text observation field.
+
+**O servidor DISPARA a Fase 2 sozinho no salvar** (`--auto` é o padrão do
+`preview_server.py`) — então quando o `watch_edits.py` te avisar de um estilo
+salvo, **cheque `progress.json` antes de rodar qualquer coisa**: se a task
+`fase2` já está `running`, o seu papel é acompanhar e atualizar o `state.json`,
+não rodar de novo (dois `phase2.py` no mesmo projeto disputam os mesmos
+arquivos). O pedido em TEXTO ("Alterações extras") continua sendo seu: o
+servidor não interpreta linguagem — leia e execute o que ele descreve.
 
 Saving writes `<edit>/preview_style.json` (its OWN file — a style pick and a
 timeline correction are different screens at different moments, and one shared
@@ -467,6 +532,38 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
    **Multicam confirmada:** o deslocamento que o helper mediu é o sync. Ranges
    do ângulo secundário usam a mesma janela de áudio com a fonte trocada e o
    tempo corrigido por ele — não uma segunda passada de transcrição.
+2a. **VARRA O ÁUDIO DA FONTE — `verify_takes.py --fonte` — antes de escolher qualquer tomada.**
+
+   ```bash
+   uv run python helpers/verify_takes.py <edit> --fonte <fonte.MP4>
+   ```
+
+   É a etapa que faz o "aha moment" do corte funcionar, e a razão é um defeito
+   de instrumento, não de atenção: **o Whisper apaga a repetição do texto sem
+   apagá-la do áudio.** Medido três vezes neste projeto — "isso explica muito"
+   dito duas vezes virou uma no transcrito; "que muitos chamam" retomado sumiu;
+   e re-transcrever o corte INTEIRO devolve a versão limpa de novo, porque com
+   contexto o modelo suaviza. Nenhum detector de texto pega o que o texto não
+   tem.
+
+   A varredura transcreve janelas curtas e ISOLADAS (2,4/4,0/6,0s, local via
+   mlx-whisper, grátis) onde a segunda passada reaparece, confirma cada achado
+   numa janela deslocada (janela isolada também alucina — medido), e grava
+   `defeitos_audio.json`: o mapa das janelas da fonte que o EDL deve DESVIAR.
+   O `portao_fase1.py` confere se desviou — range que contém uma repetição
+   confirmada do mapa é FALHA, antes mesmo de renderizar.
+
+   O ciclo inteiro, e onde cada peça age:
+
+   | quando | quem | pega |
+   |---|---|---|
+   | na transcrição | prompt de disfluência (Groq, pt) | viés a favor de manter gaguejo no texto |
+   | antes do EDL | `verify_takes --fonte` | repetição que o texto NÃO tem (áudio) |
+   | antes do EDL | `detect_restarts` | repetição que o texto TEM |
+   | antes do EDL | `transcript_audit` | fala sem texto (densidade) |
+   | no EDL | `portao` × `defeitos_audio.json` | range em cima de defeito conhecido |
+   | no render | `portao` → `verify_takes` no corte | o que ainda assim passou |
+
 2. **Pre-scan** `takes_packed.md` for verbal slips, mis-speaks, and dead-air-stretched words (Whisper stretches a word's end across silence — verify long "phrases" against `speech_regions.py`/waveform before trusting them). **Then rode DOIS auditores, porque o transcrito é cego de dois jeitos diferentes:**
    - **`transcript_audit.py <edit>`** — o transcrito é cego ao que ELE MESMO não escreveu. Gaguejo e repetição somem sem rastro: o parágrafo lê perfeito e falta uma frase inteira de áudio. Toda janela acusada é uma decisão a tomar ANTES do EDL. `--recheck` resolve as dúvidas transcrevendo só a janela, isolada.
    - **`voice_levels.py` em cada fonte** — o transcrito é cego ao NÍVEL, então um trecho inaudível lê igual a um normal. O que ele acusar: reforce com `gain_db`, ou corte o take.
@@ -487,6 +584,93 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
    picks the curve, the user picks the look.
 5. **Propose the cut strategy** (4–8 sentences: shape, takes, cut direction, grade direction, length estimate). **Wait for confirmation.**
 6. **Escreva o EDL.** `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times.
+6b. **PASSE PELO PORTÃO antes de mostrar qualquer corte.** Não é sugestão:
+
+   ```bash
+   uv run python helpers/portao_fase1.py <edit> --pular-render   # antes de renderizar
+   uv run python helpers/portao_fase1.py <edit>                  # depois, com verify_cut
+   ```
+
+   Exit 1 significa que o corte **não vai para aprovação** — volta como lista de
+   defeitos com timestamp e conserto. Isto existe porque `transcript_audit.py`,
+   `propose_breaths.py` e `verify_cut.py` já estavam todos documentados como
+   "rode antes do EDL" no dia em que um corte de 51s saiu para o usuário com dez
+   defeitos de fala: `edit/verify/` não existia, o `edl.json` não tinha
+   `breaths[]`, e o `verify_cut.py` — que sonda exatamente a palavra cortada na
+   emenda — teria reprovado aquele corte sozinho. Recomendação que se pode pular
+   é recomendação que se pula.
+
+   Depois do portão, `perguntar.py` decide o que ainda merece uma pergunta ao
+   usuário e o que a preferência dele já responde.
+
+   **DUAS REGRAS QUE NASCERAM DE UM CORTE ENTREGUE COM QUATRO REPETIÇÕES:**
+
+   1. **O portão com render OUVE o corte** (`verify_takes.py`, chamado por dentro).
+      Todas as outras checagens leem texto, e o texto é justamente onde a
+      repetição não está — o Whisper a apaga do transcrito sem apagá-la do áudio.
+      Nunca mostre um corte que não passou por essa passada.
+
+   2. **Um reinício SEMÂNTICO nunca é descartado pelo modelo.** O
+      `detect_restarts.py` marcou "com um sistema impecável" / "Um sistema
+      eficiente"; o modelo julgou anáfora deliberada, descartou calado, e o autor
+      da frase ouviu o vídeo e disse que era repetição. **Ninguém sabe a intenção
+      de quem falou além de quem falou.** Recomende — "isto me parece anáfora, e
+      cortá-la estragaria o texto" — e deixe a decisão com ele. Descartar sem
+      mostrar é a única saída que não existe. (O espelho também aconteceu: no
+      mesmo material, outra sessão julgou DUPLICATA e cortou a anáfora calada —
+      "com um sistema impecável, perfeito e de excelência" sumiu do corte. A
+      regra vale nos dois sentidos: nem manter nem cortar sem mostrar.)
+
+   **MAIS QUATRO, DO CORTE QUE MUTILOU A ANÁFORA (Fome de Poder v2):**
+
+   3. **Duplicata mínima.** Quando uma repetição confirmada precisa sair,
+      remove-se a MENOR janela que a contém — uma ocorrência do n-grama, emenda
+      em silêncio medido. Nunca se resolve duplicata cortando oração vizinha que
+      só existe uma vez: o corte que motivou esta regra removeu a oração inteira
+      "com um sistema impecável, perfeito e de excelência" para evitar um eco de
+      1s que sairia sozinho.
+
+   4. **Fronteira é medida; carimbo é palpite.** Onde o detector acústico e o
+      transcrito discordam (fala engolida pelo Whisper), o carimbo da palavra
+      vizinha NÃO posiciona corte — `silencedetect`/`speech_regions.py`
+      posicionam. Dois cortes da mesma sessão entravam no meio de palavra: um em
+      17.62s, dentro do "um sistema" engolido pelo carimbo de "eficiente"; outro
+      em 51.35s, no meio do "E" de "E essa" (o Groq tinha carimbado esse "E" a
+      0,7s de distância, colado na frase errada).
+
+   5. **Retake engolido: procure o take B inteiro.** Quando o silêncio medido
+      acusa FALA onde o transcrito mostra silêncio, suspeite de um retake
+      completo invisível no texto. Re-transcreva o sub-clipe ISOLADO (via Groq)
+      e, se o retake for completo, prefira-o INTEIRO a emendar take A + take B:
+      "Aí chega Ray Kroc, que muitos chamam de vilão" existia contínuo na fonte
+      enquanto o corte emendava dois takes para dizer o mesmo — com o "que"
+      perdido na emenda. Conectivo órfão ("que", "e", "mas") pendurado no fim do
+      grupo anterior do `takes_packed.md` é o sintoma clássico.
+
+   6. **Diff de aceitação contra o roteiro-alvo.** Existindo um roteiro final
+      (dado pelo usuário ou aprovado em conversa), transcreva o RENDER via Groq
+      e compare palavra a palavra com ele. Toda oração ausente exige
+      justificativa explícita DITA ao usuário — nunca só anotada no `reason` do
+      EDL, que ninguém lê. Foi este diff que pegou as três mutilações que
+      originaram as regras 3–5.
+
+6c. **RENDERIZE O PROXY ASSIM QUE O PORTÃO ABRIR — antes do passo do ritmo.**
+
+   ```bash
+   uv run python helpers/render.py <edit>/edl.json -o <edit>/preview_proxy.mp4 --proxy --no-subtitles
+   ```
+
+   A ordem antiga punha os respiros (passo 7) ANTES do primeiro render, e isso
+   pedia ao usuário que escolhesse o ritmo de um corte **que ele nunca viu nem
+   ouviu**. Pior: entre escrever o EDL e ver alguma coisa passavam oito etapas
+   com a tela em espera — foi exatamente a reclamação que originou esta linha
+   ("por que ainda não vejo o resultado dos cortes?").
+
+   Renderizar aqui custa pouco (720p/veryfast, ~3,2× mais barato por segmento
+   que o final) e paga duas vezes: o usuário ganha o corte para julgar, e a
+   pergunta do ritmo passa a ser feita com o material na tela dele. Depois dos
+   respiros o proxy é refeito — é o mesmo comando.
+
 7. **Encurte o ar morto — SEMPRE, antes do primeiro render, e PERGUNTANDO o ritmo.**
    Cortar no silêncio resolve o ar ENTRE tomadas; sobra o de DENTRO — a pausa no
    meio do próprio raciocínio, que nenhuma escolha de tomada remove porque está
@@ -985,7 +1169,7 @@ On startup, read it if it exists and summarize the last session in one sentence 
 - Manter uma segunda cópia dos números/catálogos no `app.js`. Já aconteceu com
   os layouts de headline e com a lista de quem usa destaque — ao entrarem sete
   layouts, a cópia teria nascido desatualizada. Leia do `variants.json`.
-- Hardcoding `#ff5200` (or any accent) in the template. The Estilo tab lets the
+- Hardcoding `#ff3b30` (or any accent) in the template. The Estilo tab lets the
   user pick it, so a literal makes the preview show their colour and the render
   show orange — worse than not offering the choice. Feed `accent` into
   `hook.accent` + `captions.accent`.

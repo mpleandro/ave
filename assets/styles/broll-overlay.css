@@ -1,0 +1,100 @@
+/* BROLL OVERLAY — animações de ênfase POR CIMA do a-roll.
+ *
+ * Três decisões estruturais, todas aprendidas em outras famílias:
+ * - O escurecimento é um SCRIM próprio, nunca `opacity` no vídeo: opacidade
+ *   abaixo de 1 cria contexto de empilhamento e mata qualquer blend (medido no
+ *   fork de origem; a memória do projeto guarda o caso).
+ * - As cores vêm de variáveis por janela (--bo-deep / --bo-accent), escritas
+ *   pelo compositor a partir de ~/.avelin/brand.json. Hexa cru aqui repetiria
+ *   o erro do accent hardcoded que a aba Estilo existe para evitar.
+ * - Todo estado inicial invisível (opacity:0) é REAPLICADO pelo JS no
+ *   buildTimeline — a folha sozinha nunca decide visibilidade final, senão a
+ *   prévia ao vivo mostra tela vazia (lição do `revelar`).
+ */
+
+.ave-bo-scrim {
+  position: absolute; inset: 0;
+  background: #000;
+  opacity: 0;               /* o GSAP leva até o valor do data-dim */
+  pointer-events: none;
+}
+
+.ave-bo-win {
+  position: absolute; left: 0; width: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+  opacity: 0;               /* entrada é do JS */
+}
+.ave-bo-win.pos-full   { top: 240px;  height: 1200px; }
+.ave-bo-win.pos-top    { top: 140px;  height: 640px; }
+.ave-bo-win.pos-bottom { top: 1080px; height: 400px; } /* acaba antes da faixa de legenda (~1490) */
+
+/* ---- palavra/frase cinética ---- */
+.ave-bo-words {
+  max-width: 880px;
+  text-align: center;
+  font-family: 'Poppins', 'Open Sans', system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 108px;
+  line-height: 1.04;
+  color: #fff;
+  text-shadow: 0 4px 28px rgba(0, 0, 0, .55);
+}
+.ave-bo-win.pos-top .ave-bo-words,
+.ave-bo-win.pos-bottom .ave-bo-words { font-size: 76px; }
+.ave-bo-words .bo-w { display: inline-block; margin: 0 .14em; }
+.ave-bo-words .bo-w.acc { color: var(--bo-accent, #ff3b30); }
+
+/* ---- número/estatística ---- */
+.ave-bo-stat {
+  text-align: center;
+  font-family: 'Poppins', 'Open Sans', system-ui, sans-serif;
+  color: #fff;
+}
+.ave-bo-stat .bo-value {
+  font-weight: 900;
+  font-size: 190px;
+  line-height: 1;
+  color: var(--bo-accent, #ff3b30);
+  text-shadow: 0 6px 34px rgba(0, 0, 0, .6);
+}
+.ave-bo-win.pos-top .ave-bo-stat .bo-value,
+.ave-bo-win.pos-bottom .ave-bo-stat .bo-value { font-size: 120px; }
+.ave-bo-stat .bo-fix { font-size: .42em; font-weight: 700; vertical-align: .12em; margin: 0 .08em; }
+.ave-bo-stat .bo-label {
+  margin-top: 18px;
+  font-weight: 600;
+  font-size: 46px;
+  letter-spacing: .04em;
+  color: rgba(255, 255, 255, .92);
+}
+
+/* ---- etiquetas em sequência ---- */
+.ave-bo-labels { display: flex; flex-direction: column; gap: 22px; align-items: center; }
+.ave-bo-labels .bo-item {
+  font-family: 'Poppins', 'Open Sans', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 56px;
+  color: #fff;
+  background: var(--bo-deep, #0D2137);
+  border-left: 10px solid var(--bo-accent, #ff3b30);
+  border-radius: 14px;
+  padding: 18px 44px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .45);
+  opacity: 0;               /* cada item entra pelo JS, um a um */
+}
+
+/* ---- mídia pronta ---- */
+.ave-bo-media {
+  border-radius: 26px;
+  overflow: hidden;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .55);
+  background: var(--bo-deep, #0D2137);
+}
+.ave-bo-win.pos-full .ave-bo-media { width: 880px; }
+.ave-bo-win.pos-top .ave-bo-media,
+.ave-bo-win.pos-bottom .ave-bo-media { width: 700px; }
+.ave-bo-media video, .ave-bo-media img {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+}

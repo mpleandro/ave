@@ -218,12 +218,16 @@ def approval_digest(p: Path) -> str:
         return f"preview_approval.json ilegível ({e.__class__.__name__})"
     nota = (d.get("note") or "").strip()
     out = [f"✅ CORTE APROVADO pelo usuário ({d.get('savedAt', '')}).",
+           "   O SERVIDOR JÁ DISPAROU o encode 1080p e abriu a aba Estilo —",
+           "   NÃO rode render.py em paralelo: dois encodes limpam o mesmo",
+           "   clips_graded/ e um mata o outro (medido: exit 254 no seg_02).",
            "   Agora, nesta ordem:",
-           "   1. encode o corte final UMA vez:  render.py edl.json -o preview.mp4 --no-subtitles",
-           "   2. aponte state.json.video para preview.mp4 (é o que destranca as camadas do render)",
-           "   3. regenere segments.json a partir dos segmentos FINAIS",
-           "   4. só então abra a aba Estilo (awaitingStyle: true)",
-           "   Depois apague o preview_approval.json."]
+           "   1. acompanhe progress.json até o task 'encode' terminar;",
+           "      SÓ se ele falhar, rode você:  render.py edl.json -o preview.mp4 --no-subtitles",
+           "   2. com preview.mp4 pronto, aponte state.json.video para ele",
+           "      (é o que destranca as camadas do render)",
+           "   Depois apague o preview_approval.json.",
+           "   (segments.json não existe mais neste fluxo — o compose lê o jcut_timeline do edl.json)"]
     if nota:
         out.insert(1, f'   com observação: "{nota}"')
     return "\n".join(out)

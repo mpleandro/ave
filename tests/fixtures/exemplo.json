@@ -1,0 +1,15 @@
+{
+  "_leia": "EXEMPLO ANÔNIMO — não roda, serve de formato. Crie a sua com: uv run python tests/regressao.py --criar <edit-dir> --nome meu-projeto --contexto 'Minha Série' --defeitos '3.21-6.07:gaguejo, 8.77-9.47:respiro'",
+  "nome": "exemplo",
+  "edit": "/caminho/para/seu/projeto/edit",
+  "fontes": ["/caminho/para/sua/fonte.MP4"],
+  "formato": "shortform",
+  "contexto": "Minha Série",
+  "_proxy_do_corte_original": "congela o mapa do corte em que os defeitos foram VISTOS — sem isso o primeiro re-corte move todos os timestamps e a fixture passa a apontar para o lugar errado",
+  "proxy_do_corte_original": [{"start": 0.0, "end": 39.13}],
+  "_defeitos": "proxy_ini/proxy_fim são o tempo no vídeo que você ASSISTIU; fonte_ini é calculado e é a âncora estável",
+  "defeitos": [
+    {"proxy_ini": 3.21, "proxy_fim": 6.07, "tipo": "gaguejo", "fonte_ini": 3.21},
+    {"proxy_ini": 29.42, "proxy_fim": 32.43, "tipo": "duplicado", "fonte_ini": 29.42}
+  ]
+}

@@ -40,6 +40,22 @@
   display: none;
 }
 
+/* B-ROLL EM VÍDEO. Mesma geometria da arte, e uma diferença que é o ponto: sem
+   `display: none`.
+   
+   A imagem nasce escondida e o split.js a acende no início da janela. O vídeo
+   não passa por ali — ele leva `class="clip"` e os `data-start`/`data-duration`
+   do HyperFrames, então quem controla a visibilidade dele é o renderer. Duas
+   gerências sobre o mesmo `display` fariam uma apagar o que a outra acende, e o
+   sintoma seria uma faixa preta sem explicação. */
+.ave-split-media {
+  position: absolute;
+  left: 0;
+  right: 0;
+  width: 100%;
+  object-fit: cover;
+}
+
 /* Degradê na costura, SÓ no layout `top`.
  *
  * Ali a legenda senta sobre a arte e precisa de base para se ler. No `bottom`

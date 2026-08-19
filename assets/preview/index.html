@@ -284,11 +284,6 @@
       <!-- O SWITCH troca só o que está ABAIXO dele. Transporte, preview e barra
            de ação ficam nos dois modos: são a mesma edição vista de dois
            ângulos, não duas telas. -->
-      <!-- RECOLHER, simétrico ao das camadas: as duas metades da coluna
-           disputam a mesma altura, e só uma delas podia ceder. Em tela baixa,
-           recolher a linha do tempo é o que devolve o vídeo ao tamanho útil. -->
-      <button id="tlToggle" class="btn icon caret" type="button"
-              title="Recolher a linha do tempo" aria-expanded="true">⌄</button>
       <div class="viewseg" role="group" aria-label="Modo de edição">
         <button class="vseg on" data-view="tl" type="button" title="Linha do tempo" aria-label="Linha do tempo"></button>
         <button class="vseg" data-view="tx" type="button" title="Transcrição" aria-label="Transcrição"></button>
@@ -335,7 +330,14 @@
            o usuário sem noção de quanto está tirando, e de onde. -->
       <div id="cutOverlay" class="cut-overlay"></div>
       <div class="track ruler-track">
-        <div class="track-label"></div>
+        <!-- O MODO da linha do tempo mora DENTRO dela, na calha da régua — o
+             recolher que vivia na barra escondia o painel inteiro, que ninguém
+             pedia. O que se alterna é a DENSIDADE: compacta (vídeo + waveform
+             geral, o PADRÃO) ou expandida (marcações, legendas, J-cut,
+             efeitos). Conteúdo do botão nasce no JS, como os demais. -->
+        <div class="track-label">
+          <button id="tlMode" class="tl-modebtn" type="button" aria-expanded="false"></button>
+        </div>
         <div class="lane ruler-lane"><canvas id="ruler"></canvas></div>
       </div>
       <div class="track" id="trkNotes">
