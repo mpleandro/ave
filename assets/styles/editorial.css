@@ -1,0 +1,60 @@
+/* EDITORIAL — legendas por PAPEL, ancoradas à esquerda.
+ *
+ * O padrão é o `.amber` do site da Avelin levado ao vídeo (styles.local.js
+ * BRAND.roles): conectivo apagado (ctx), conteúdo firme (stress), acento em
+ * SERIF ITÁLICO (serif/serifAcc), punch no accent com glow, algarismo serif
+ * gigante (num). Achatar o contraste entre papéis mata o estilo — ele vira
+ * legenda comum com fonte trocada.
+ *
+ * Cores dos papéis são identidade do estilo (como o branco/cinza do stacked);
+ * só o ACCENT viaja por variável (--cap-accent), seguindo a aba Estilo. As
+ * famílias descem por --cap-family / --edt-serif para o seletor de fonte da
+ * aba poder trocar a sans (ex.: Britti local) sem tocar nesta folha.
+ */
+
+.ave-edt {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  font-family: var(--cap-family, 'Open Sans', system-ui, sans-serif);
+}
+
+.edt-cue {
+  position: absolute;
+  left: var(--edt-left, 90px);
+  right: 60px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column;
+  align-items: flex-start;
+  line-height: var(--edt-lh, 1.0);
+  letter-spacing: -0.02em;
+}
+
+.edt-line { display: flex; align-items: baseline; white-space: pre; }
+
+.edt-w {
+  display: inline-block;
+  transform-origin: left center;
+  opacity: 0;                    /* a entrada é do JS, palavra a palavra */
+  filter: drop-shadow(0 6px 14px rgba(13, 33, 55, .72));
+  font-size: calc(var(--cap-size, 76px) * var(--em, 1));
+  font-weight: var(--w, 400);
+  color: var(--cor, #F5F2EE);
+}
+
+.edt-w.r-ctx      { --em: 0.62; --w: 400; --cor: #7A95AA; }
+.edt-w.r-stress   { --em: 1.0;  --w: 700; --cor: #F5F2EE; }
+.edt-w.r-serif,
+.edt-w.r-serifAcc,
+.edt-w.r-num {
+  font-family: var(--edt-serif, 'Libre Baskerville', Georgia, serif);
+  font-style: italic;
+}
+.edt-w.r-serif    { --em: 1.12; --cor: #F5F2EE; }
+.edt-w.r-serifAcc { --em: 1.12; --cor: var(--cap-accent, #ff3b30); }
+.edt-w.r-punch    { --em: 1.0;  --w: 700; --cor: var(--cap-accent, #ff3b30);
+  text-shadow: 0 0 22px color-mix(in srgb, var(--cap-accent, #ff3b30) 55%, transparent); }
+.edt-w.r-num      { --em: 2.0;  --cor: var(--cap-accent, #ff3b30); }
+
+/* tipo "type": os caracteres entram um a um; o JS os escalona */
+.edt-w .ch { display: inline-block; opacity: 0; }

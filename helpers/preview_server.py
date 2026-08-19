@@ -388,14 +388,17 @@ def _videos_in(d: Path) -> list[str]:
 
 
 def _init_state(edit: Path, nome: str, sources: list[str]) -> None:
-    """O state.json de um projeto que ACABOU de nascer — e que ainda não começou.
+    """O state.json de um projeto que ACABOU de nascer.
 
-    `awaitingStart` é o que separa "a pasta existe" de "o trabalho começou".
-    Antes, largar o vídeo já disparava a Fase 1 na mesma batida: a tela ia
-    direto para "aguardando o primeiro render", sem o usuário ter confirmado
-    nada e sem saber o que tinha sido posto para rodar. Agora a dropzone
-    MONTA o projeto e para aqui; quem dispara é o botão da tela de início
-    (`/api/start`), que é onde o passo seguinte está escrito por extenso.
+    `awaitingStart` aqui é um estado de MILISSEGUNDOS, não uma tela: quem cria
+    o projeto (dropzone, upload, navegador de pastas) chama `_auto_start` na
+    sequência, que o desliga e dispara a Fase 1. A tela que perguntava formato
+    e briefing entre o drop e o processamento foi removida — o corte segue o
+    aspect ratio do material de origem, e formato ou briefing diferentes se
+    pedem no chat. O flag continua existindo por dois motivos: é o que
+    `_auto_start` lê para saber que o projeto nunca começou (inclusive
+    projetos antigos parados nesse estado), e é o que impede um projeto JÁ
+    andando de ser recortado ao ser reaberto.
     """
     st = edit / "state.json"
     if st.exists():
@@ -406,7 +409,7 @@ def _init_state(edit: Path, nome: str, sources: list[str]) -> None:
         "phase": 1,
         "video": "preview_proxy.mp4",
         "edl": "edl.json",
-        "message": "Pronto para começar — confirme para gerar os cortes",
+        "message": "Projeto criado — preparando a Fase 1",
         "awaitingStyle": False,
         "awaitingStart": True,
         "sources": sources,
@@ -877,6 +880,16 @@ class Handler(BaseHTTPRequestHandler):
         Recusar o download porque a Fase 2 não rodou seria esconder um arquivo
         que existe e serve — o usuário pode querer o corte limpo.
         """
+        # EXPORTAR DURANTE UM RENDER entrega arquivo pela metade: o ffmpeg
+        # escreve o final.mp4 NO LUGAR, e um download no meio sai truncado com
+        # o Content-Length de um arquivo que ainda está crescendo — medido em
+        # 2026-08-19 ("Tive um erro ao exportar", com um render de 83s
+        # reescrevendo o arquivo no mesmo instante). Recusar com nome é melhor
+        # que servir vídeo corrompido; o botão do app mostra esta mensagem.
+        prog = progress.read(self.root) or {}
+        if prog.get("state") == "running" and prog.get("task") in ("fase2", "encode"):
+            self._json({"error": "render em andamento — exporte quando a barra de progresso terminar"}, 409)
+            return
         state = {}
         try:
             state = json.loads((self.root / "state.json").read_text())
@@ -1082,6 +1095,14 @@ class Handler(BaseHTTPRequestHandler):
             if p.name == "edit" or (p / "edit").is_dir():
                 alvo = (p if p.name == "edit" else p / "edit").resolve()
             elif body.get("create"):
+                # Criar é DISPARAR: sem a tela de início, um projeto novo vai
+                # direto para a Fase 1 — e uma pasta sem vídeo não tem o que
+                # cortar. Recusar aqui explica antes; criar e falhar depois
+                # deixaria um projeto vazio parado numa tela de espera.
+                if not _videos_in(p):
+                    self._json({"error": "não achei nenhum vídeo nesta pasta — "
+                                         "coloque o arquivo nela primeiro"}, 400)
+                    return
                 alvo = (p / "edit").resolve()
                 try:
                     alvo.mkdir(parents=True, exist_ok=True)
@@ -1093,34 +1114,35 @@ class Handler(BaseHTTPRequestHandler):
                             "canCreate": True}, 404)
                 return
         # Pasta nova (ou `edit` sem state): o projeto nasce aqui, igualzinho ao
-        # que a dropzone monta — inclusive esperando o submit. Sem isto, quem
-        # entra pelo navegador de pastas cai num projeto sem state nenhum, que
-        # é a tela que não sabe dizer o que fazer em seguida.
+        # que a dropzone monta. Sem isto, quem entra pelo navegador de pastas
+        # cai num projeto sem state nenhum, que é a tela que não sabe dizer o
+        # que fazer em seguida.
         _init_state(alvo, alvo.parent.name or alvo.name, _videos_in(alvo.parent))
         _set_root(alvo)
         _recents_touch(alvo)
+        # Projeto que nunca começou (recém-nascido ou parado de uma versão com
+        # a tela de início) vai direto para a Fase 1; um em andamento passa reto.
+        self._auto_start()
         self._json({"ok": True, "path": str(alvo), "project": _project_card(alvo)})
 
     def _close(self) -> None:
         _set_root(None)
         self._json({"ok": True})
 
-    # O SUBMIT do primeiro vídeo. É o único lugar que pede a Fase 1.
-    #
-    # Existe porque montar o projeto e COMEÇAR a trabalhar nele eram, até aqui,
-    # o mesmo gesto: soltar o arquivo. Quem soltava não tinha onde ler o que ia
-    # acontecer, não tinha como desistir, e a tela seguinte ("aguardando o
-    # primeiro render") não dizia se alguma coisa estava rodando ou se ele tinha
-    # de fazer mais algum passo. Agora o gesto é explícito, e o que ele dispara
-    # está escrito ao lado do botão.
+    # O DISPARO da Fase 1. A tela que perguntava formato e briefing entre o
+    # drop e o processamento foi removida: soltar o vídeo monta o projeto E
+    # começa o corte na mesma batida, seguindo o aspect ratio do material de
+    # origem (`format: "auto"`). Formato ou briefing diferentes se pedem no
+    # chat — o watcher está sempre ouvindo.
     #
     # `preview_request.json` continua sendo o canal — o mesmo arquivo que o
-    # watch_edits.py já vigia. O que mudou é QUANDO ele é escrito.
+    # watch_edits.py já vigia. `/api/start` sobrevive como rota para scripts,
+    # mas o caminho normal é `_auto_start`, chamado por quem cria o projeto.
     FORMATS = {"short", "long", "auto"}
 
-    def _start(self, body: dict) -> None:
-        if self._no_project():
-            return
+    def _begin_phase1(self, brief: str = "", fmt: str = "auto") -> str | None:
+        """Escreve o `preview_request.json` e marca o começo no state.
+        Devolve a mensagem de erro, ou None quando disparou."""
         state: dict = {}
         try:
             state = json.loads((self.root / "state.json").read_text())
@@ -1131,18 +1153,13 @@ class Handler(BaseHTTPRequestHandler):
         if not sources:
             sources = _videos_in(pasta)
         if not sources:
-            self._json({"error": "não achei nenhum vídeo nesta pasta"}, 400)
-            return
+            return "não achei nenhum vídeo nesta pasta"
         # Os nomes gravados são relativos à pasta de vídeos; um caminho absoluto
         # (fonte que ficou fora da pasta) passa direto.
         def _abs(s: str) -> str:
             p = Path(s)
             return str(p if p.is_absolute() else (pasta / p))
 
-        brief = str(body.get("brief") or "").strip()[:2000]
-        fmt = str(body.get("format") or "auto")
-        if fmt not in self.FORMATS:
-            fmt = "auto"
         (self.root / "preview_request.json").write_text(json.dumps({
             "type": "new-project",
             "videosDir": str(pasta),
@@ -1159,6 +1176,39 @@ class Handler(BaseHTTPRequestHandler):
             format=fmt,
             message="Fase 1 — gerando os cortes",
         )
+        return None
+
+    def _auto_start(self) -> None:
+        """Projeto que nunca começou → Fase 1, sem perguntar.
+
+        Só age sobre `awaitingStart` ligado — um projeto em andamento (state
+        sem o flag) passa intocado, então reabrir ou arrastar de novo um
+        trabalho pronto continua sendo só abrir. Também destrava projetos
+        antigos que ficaram parados na tela de início que não existe mais.
+        """
+        try:
+            st = json.loads((self.root / "state.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            return
+        if not st.get("awaitingStart"):
+            return
+        err = self._begin_phase1(str(st.get("brief") or ""),
+                                 str(st.get("format") or "auto"))
+        if err:
+            # Sem fonte não há o que cortar; o recado fica no lugar da tela.
+            self._patch_state(message=f"{err} — coloque o vídeo na pasta e reabra o projeto")
+
+    def _start(self, body: dict) -> None:
+        if self._no_project():
+            return
+        brief = str(body.get("brief") or "").strip()[:2000]
+        fmt = str(body.get("format") or "auto")
+        if fmt not in self.FORMATS:
+            fmt = "auto"
+        err = self._begin_phase1(brief, fmt)
+        if err:
+            self._json({"error": err}, 400)
+            return
         self._json({"ok": True})
 
     def _adopt(self, video: Path) -> None:
@@ -1175,16 +1225,18 @@ class Handler(BaseHTTPRequestHandler):
         # ARRASTAR UM VÍDEO DE UM PROJETO QUE JÁ EXISTE É ABRIR ELE, e nada
         # mais. Pedir a Fase 1 aqui mandaria recortar um trabalho pronto — e o
         # arquivo que mais convida a ser arrastado é justamente o render que
-        # está na pasta do projeto acabado.
+        # está na pasta do projeto acabado. O guarda é o `awaitingStart` que
+        # o `_auto_start` exige: um state em andamento não o tem.
         #
-        # E um projeto NOVO também não dispara nada por conta própria: nasce em
-        # `awaitingStart`, e quem manda a Fase 1 começar é o botão da tela de
-        # início. Ver `_init_state` e `_start`.
+        # Um projeto NOVO, por outro lado, dispara a Fase 1 aqui mesmo — não
+        # existe mais tela entre o drop e o processamento. O corte segue o
+        # aspect ratio da fonte; formato e briefing se pedem no chat.
         _init_state(edit, pasta.name,
                     [(pasta / video.name).name if (pasta / video.name).exists()
                      else str(video)])
         _set_root(edit.resolve())
         _recents_touch(Handler.root)
+        self._auto_start()
         _scan_cache["at"] = 0.0  # o projeto é novo; a varredura cacheada não o tem
         self._json({"ok": True, "path": str(Handler.root),
                     "project": _project_card(Handler.root)})

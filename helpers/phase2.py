@@ -41,7 +41,8 @@ ENV = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
 
 # Estilos que já existem de verdade. A aba Estilo oferece mais do que isto; um
 # pedido fora desta lista precisa falhar com nome, não renderizar outra coisa.
-PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica", "scatter", "stacked"}
+PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica", "scatter", "stacked",
+                   "pop", "popLinha", "popBloco", "revelar", "editorial"}
 PORTED_HEADLINES = {"outline", "card", "realce", "misto",
                     "bloco", "etiqueta", "manuscrito", "gigante",
                     "relevo", "grifo", "contorno_duplo"}
@@ -346,6 +347,20 @@ def main() -> None:
             if (data.get("captions") or {}).get("alwaysOutline"):
                 cmd.append("--always-outline")
             run(cmd)
+        compose += ["--cues", str(cues)]
+
+    if data.get("captions", {}).get("style") == "editorial":
+        cues = pub / "caption-editorial.json"
+        transcript = edit / "transcripts" / "cut_mapped.json"
+        if not transcript.exists():
+            transcript = edit / "transcripts" / "cut.json"
+        if not cues.exists():
+            if not transcript.exists():
+                sys.exit(f"o editorial precisa da transcrição do corte em {transcript}")
+            print("  preparando os papéis do editorial…")
+            progress.step(edit, detail="preparando os papéis do editorial")
+            run([sys.executable, str(SKILL / "helpers" / "caption_style_editorial.py"),
+                 "--transcript", str(transcript), "-o", str(cues)])
         compose += ["--cues", str(cues)]
     if args.end:
         compose += ["--end", str(args.end)]

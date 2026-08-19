@@ -90,7 +90,7 @@ PENCIL_D = ("M 30 78 C 26 40, 120 20, 190 24 C 262 28, 300 52, 288 82 "
 
 
 def style_files(style_id: str, style: dict) -> list[str]:
-    if style_id in ("scatter", "stacked"):
+    if style_id in ("scatter", "stacked", "editorial"):
         return [f"{style_id}.css", f"{style_id}.js"]
     return ["karaoke.css", "karaoke.js"] if style["animated"] else ["static.css"]
 
@@ -174,6 +174,38 @@ def fit_font(text: str, base: float, avail: float, factor: float) -> int:
     n = max(1, len(text.strip()))
     est = n * base * factor
     return int(avail / (n * factor)) if est > avail else int(base)
+
+
+def editorial_markup(cues: list[dict], st: dict, duration: float) -> str:
+    """Blocos do estilo EDITORIAL: um clip por deixa; cada palavra chega no seu
+    TEMPO DE FALA (data-at absoluto) com a entrada do PAPEL dela — o karaokê do
+    estilo é a palavra chegando junto da voz, não um destaque sobre texto
+    parado. `anim: type` vira caracteres soltos (.ch) aqui, porque o
+    escalonamento por caractere precisa de um nó por caractere."""
+    blocks: list[str] = []
+    for c in cues:
+        s = c["startMs"] / 1000
+        if s >= duration:
+            continue
+        e = min(c["endMs"] / 1000, duration)
+        linhas: list[str] = []
+        for ln in c["lines"]:
+            spans: list[str] = []
+            for w in ln:
+                at = w["fromMs"] / 1000
+                anim = w.get("anim", "fade")
+                if anim == "type":
+                    corpo = "".join(f'<i class="ch">{esc(ch)}</i>' for ch in w["text"]) + " "
+                else:
+                    corpo = esc(w["text"]) + " "
+                spans.append(f'<span class="edt-w r-{w["role"]}" data-at="{at:.3f}" '
+                             f'data-anim="{anim}">{corpo}</span>')
+            linhas.append('<div class="edt-line">' + "".join(spans) + "</div>")
+        blocks.append(
+            f'    <div class="edt-cue clip" data-start="{s:.3f}" '
+            f'data-duration="{e - s:.3f}" data-exit="{c.get("exit", "abrupt")}" '
+            f'data-track-index="{TRACK["caption"]}">' + "".join(linhas) + "</div>")
+    return "\n".join(blocks)
 
 
 def stacked_markup(cues: list[dict], st: dict, duration: float,
@@ -345,23 +377,42 @@ def _bo_ritmo(dur: float) -> tuple[float, float]:
     return 0.30, 0.11
 
 
-def _bo_cores(data: dict) -> dict:
-    """As cores do B-roll são MARCA, não projeto: vêm de ~/.avelin/brand.json
-    (perguntadas uma vez e salvas — protocolo do usuário, 2026-08-18), com
-    override opcional por `brollColors` no edit-data. Fallback: o accent do
-    projeto e o azul-noite padrão."""
-    cores = dict(data.get("brollColors") or {})
-    if "deep" not in cores or "accent" not in cores:
-        try:
-            b = json.loads((Path.home() / ".avelin" / "brand.json").read_text())
-        except (OSError, json.JSONDecodeError):
-            b = {}
-        cores.setdefault("accent", b.get("accent") or data.get("accent") or "#ff3b30")
-        cores.setdefault("deep", b.get("deep") or "#0D2137")
-    return cores
+def _hex_rgb(hexa: str) -> str:
+    """'#0D2137' → '13,33,55' — para as sombras rgba do kit."""
+    h = (hexa or "").lstrip("#")
+    if len(h) != 6:
+        return "0,0,0"
+    return ",".join(str(int(h[k:k + 2], 16)) for k in (0, 2, 4))
 
 
-def broll_markup(data: dict, duration: float, events: list) -> str:
+def _bo_vars(kit: dict, data: dict) -> str:
+    """As variáveis CSS de uma janela, resolvidas do MOTION KIT.
+
+    O kit já chega com a marca aplicada (motion_kit.carregar_kit resolve
+    brand.json por cima); `brollColors` no edit-data é o override pontual de
+    projeto. Nenhuma cor/fonte/forma nasce no CSS — trocar o gosto é trocar o
+    kit, nunca editar folha de estilo."""
+    cores = {**(kit.get("cores") or {}), **(data.get("brollColors") or {})}
+    fontes = kit.get("fontes") or {}
+    formas = kit.get("formas") or {}
+    sombra = kit.get("sombra") or "0 30px 70px -28px"
+    return (
+        f"--bo-accent:{cores.get('accent', '#ff3b30')};"
+        f"--bo-deep:{cores.get('deep', '#0B0B0F')};"
+        f"--bo-card-top:{cores.get('cardTop', cores.get('deep', '#17171C'))};"
+        f"--bo-card-bottom:{cores.get('cardBottom', cores.get('deep', '#0B0B0F'))};"
+        f"--bo-paper:{cores.get('paper', '#F5F5F5')};"
+        f"--bo-soft:{cores.get('accentSoft', cores.get('accent', '#ff3b30'))};"
+        f"--bo-radius:{formas.get('raioCardPx', 16)}px;"
+        f"--bo-pill:{formas.get('raioPillPx', 999)}px;"
+        f"--bo-frame:{formas.get('molduraMock', '6px')};"
+        f"--bo-shadow:{sombra} rgba({_hex_rgb(cores.get('deep', '#000000'))},.5);"
+        f"--bo-font-display:'{fontes.get('display', 'Poppins')}';"
+        f"--bo-font-ui:'{fontes.get('ui', 'Poppins')}'"
+    )
+
+
+def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
     """Janelas de ênfase POR CIMA do a-roll — o formato "Broll Overlay".
 
     Quatro tipos (`kind`): `words` (frase cinética), `stat` (número que conta),
@@ -380,7 +431,23 @@ def broll_markup(data: dict, duration: float, events: list) -> str:
             and float(w.get("end", 0)) > float(w.get("start", 0))]
     if not wins:
         return ""
-    cores = _bo_cores(data)
+    vars_css = _bo_vars(kit, data)
+    fontes = kit.get("fontes") or {}
+    formas = kit.get("formas") or {}
+    mo = kit.get("motion") or {}
+    # os números do kit viajam num atributo só; o JS executa, nunca decide
+    motion_attr = json.dumps({
+        "linhas": mo.get("linhas") or {"yPercent": 110, "stagger": 0.1, "dur": 0.8},
+        "reveal": mo.get("reveal") or {"y": 28, "dur": 0.7},
+        "clip": mo.get("clip") or {"dur": 0.9},
+        "capline": mo.get("capline") or {"larguraPx": 140, "dur": 0.8, "dotDelay": 0.4},
+        "ringSpinS": mo.get("ringSpinS") or [60, 45],
+    }, separators=(",", ":"))
+    kit_classes = ""
+    if fontes.get("displayItalico"):
+        kit_classes += " kit-italico"
+    if formas.get("topoFolha"):
+        kit_classes += " folha"
     blocks: list[str] = []
     for i, o in enumerate(wins):
         s = float(o["start"])
@@ -425,8 +492,11 @@ def broll_markup(data: dict, duration: float, events: list) -> str:
             events.append((s + vin * 0.4, "callout"))
         elif kind == "labels":
             itens = o.get("items") or []
+            # numeração "01" em display — o feature-num da referência
             inner = ('<div class="ave-bo-labels">'
-                     + "".join(f'<div class="bo-item">{esc(str(t))}</div>' for t in itens)
+                     + "".join(f'<div class="bo-item"><span class="bo-idx">{k + 1:02d}</span>'
+                               f'<span>{esc(str(t))}</span></div>'
+                               for k, t in enumerate(itens))
                      + '</div>')
             for k in range(min(len(itens), 5)):
                 events.append((s + k * max(stag, 0.14), "tick"))
@@ -446,16 +516,34 @@ def broll_markup(data: dict, duration: float, events: list) -> str:
                   file=sys.stderr)
             continue
         events.append((s, "hook" if dim_val > 0 else "element"))
+        # O CENÁRIO vem do kit: glow radial + anéis girando nas janelas cheias
+        # (o hero das LPs); painel-cartão nas de faixa (o sticky card). Eyebrow
+        # e linha-legenda são a assinatura editorial — entram quando fazem
+        # sentido para o tipo, e o eyebrow só quando o autor escreveu um.
+        cenario = ""
+        if pos == "full":
+            if formas.get("aneis", True):
+                cenario += '<div class="bo-ring r1"></div><div class="bo-ring r2"></div>'
+            if formas.get("glowRadial", True):
+                cenario += '<div class="bo-glow"></div>'
+        eyebrow = (f'<div class="bo-eyebrow">{esc(str(o["eyebrow"]))}</div>'
+                   if o.get("eyebrow") else "")
+        capline = ('<div class="bo-capline"><i class="l"></i><i class="d"></i></div>'
+                   if kind in ("words", "stat") else "")
+        conteudo = f"{eyebrow}{inner}{capline}"
+        if pos in ("top", "bottom") and kind != "media":
+            conteudo = f'<div class="bo-card">{conteudo}</div>'
         # `clip` + track são exigência do motor para elemento com timing — sem
         # eles o check barra (timed_element_missing_clip_class, medido). As
         # janelas não se sobrepõem entre si, então dividem um track só.
         blocks.append(
-            f'  <div id="bo{i}" class="ave-bo-win pos-{pos} clip"{scrim_attr} '
+            f'  <div id="bo{i}" class="ave-bo-win pos-{pos} clip{kit_classes}"{scrim_attr} '
             f'data-start="{s:.3f}" data-duration="{d:.3f}" '
             f'data-track-index="{TRACK["overlay"]}" '
             f'data-in="{vin}" data-stagger="{stag}" '
-            f'style="--bo-deep:{cores["deep"]};--bo-accent:{cores["accent"]}">'
-            f'{inner}</div>')
+            f"data-motion='{motion_attr}' "
+            f'style="{vars_css}">'
+            f'{cenario}{conteudo}</div>')
     return "\n".join(blocks)
 
 
@@ -1243,7 +1331,20 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
     cap_fam = cfg.get("fontMain")
     fam_var = f" --cap-family:{hl_css_family(cap_fam)};" if cap_fam else ""
 
+    # O MOTION KIT dos Broll Overlays (helpers/motion_kit.py): o do usuário
+    # (~/.avelin/motion/kit.json) quando existe, senão o default do repo, com
+    # a marca resolvida por cima. As fontes DELE entram na folha do Google via
+    # `gfontQuery` do próprio kit — a consulta viaja no dado, nunca fixa aqui.
+    bo_kit: dict = {}
+    if data.get("brollOverlays"):
+        from motion_kit import carregar_kit
+        bo_kit = carregar_kit()
+
     gfont = st["gfont"]
+    if bo_kit:
+        bq = (bo_kit.get("fontes") or {}).get("gfontQuery")
+        if bq:
+            gfont = f"{gfont}&{bq}"
     # As famílias da LEGENDA entram na mesma folha. Sem isto, escolher uma
     # fonte na aba renderizava com a de fábrica — o CSS pedia a nova, o
     # navegador não a tinha, e caía numa genérica sem erro visível.
@@ -1286,6 +1387,17 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         container = (f'<div class="ave-scatter" style="--scat-scale:1;'
                      f' --scat-size:{size}; --scat-gap:{st["gap"]};'
                      f' --scat-offset-y:{cfg.get("scatterOffsetY", st["offsetY"])}">')
+    elif style_id == "editorial":
+        cap_css = ('<link rel="stylesheet" href="styles/editorial.css">\n'
+                   '<script src="styles/editorial.js"></script>')
+        # os números do movimento viajam no dado (variants.styles.editorial.motion)
+        mo_attr = json.dumps(st.get("motion") or {}, separators=(",", ":"))
+        container = (f'<div class="ave-edt" style="--cap-scale:1;{fam_var}'
+                     f' --cap-accent:{accent or "#ff3b30"}; --cap-size:{st["size"]}px;'
+                     f' --edt-left:{st.get("safeLeftPx", 90)}px;'
+                     f' --edt-lh:{st.get("lineHeight", 1.0)};'
+                     f' --edt-serif:{st.get("serifFamily", "serif")}"'
+                     f" data-motion='{mo_attr}'>")
     elif st.get("css") == "pop":
         # Os TRÊS estilos de estouro compartilham a folha e o script: a curva é
         # a mesma (medida do CapCut, idêntica byte a byte entre eles) e o que
@@ -1325,6 +1437,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
         parts.append("  AVE_STACKED.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif style_id == "scatter":
         parts.append("  AVE_SCATTER.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+    elif style_id == "editorial":
+        parts.append("  AVE_EDITORIAL.buildTimeline(document.getElementById('root'), gsap, tl);")
     elif st.get("css") == "pop":
         parts.append("  AVE_POP.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif st.get("css") == "revelar":
@@ -1473,7 +1587,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 
     # Broll Overlay ANTES do corte de efeitos: as janelas emitem os próprios
     # eventos de som, e eles têm de existir quando sfx_blocks olhar a lista.
-    bo_html = broll_markup(data, duration, events)
+    bo_html = broll_markup(data, duration, events, bo_kit)
 
     proj = Path(data.get("_proj", "."))
     # O interruptor da aba Estilo. Desligado, nenhum efeito entra — antes disso
@@ -1610,7 +1724,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty) ->
 {sfx_html}
 
   {container}
-{data["_stackedMarkup"] if style_id == "stacked" else (scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty, splits))}
+{data["_stackedMarkup"] if style_id == "stacked" else (data.get("_editorialMarkup", "") if style_id == "editorial" else (scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty, splits)))}
   </div>
 </div>
 
@@ -1712,8 +1826,20 @@ def main() -> None:
             segs.append({"start": round(s0, 3), "end": round(min(s1, duration), 3)})
     data["_segments"] = segs
 
+    # DURANTE UM BROLL OVERLAY A LEGENDA SAI DE CENA (pedido do usuário,
+    # 2026-08-19): o overlay já é o texto do momento, e os dois juntos
+    # disputavam a mesma tela. Filtrado pelo PONTO MÉDIO da deixa — uma deixa
+    # que só encosta na borda da janela continua existindo fora dela.
+    bo_spans = [(float(o.get("start", 0)), float(o.get("end", 0)))
+                for o in (data.get("brollOverlays") or [])]
+
+    def fora_broll(ms_a: float, ms_b: float) -> bool:
+        mid = (ms_a + ms_b) / 2000.0
+        return all(not (a <= mid <= b) for a, b in bo_spans)
+
     words = [w for w in json.loads(args.captions.read_text())
-             if w["startMs"] / 1000 < duration]
+             if w["startMs"] / 1000 < duration
+             and fora_broll(w["startMs"], w.get("endMs", w["startMs"]))]
 
     timed = []
     if style_id == "stacked":
@@ -1723,6 +1849,8 @@ def main() -> None:
                      f"  uv run python helpers/caption_style.py --transcript "
                      f"<edit>/transcripts/cut.json -o {cues_path}")
         cues = json.loads(cues_path.read_text())
+        cues = [c for c in cues
+                if fora_broll(c.get("startMs", 0), c.get("endMs", c.get("startMs", 0)))]
         # o MESMO accent que o resto da composição usa — o círculo do solo era
         # verde fixo e atravessava qualquer paleta escolhida na aba Estilo
         mk, stretched = stacked_markup(cues, st, duration,
@@ -1736,6 +1864,22 @@ def main() -> None:
             and c["startMs"] / 1000 < duration]
         data["_stackedCount"] = mk.count("stk-cue")
         data["_stackedStretched"] = stretched
+    elif style_id == "editorial":
+        cues_path = args.cues or (args.captions.parent / "caption-editorial.json")
+        if not cues_path.exists():
+            sys.exit("o editorial precisa do caption-editorial.json — rode antes:\n"
+                     f"  uv run python helpers/caption_style_editorial.py --transcript "
+                     f"<edit>/transcripts/cut.json -o {cues_path}")
+        ecues = json.loads(cues_path.read_text())
+        ecues = [c for c in ecues
+                 if fora_broll(c.get("startMs", 0), c.get("endMs", c.get("startMs", 0)))]
+        data["_editorialMarkup"] = editorial_markup(ecues, st, duration)
+        # punch estala, algarismo estoura — os acentos do estilo SOAM, como no
+        # empilhado; sem som, palavra que salta lê como falha de render
+        data["_soloCues"] = [
+            (w["fromMs"] / 1000, "callout" if w["role"] == "num" else "soloWord")
+            for c in ecues for ln in c["lines"] for w in ln
+            if w["role"] in ("punch", "num") and w["fromMs"] / 1000 < duration]
     elif cfg.get("enabled", True):
         budget = (cfg.get("safeWidth") if tuned_for else None) or st["maxW"]
         cues = build_cues(words, st, budget)
@@ -1747,6 +1891,14 @@ def main() -> None:
     data["_video"] = args.video
     args.output.write_text(render_html(data, timed, st, style_id, args.video,
                                        duration, orphans, penalty))
+
+    if style_id == "editorial":
+        n = data.get("_editorialMarkup", "").count("edt-cue")
+        print(f"{args.output}")
+        print(f"  estilo editorial (animado) · {st['family']} + serif @ {st['size']}px")
+        print(f"  {len(words)} palavras → {n} deixas com papéis")
+        print(f"  duração {duration:.3f}s (stream de vídeo)")
+        return
 
     if style_id == "stacked":
         n = data.get("_stackedCount", 0)

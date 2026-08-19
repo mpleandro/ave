@@ -1,16 +1,23 @@
-/* BROLL OVERLAY — linha do tempo das janelas de ênfase.
+/* BROLL OVERLAY — a linha do tempo das janelas de ênfase, guiada pelo KIT.
  *
- * O RITMO vem do dado, não daqui: o compositor mede a duração de cada janela
- * contra a fala e escreve `data-in` (entrada) e `data-stagger` (cadência dos
- * filhos). Este arquivo só executa — janela curta entra seca, janela longa
- * respira, e mudar a régua é mexer no compose, não em keyframes.
+ * NENHUM número de movimento nasce aqui: o compositor lê o Motion Kit
+ * (helpers/motion_kit.py) e escreve em cada janela `data-motion` (números do
+ * kit) e `data-in`/`data-stagger` (o RITMO da janela, derivado da duração do
+ * trecho). Este arquivo só executa. Trocar o gosto é trocar o kit.
  *
- * O scrim é irmão da janela (`data-bo-scrim` aponta o id): escurece o a-roll
- * ANTES de o elemento surgir (metade da entrada), e devolve a luz na saída.
+ * O gesto central vem da referência aprendida: texto sobe por MÁSCARA
+ * (yPercent 110→0, o reveal de linhas das LPs), acento em itálico display,
+ * linha-legenda que cresce e ganha o ponto, anéis girando em loop lento,
+ * mídia revelada por clip-path de cima para baixo.
  */
 (function (root) {
   'use strict';
-  var OUT = 0.24;              /* saída fixa: acento é na entrada, não na volta */
+  var OUT = 0.24;              /* saída fixa: o acento é a entrada, não a volta */
+
+  function motionDe(el) {
+    try { return JSON.parse(el.getAttribute('data-motion') || '{}'); }
+    catch (e) { return {}; }
+  }
 
   function buildTimeline(rootEl, gsap, tl) {
     rootEl.querySelectorAll('.ave-bo-win').forEach(function (el) {
@@ -18,6 +25,8 @@
       var d = parseFloat(el.getAttribute('data-duration')) || 0;
       var IN = parseFloat(el.getAttribute('data-in')) || 0.3;
       var STAG = parseFloat(el.getAttribute('data-stagger')) || 0.11;
+      var M = motionDe(el);
+      var ease = M.easing ? 'power3.out' : 'power3.out'; /* easing CSS fica nos hovers; GSAP usa a família power, como a referência */
       var end = s + d;
 
       var scrimId = el.getAttribute('data-bo-scrim');
@@ -33,47 +42,77 @@
       tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: IN / 2, ease: 'none' }, s);
       tl.to(el, { opacity: 0, duration: OUT, ease: 'none' }, end - OUT);
 
-      /* palavras: sobem uma a uma, como o karaokê — mas maiores e mais duras */
-      el.querySelectorAll('.ave-bo-words .bo-w').forEach(function (w, i) {
-        tl.fromTo(w, { opacity: 0, y: 46, scale: 0.94 },
-                  { opacity: 1, y: 0, scale: 1, duration: IN, ease: 'back.out(1.6)' },
-                  s + i * STAG);
+      /* cenário: glow respira na entrada; anéis giram o tempo todo da janela */
+      var glow = el.querySelector('.bo-glow');
+      if (glow) tl.fromTo(glow, { scale: 0.85, opacity: 0 },
+                          { scale: 1, opacity: 1, duration: IN * 2, ease: 'power2.out' }, s);
+      var spins = M.ringSpinS || [60, 45];
+      el.querySelectorAll('.bo-ring').forEach(function (r, i) {
+        tl.fromTo(r, { opacity: 0 }, { opacity: 1, duration: IN, ease: 'none' }, s);
+        tl.to(r, { rotation: i % 2 ? -360 : 360, duration: spins[i % spins.length],
+                   ease: 'none', repeat: -1 }, s);
       });
 
-      /* estatística: o número CONTA até o valor quando é numérico; o rótulo
-         chega depois, quando o número já assentou */
+      /* cartão (top/bottom): reveal de baixo, como os sticky cards */
+      var card = el.querySelector('.bo-card');
+      var rev = M.reveal || { y: 28, dur: 0.9 };
+      if (card) tl.fromTo(card, { y: rev.y * 1.4, scale: 0.97 },
+                          { y: 0, scale: 1, duration: rev.dur, ease: 'power2.out' }, s);
+
+      var eyebrow = el.querySelector('.bo-eyebrow');
+      if (eyebrow) tl.fromTo(eyebrow, { opacity: 0, y: rev.y * 0.6 },
+                             { opacity: 1, y: 0, duration: rev.dur * 0.7, ease: 'power2.out' }, s + IN * 0.3);
+
+      /* palavras: sobem POR DENTRO da máscara — o reveal de linhas da referência */
+      var linhas = M.linhas || { yPercent: 110, stagger: 0.12, dur: 1.0 };
+      var ws = el.querySelectorAll('.ave-bo-words .bo-w');
+      ws.forEach(function (w, i) {
+        tl.fromTo(w, { yPercent: linhas.yPercent },
+                  { yPercent: 0, duration: Math.max(IN, linhas.dur * 0.7), ease: ease },
+                  s + IN * 0.25 + i * STAG);
+      });
+
+      /* linha-legenda: cresce depois que o conteúdo assentou; o ponto pisca no fim */
+      var cap = M.capline || { larguraPx: 140, dur: 1.0, dotDelay: 0.5 };
+      var cl = el.querySelector('.bo-capline .l');
+      var cd = el.querySelector('.bo-capline .d');
+      var caplineAt = s + IN + Math.max(0, (ws.length - 1)) * STAG * 0.6;
+      if (cl) tl.to(cl, { width: cap.larguraPx, duration: cap.dur * 0.8, ease: 'power2.out' }, caplineAt);
+      if (cd) tl.fromTo(cd, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: 'none' },
+                        caplineAt + (cap.dotDelay || 0.5) * 0.8);
+
+      /* estatística: o número CONTA; o rótulo chega quando ele assenta */
       var val = el.querySelector('.ave-bo-stat .bo-num');
       if (val) {
-        var target = parseFloat(val.getAttribute('data-count'));
-        tl.fromTo(val.parentNode, { opacity: 0, scale: 0.8 },
-                  { opacity: 1, scale: 1, duration: IN, ease: 'back.out(1.8)' }, s);
-        if (!isNaN(target)) {
+        var alvo = parseFloat(val.getAttribute('data-count'));
+        tl.fromTo(val.parentNode, { opacity: 0, scale: 0.82 },
+                  { opacity: 1, scale: 1, duration: IN, ease: 'back.out(1.7)' }, s);
+        if (!isNaN(alvo)) {
           var obj = { n: 0 };
           var dec = (val.getAttribute('data-count').split('.')[1] || '').length;
           tl.to(obj, {
-            n: target, duration: Math.min(1.1, Math.max(0.5, d * 0.28)), ease: 'power2.out',
+            n: alvo, duration: Math.min(1.1, Math.max(0.5, d * 0.28)), ease: 'power2.out',
             onUpdate: function () { val.textContent = obj.n.toFixed(dec).replace('.', ','); },
           }, s + IN * 0.4);
         }
         var lab = el.querySelector('.ave-bo-stat .bo-label');
-        if (lab) {
-          tl.fromTo(lab, { opacity: 0, y: 24 },
-                    { opacity: 1, y: 0, duration: IN, ease: 'power2.out' }, s + IN + STAG);
-        }
+        if (lab) tl.to(lab, { opacity: 1, duration: rev.dur * 0.6, ease: 'power2.out' },
+                       s + IN + STAG * 2);
       }
 
-      /* etiquetas: entram da esquerda, uma por vez */
+      /* etiquetas: entram como reveals, uma por vez, numeradas */
       el.querySelectorAll('.ave-bo-labels .bo-item').forEach(function (it, i) {
-        tl.fromTo(it, { opacity: 0, x: -70 },
-                  { opacity: 1, x: 0, duration: IN, ease: 'power3.out' },
+        tl.fromTo(it, { opacity: 0, y: rev.y, x: -30 },
+                  { opacity: 1, y: 0, x: 0, duration: rev.dur * 0.7, ease: 'power3.out' },
                   s + i * Math.max(STAG, 0.14));
       });
 
-      /* mídia: entrada de cartão + crescimento lento, o mesmo gesto do insert */
+      /* mídia: clip reveal de cima para baixo, na moldura de mockup */
       var med = el.querySelector('.ave-bo-media');
       if (med) {
-        tl.fromTo(med, { scale: 0.93, y: 24 },
-                  { scale: 1, y: 0, duration: IN, ease: 'cubic.out' }, s);
+        var clip = M.clip || { dur: 1.1 };
+        tl.fromTo(med, { clipPath: 'inset(0 0 100% 0)', y: 20 },
+                  { clipPath: 'inset(0% 0 0% 0)', y: 0, duration: clip.dur, ease: 'power2.inOut' }, s);
         var mv = med.querySelector('video, img');
         if (mv) tl.fromTo(mv, { scale: 1 }, { scale: 1.06, duration: d, ease: 'none' }, s);
       }

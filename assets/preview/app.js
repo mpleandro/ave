@@ -100,7 +100,7 @@ const ICON = {
 // é de propósito: o catálogo é a promessa, isto é o estado.
 const PORTED = {
   captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked',
-                     'pop', 'popLinha', 'popBloco', 'revelar']),
+                     'pop', 'popLinha', 'popBloco', 'revelar', 'editorial']),
   headlines: new Set(['', 'outline', 'card', 'realce', 'misto',
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
                       'relevo', 'grifo', 'contorno_duplo']),
@@ -943,30 +943,43 @@ function buildCapCutDemo(host, tipo, grupo) {
     ensureFonts([S.style.capFont]);
     raiz.style.setProperty('--cap-family', cssFamily(S.style.capFont));
   }
-  const linha = el('div', 'ave-cap-line', raiz);
-  /* No RENDER a legenda senta a `--cap-bottom` px do fundo do quadro de 1080.
-     No cartão da prévia, que tem um sexto da altura, essa mesma distância a
-     joga contra o topo. Aqui ela é centrada — a prévia mostra o ESTILO e a
-     animação, não o posicionamento no quadro, que é escolha de outra tela. */
-  linha.style.bottom = '50%';
-  linha.style.transform = 'translateY(50%)';
-  const palavras = CAP_TEXT.split(' ').slice(0, 4);
-  const spans = palavras.map((w, i) => {
-    const sp = el('span', i === 1 ? 'hi' : '', linha);
-    sp.textContent = w.toUpperCase();
-    return sp;
+  /* A FRASE COMPLETA, em DUAS linhas (pedido do usuário, 2026-08-19): com uma
+     linha só, "linha" e "bloco" eram literalmente a mesma animação e os dois
+     cartões pulsavam idênticos — a dimensão que os separa (o que estoura
+     JUNTO) só existe a partir da segunda linha. No RENDER a legenda senta a
+     `--cap-bottom` px do fundo; no cartão, o par de linhas é centrado — a
+     prévia mostra o ESTILO e a animação, não o posicionamento no quadro. */
+  const palavras = CAP_TEXT.split(' ');
+  const metade = Math.ceil(palavras.length / 2);
+  const linhasTx = [palavras.slice(0, metade), palavras.slice(metade)];
+  const rows = [];
+  const spans = [];
+  linhasTx.forEach((ws, li) => {
+    const row = el('div', 'ave-cap-line', raiz);
+    row.style.bottom = li === 0 ? '56%' : '38%';
+    rows.push(row);
+    for (const w of ws) {
+      const sp = el('span', spans.length === 1 ? 'hi' : '', row);
+      sp.textContent = w.toUpperCase();
+      spans.push(sp);
+    }
   });
 
   if (tipo === 'pop') {
     const P = window.AVE_POP;
     if (!P) return () => {};
-    const n = P.unitCount(spans.length, grupo);
-    const ciclo = P.lineDuration(spans.length, grupo) + 0.35;
-    const alvos = grupo === 'palavra' ? spans : [linha];
+    const T = P.TIMING;
+    /* palavra: cada uma na sua vez · linha: uma LINHA depois da outra ·
+       bloco: as duas linhas estouram JUNTAS — agora dá para ver a diferença */
+    let alvos = spans;
+    let step = T.STEP;
+    if (grupo === 'linha') { alvos = rows; step = T.TOTAL + 0.12; }
+    if (grupo === 'bloco') { alvos = rows; step = 0; }
+    const ciclo = (alvos.length - 1) * step + T.TOTAL + T.HOLD + 0.35;
     return (now) => {
       const t = now % ciclo;
       alvos.forEach((elm, i) => {
-        const st = P.unitState(t, i);
+        const st = P.unitState(t, i, step);
         elm.style.opacity = st.opacity;
         elm.style.transform = `skewX(-1deg) scale(${st.scale})`;
       });
@@ -3066,7 +3079,7 @@ const CAP_CSS = {
   karaoke: 'karaoke.css', simples: 'static.css', serifada: 'static.css',
   classica: 'static.css', stacked: 'stacked.css', scatter: 'scatter.css',
   pop: 'pop.css', popLinha: 'pop.css', popBloco: 'pop.css',
-  revelar: 'revelar.css',
+  revelar: 'revelar.css', editorial: 'editorial.css',
 };
 
 // os estilos medidos do CapCut, e o grupo de cada um
@@ -4558,7 +4571,13 @@ async function doExport() {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     toast('Exportado para a pasta de downloads', 3000);
   } catch (e) {
-    toast(`Não consegui exportar: ${e.message}`, 5000);
+    // "Failed to fetch" é o navegador dizendo que o SERVIDOR não respondeu —
+    // na prática, ele reiniciou embaixo da aba (medido: export de 0 KB no
+    // destino em 2026-08-19). Traduzir é o que transforma o erro em ação.
+    const rede = e && (e.name === 'TypeError' || /fetch/i.test(e.message || ''));
+    toast(rede
+      ? 'O servidor reiniciou — recarregue a página (F5) e exporte de novo'
+      : `Não consegui exportar: ${e.message}`, 6000);
   } finally {
     b.classList.remove('busy');
     lab.textContent = textoOriginal;
@@ -5108,15 +5127,19 @@ const F1_STEPS = [
   { label: 'Conferindo o corte', re: /proxy|linha do tempo|verific|conferindo o corte|pronto para|aprovaç/i },
 ];
 
-let startFmt = 'auto';
 let startTick = null;
 
-/* '' = esta tela não é da vez · 'ready' = esperando o submit ·
-   'working' = enviado, a IA está com ele. O vídeo em tela vence os dois: se há
-   corte, o lugar do usuário é a linha do tempo. */
+/* '' = esta tela não é da vez · 'working' = a IA está com ele. O vídeo em
+   tela vence: se há corte, o lugar do usuário é a linha do tempo.
+
+   Não existe mais o modo 'ready' (formato + briefing + "Gerar cortes"):
+   soltar o vídeo já dispara a Fase 1 no servidor, seguindo o aspect ratio da
+   fonte. Um `awaitingStart` que ainda apareça aqui é um projeto nascendo (ou
+   um antigo que o servidor destrava ao abrir) — mostra-se como trabalho em
+   curso, nunca como uma tela pedindo um clique que não existe mais. */
 function startMode() {
   if (S.videoDuration > 0) return '';
-  if (S.state.awaitingStart) return 'ready';
+  if (S.state.awaitingStart) return 'working';
   if (S.state.startedAt) return 'working';
   /* SEM VÍDEO E COM ALGUÉM FALANDO É TRABALHO EM CURSO.
    *
@@ -5132,60 +5155,6 @@ function startMode() {
    * melhor que não mostrar nada. */
   if ((S.state.message || '').trim() && (S.state.phase || 1) === 1) return 'working';
   return '';
-}
-
-function startSourceLine() {
-  const src = (S.state.sources || []).map((s) => String(s).split('/').pop()).filter(Boolean);
-  const el = $('startSrc');
-  if (!el) return;
-  el.textContent = '';
-  if (!src.length) { el.classList.add('hidden'); return; }
-  el.classList.remove('hidden');
-  const nome = document.createElement('b');
-  nome.textContent = src[0];
-  el.appendChild(nome);
-  const meta = document.createElement('span');
-  meta.textContent = src.length > 1 ? ` + ${src.length - 1} outro${src.length > 2 ? 's' : ''} nesta pasta`
-                                    : ' · pronto para cortar';
-  el.appendChild(meta);
-}
-
-function renderStartReady() {
-  startSourceLine();
-  const fmt = S.state.format || startFmt;
-  $('startFormat').querySelectorAll('button').forEach((b) => {
-    b.classList.toggle('on', b.dataset.fmt === fmt);
-  });
-  const brief = $('startBrief');
-  if (document.activeElement !== brief && !brief.value) brief.value = S.state.brief || '';
-
-  // A checklist aqui é PRÉ-VOO: só o que falta. Repetir onze linhas verdes
-  // sobre o botão empurraria o botão para fora da tela por nenhuma razão.
-  const alvo = $('startCheck');
-  alvo.textContent = '';
-  const falta = depMissing((it) => it.req);
-  if (falta.length) {
-    const t = document.createElement('h4');
-    t.textContent = 'Antes de começar';
-    alvo.appendChild(t);
-    falta.forEach((it) => alvo.appendChild(depRow(it)));
-  }
-  alvo.classList.toggle('hidden', !falta.length);
-
-  /* PASTA SEM VÍDEO é um caso real: quem chega pelo navegador de pastas pode
-     abrir uma pasta que ainda não recebeu o material. O servidor recusaria o
-     envio, mas depois do clique — e um botão que só falha ao ser apertado é
-     pior que um botão que explica antes. */
-  const trava = depBlocking();
-  const semFonte = !(S.state.sources || []).length;
-  const go = $('startGo');
-  go.disabled = trava.length > 0 || semFonte;
-  go.title = trava.length ? `Falta: ${trava.map((it) => it.name).join(', ')}` : '';
-  $('startHint').textContent = semFonte
-    ? 'Não achei vídeo nesta pasta — coloque o arquivo nela e recarregue'
-    : (trava.length
-      ? 'Instale o que falta acima e recarregue esta página'
-      : 'Você aprova o corte antes de qualquer legenda ou trilha');
 }
 
 function renderStartWorking() {
@@ -5221,56 +5190,11 @@ function renderStart() {
   if (!painel) return;
   const modo = startMode();
   painel.classList.toggle('hidden', !modo);
-  $('startReady').classList.toggle('hidden', modo !== 'ready');
-  $('startWorking').classList.toggle('hidden', modo !== 'working');
-
-  if (modo === 'ready') renderStartReady();
-  if (modo === 'working') renderStartWorking();
+  if (modo) renderStartWorking();
 
   // O relógio anda localmente: o poll é de 2s e um cronômetro que pula de dois
   // em dois lê como travado — que é o oposto do que esta tela existe para dizer.
-  if (modo === 'working' && !startTick) startTick = setInterval(renderStartWorking, 1000);
-  if (modo !== 'working' && startTick) { clearInterval(startTick); startTick = null; }
+  if (modo && !startTick) startTick = setInterval(renderStartWorking, 1000);
+  if (!modo && startTick) { clearInterval(startTick); startTick = null; }
   return modo;
-}
-
-if ($('startFormat')) {
-  $('startFormat').addEventListener('click', (e) => {
-    const b = e.target.closest('button');
-    if (!b) return;
-    startFmt = b.dataset.fmt;
-    S.state.format = startFmt;
-    renderStartReady();
-  });
-}
-
-if ($('startGo')) {
-  $('startGo').addEventListener('click', async () => {
-    const go = $('startGo');
-    go.disabled = true;
-    try {
-      const res = await fetch('/api/start', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brief: $('startBrief').value.trim(),
-          format: S.state.format || startFmt,
-        }),
-      });
-      const d = await res.json();
-      if (!res.ok) { toast(d.error || 'não consegui enviar', 5000); go.disabled = false; return; }
-    } catch (e) {
-      toast(`não consegui enviar: ${e.message}`, 5000);
-      go.disabled = false;
-      return;
-    }
-    /* A troca de tela é IMEDIATA, sem esperar o poll. Entre clicar e ver, dois
-       segundos de tela parada leem como clique perdido — e o clique que se
-       repete aqui manda a Fase 1 duas vezes. */
-    S.state.awaitingStart = false;
-    S.state.startedAt = Date.now() / 1000;
-    S.state.message = 'Fase 1 — gerando os cortes';
-    renderStart();
-    toast('Enviado — a IA começou a gerar os cortes', 4000);
-    await refreshNow();
-  });
 }

@@ -36,17 +36,19 @@ def current_root() -> Path | None:
 FORMAT_LABEL = {
     "short": "SHORT-FORM vertical 9:16 (Reels/TikTok/Shorts)",
     "long": "LONGFORM horizontal 16:9 (YouTube)",
-    "auto": "não escolhido — decida pelo material e confirme com o usuário",
+    "auto": "siga o ASPECT RATIO do material de origem — não pergunte; "
+            "só mude se o usuário pedir no chat",
 }
 
 
 def request_digest(p: Path) -> str:
-    """O USUÁRIO APERTOU "GERAR CORTES" NO EDITOR — comece a Fase 1.
+    """O USUÁRIO SOLTOU UM VÍDEO NOVO NO EDITOR — comece a Fase 1.
 
-    O editor monta a pasta quando o vídeo é solto, mas não pede nada: quem
-    dispara é o botão da tela de início. Este arquivo é esse botão chegando
-    aqui — com o que o usuário respondeu antes de apertá-lo (formato e
-    briefing), que é justamente o que a Fase 1 pararia para perguntar.
+    Soltar o vídeo monta a pasta E dispara o corte na mesma batida: não há
+    mais tela de formato/briefing entre o drop e o processamento. Este
+    arquivo é esse gesto chegando aqui. `format: "auto"` significa seguir o
+    aspect ratio da fonte (meça com ffprobe); formato ou briefing diferentes
+    chegam pelo chat quando o usuário quiser.
     """
     try:
         d = json.loads(p.read_text())
@@ -204,6 +206,10 @@ def notes_digest(p: Path) -> str:
         return ""
     out = [f"MARCAÇÕES AGUARDANDO LEITURA ({len(notes)}) — o corte mecânico já foi aplicado:"]
     for n in notes:
+        if n.get("request"):
+            # pedido do chat da aplicação ("Alterações extras") — sem timestamps
+            out.append(f"· PEDIDO EM TEXTO: {(n.get('text') or '').strip()}")
+            continue
         a = fmt(n.get("renderedStart", n.get("start", 0)))
         b = fmt(n.get("renderedEnd", n.get("end", 0)))
         out.append(f"· [{a} → {b}] {(n.get('text') or '').strip()}")

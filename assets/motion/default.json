@@ -1,0 +1,42 @@
+{
+  "name": "default",
+  "origem": "kit padrão do produto — vermelho/preto; a marca do usuário (~/.avelin/brand.json) e o kit dele (~/.avelin/motion/kit.json) vencem quando existem",
+  "cores": {
+    "deep": "#0B0B0F",
+    "cardTop": "#17171C",
+    "cardBottom": "#0B0B0F",
+    "accent": "#ff3b30",
+    "accentSoft": "#ff7a73",
+    "accentMist": "#ffe3e1",
+    "paper": "#F5F5F5",
+    "subtle": "#9A9AA5"
+  },
+  "fontes": {
+    "display": "Poppins",
+    "displayItalico": false,
+    "ui": "Poppins",
+    "gfontQuery": "family=Poppins:wght@400;600;900"
+  },
+  "texto": {
+    "eyebrow": {"sizePx": 30, "tracking": ".12em", "weight": 600, "upper": true},
+    "acento": "bold",
+    "numeracao": "bold"
+  },
+  "formas": {
+    "raioCardPx": 16,
+    "raioPillPx": 999,
+    "molduraMock": "6px",
+    "aneis": true,
+    "glowRadial": true,
+    "topoFolha": false
+  },
+  "sombra": "0 30px 70px -28px",
+  "motion": {
+    "easing": "cubic-bezier(.2,.8,.2,1)",
+    "linhas": {"yPercent": 110, "stagger": 0.1, "dur": 0.8},
+    "reveal": {"y": 28, "dur": 0.7},
+    "clip": {"dur": 0.9, "ease": "power2.inOut"},
+    "capline": {"larguraPx": 140, "dur": 0.8, "dotDelay": 0.4},
+    "ringSpinS": [60, 45]
+  }
+}

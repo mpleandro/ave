@@ -198,6 +198,86 @@
       "css": "revelar",
       "js": "revelar",
       "grupo": "varredura"
+    },
+    "editorial": {
+      "_note": "Editorial — papéis por palavra (caption-editorial.json, do caption_style_editorial.py). Bloco ancorado à ESQUERDA — metade do que o faz ler como editorial e não como legenda. Papéis e movimento vêm do kit Avelin (styles.local.js BRAND): conectivo apagado, acento serif ITÁLICO, punch no accent, algarismo gigante.",
+      "animated": true,
+      "needsCues": true,
+      "css": "editorial",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "serifFamily": "'Libre Baskerville', Georgia, serif",
+      "gfont": "family=Open+Sans:wght@400;600;700&family=Libre+Baskerville:ital,wght@0,400;1,400",
+      "size": 76,
+      "maxW": 900,
+      "safeLeftPx": 90,
+      "lineHeight": 1.0,
+      "letterSpacing": -0.02,
+      "offsetY": 0.5,
+      "roles": {
+        "ctx": {
+          "em": 0.62,
+          "color": "#7A95AA",
+          "weight": 400,
+          "serif": false
+        },
+        "stress": {
+          "em": 1.0,
+          "color": "#F5F2EE",
+          "weight": 700,
+          "serif": false
+        },
+        "serif": {
+          "em": 1.12,
+          "color": "#F5F2EE",
+          "weight": 400,
+          "serif": true
+        },
+        "serifAcc": {
+          "em": 1.12,
+          "color": "accent",
+          "weight": 400,
+          "serif": true
+        },
+        "punch": {
+          "em": 1.0,
+          "color": "accent",
+          "weight": 700,
+          "serif": false
+        },
+        "num": {
+          "em": 2.0,
+          "color": "accent",
+          "weight": 400,
+          "serif": true
+        }
+      },
+      "motion": {
+        "fade": {
+          "dur": 0.34,
+          "blur": 2
+        },
+        "serifIn": {
+          "dur": 0.32,
+          "scale": 0.8
+        },
+        "type": {
+          "dur": 0.24,
+          "riseY": 5,
+          "staggerPerChar": 0.045
+        },
+        "pop": {
+          "dur": 0.5,
+          "blur": 20
+        },
+        "glow": {
+          "dur": 0.42,
+          "blur": 11,
+          "scale": 1.05
+        },
+        "exit": 0.2
+      },
+      "weight": 400
     }
   },
   "_headlines_readme": "Números de CADA layout de headline, lidos pela prévia do editor E pelo compositor. `paint` diz quem recebe a cor PRINCIPAL e quem recebe o DESTAQUE — por linha, por palavra ou no fundo. `gradient` é regra do MODELO, não escolha do usuário: quando existe, a cor escolhida vira a parada de cima e a de baixo é DERIVADA dela (escurecendo ou clareando por `amount`), para o usuário escolher uma cor e receber um degradê coerente em vez de ter de casar duas pontas na mão. `sizes` por linha (multiplicadores do corpo ajustado) é o que permite layouts com uma linha herói — sem ele toda headline é um bloco de linhas do mesmo tamanho.",

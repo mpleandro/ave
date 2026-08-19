@@ -142,6 +142,14 @@ def main() -> None:
         sys.exit("nada salvo no editor — nenhum preview_edits.json")
 
     notes = payload.get("notes") or []
+    # O PEDIDO EM TEXTO ("Alterações extras") viaja em `request`, não em notes.
+    # Ignorá-lo sumia com a mensagem: o toast dizia "✓ Enviado", este script
+    # dizia "nada a aplicar" e apagava o arquivo — medido em 2026-08-19, com o
+    # usuário perguntando se o pedido tinha chegado. Vira nota pendente, que o
+    # watcher anuncia como qualquer outra.
+    pedido = (payload.get("request") or "").strip()
+    if pedido:
+        notes = list(notes) + [{"text": pedido, "request": True}]
     has_edl = bool(payload.get("edl"))
     has_data = bool(payload.get("editData"))
 
@@ -205,7 +213,10 @@ def main() -> None:
         print(f"\n{len(notes)} marcação(ões) escrita(s) — estas NÃO foram aplicadas, "
               f"porque são pedidos em texto e precisam de leitura:")
         for n in notes:
-            print(f'  [{n["renderedStart"]:.2f}–{n["renderedEnd"]:.2f}s] {n["text"]}')
+            if n.get("request"):
+                print(f'  [pedido em texto] {n["text"]}')
+            else:
+                print(f'  [{n["renderedStart"]:.2f}–{n["renderedEnd"]:.2f}s] {n["text"]}')
         print("  guardadas em pending_notes.json")
 
     edits_path.unlink(missing_ok=True)

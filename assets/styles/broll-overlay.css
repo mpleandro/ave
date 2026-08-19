@@ -1,15 +1,13 @@
-/* BROLL OVERLAY — animações de ênfase POR CIMA do a-roll.
+/* BROLL OVERLAY — janelas de ênfase POR CIMA do a-roll, vestidas por um
+ * MOTION KIT (helpers/motion_kit.py): o repo entrega o default vermelho/preto;
+ * o kit aprendido do usuário (~/.avelin/motion/kit.json) e a marca dele
+ * (~/.avelin/brand.json) vencem. NENHUMA cor/fonte/forma é decidida aqui —
+ * tudo chega por variável (--bo-*) escrita pelo compositor a partir do kit.
  *
- * Três decisões estruturais, todas aprendidas em outras famílias:
- * - O escurecimento é um SCRIM próprio, nunca `opacity` no vídeo: opacidade
- *   abaixo de 1 cria contexto de empilhamento e mata qualquer blend (medido no
- *   fork de origem; a memória do projeto guarda o caso).
- * - As cores vêm de variáveis por janela (--bo-deep / --bo-accent), escritas
- *   pelo compositor a partir de ~/.avelin/brand.json. Hexa cru aqui repetiria
- *   o erro do accent hardcoded que a aba Estilo existe para evitar.
- * - Todo estado inicial invisível (opacity:0) é REAPLICADO pelo JS no
- *   buildTimeline — a folha sozinha nunca decide visibilidade final, senão a
- *   prévia ao vivo mostra tela vazia (lição do `revelar`).
+ * Regras herdadas de outras famílias:
+ * - escurecer é SCRIM próprio, nunca opacity no vídeo (stacking context mata blend);
+ * - estado inicial invisível é REAPLICADO pelo JS (lição do `revelar`);
+ * - sombra re-emitida em qualquer valor animado de filter (lição do disperso).
  */
 
 .ave-bo-scrim {
@@ -23,74 +21,140 @@
   position: absolute; left: 0; width: 100%;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
+  gap: 26px;
   pointer-events: none;
   opacity: 0;               /* entrada é do JS */
 }
 .ave-bo-win.pos-full   { top: 240px;  height: 1200px; }
 .ave-bo-win.pos-top    { top: 140px;  height: 640px; }
-.ave-bo-win.pos-bottom { top: 1080px; height: 400px; } /* acaba antes da faixa de legenda (~1490) */
+.ave-bo-win.pos-bottom { top: 1080px; height: 400px; } /* acaba antes da faixa de legenda */
 
-/* ---- palavra/frase cinética ---- */
+/* ---- cenário da janela cheia: glow radial + anéis girando ---- */
+.ave-bo-win .bo-glow {
+  position: absolute; left: 50%; top: 50%;
+  width: 1400px; height: 1400px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--bo-accent) 26%, transparent) 0%, transparent 62%);
+  pointer-events: none;
+}
+.ave-bo-win .bo-ring {
+  position: absolute; left: 50%; top: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--bo-paper, #fff) 14%, transparent);
+  border-radius: 999px;
+  pointer-events: none;
+}
+.ave-bo-win .bo-ring.r1 { width: 980px; height: 980px; margin: -490px 0 0 -490px;
+  border-style: dashed; }
+.ave-bo-win .bo-ring.r2 { width: 720px; height: 720px; margin: -360px 0 0 -360px;
+  border-color: color-mix(in srgb, var(--bo-accent) 32%, transparent); }
+
+/* ---- painel-cartão (janelas top/bottom): o sticky card da referência ---- */
+.ave-bo-win .bo-card {
+  display: flex; flex-direction: column; align-items: center; gap: 20px;
+  padding: 44px 64px;
+  background: linear-gradient(160deg, var(--bo-card-top), var(--bo-card-bottom));
+  border-radius: var(--bo-radius, 18px);
+  box-shadow: var(--bo-shadow);
+  border: 1px solid color-mix(in srgb, var(--bo-accent) 22%, transparent);
+}
+.ave-bo-win.folha .bo-card { border-radius: 22px 22px var(--bo-radius, 18px) var(--bo-radius, 18px); }
+
+/* ---- eyebrow + linha-legenda: a assinatura editorial da referência ---- */
+.ave-bo-win .bo-eyebrow {
+  font-family: var(--bo-font-ui), system-ui, sans-serif;
+  font-size: 30px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--bo-soft, var(--bo-accent));
+  opacity: 0;
+}
+.ave-bo-win .bo-capline {
+  display: flex; align-items: center; gap: 14px; height: 10px;
+}
+.ave-bo-win .bo-capline .l {
+  display: block; height: 3px; width: 0;   /* cresce pelo JS */
+  background: linear-gradient(90deg, var(--bo-accent), transparent);
+  border-radius: 2px;
+}
+.ave-bo-win .bo-capline .d {
+  display: block; width: 10px; height: 10px; border-radius: 999px;
+  background: var(--bo-accent); opacity: 0;
+}
+
+/* ---- palavra/frase cinética: linhas sobem por MÁSCARA, acento em itálico ---- */
 .ave-bo-words {
-  max-width: 880px;
+  position: relative;
+  max-width: 900px;
   text-align: center;
-  font-family: 'Poppins', 'Open Sans', system-ui, sans-serif;
-  font-weight: 900;
-  font-size: 108px;
-  line-height: 1.04;
-  color: #fff;
+  font-family: var(--bo-font-display), Georgia, serif;
+  font-weight: 700;
+  font-size: 104px;
+  line-height: 1.1;
+  color: var(--bo-paper, #fff);
   text-shadow: 0 4px 28px rgba(0, 0, 0, .55);
 }
 .ave-bo-win.pos-top .ave-bo-words,
-.ave-bo-win.pos-bottom .ave-bo-words { font-size: 76px; }
-.ave-bo-words .bo-w { display: inline-block; margin: 0 .14em; }
-.ave-bo-words .bo-w.acc { color: var(--bo-accent, #ff3b30); }
+.ave-bo-win.pos-bottom .ave-bo-words { font-size: 72px; }
+.ave-bo-words .bo-lw {                 /* a máscara: cada palavra sobe de dentro dela */
+  display: inline-block; overflow: hidden;
+  vertical-align: bottom;
+  margin: 0 .13em; padding-bottom: .08em;
+}
+.ave-bo-words .bo-w { display: inline-block; }
+.ave-bo-words .bo-w.acc { color: var(--bo-accent); }
+.ave-bo-win.kit-italico .ave-bo-words .bo-w.acc { font-style: italic; }
 
 /* ---- número/estatística ---- */
-.ave-bo-stat {
-  text-align: center;
-  font-family: 'Poppins', 'Open Sans', system-ui, sans-serif;
-  color: #fff;
-}
+.ave-bo-stat { position: relative; text-align: center; color: var(--bo-paper, #fff); }
 .ave-bo-stat .bo-value {
-  font-weight: 900;
-  font-size: 190px;
+  font-family: var(--bo-font-display), Georgia, serif;
+  font-weight: 700;
+  font-size: 200px;
   line-height: 1;
-  color: var(--bo-accent, #ff3b30);
+  color: var(--bo-accent);
   text-shadow: 0 6px 34px rgba(0, 0, 0, .6);
 }
+.ave-bo-win.kit-italico .ave-bo-stat .bo-value { font-style: italic; }
 .ave-bo-win.pos-top .ave-bo-stat .bo-value,
-.ave-bo-win.pos-bottom .ave-bo-stat .bo-value { font-size: 120px; }
-.ave-bo-stat .bo-fix { font-size: .42em; font-weight: 700; vertical-align: .12em; margin: 0 .08em; }
+.ave-bo-win.pos-bottom .ave-bo-stat .bo-value { font-size: 124px; }
+.ave-bo-stat .bo-fix { font-size: .4em; font-weight: 700; vertical-align: .14em; margin: 0 .08em; }
 .ave-bo-stat .bo-label {
-  margin-top: 18px;
-  font-weight: 600;
-  font-size: 46px;
-  letter-spacing: .04em;
-  color: rgba(255, 255, 255, .92);
+  margin-top: 20px;
+  font-family: var(--bo-font-ui), system-ui, sans-serif;
+  font-size: 34px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--bo-paper, #fff) 88%, transparent);
+  opacity: 0;
 }
 
-/* ---- etiquetas em sequência ---- */
+/* ---- etiquetas em sequência: pills numeradas, como o build-meta ---- */
 .ave-bo-labels { display: flex; flex-direction: column; gap: 22px; align-items: center; }
 .ave-bo-labels .bo-item {
-  font-family: 'Poppins', 'Open Sans', system-ui, sans-serif;
-  font-weight: 700;
-  font-size: 56px;
-  color: #fff;
-  background: var(--bo-deep, #0D2137);
-  border-left: 10px solid var(--bo-accent, #ff3b30);
-  border-radius: 14px;
-  padding: 18px 44px;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, .45);
+  display: flex; align-items: baseline; gap: 22px;
+  font-family: var(--bo-font-ui), system-ui, sans-serif;
+  font-weight: 700; font-size: 52px;
+  color: var(--bo-paper, #fff);
+  background: linear-gradient(160deg, var(--bo-card-top), var(--bo-card-bottom));
+  border: 1.5px solid color-mix(in srgb, var(--bo-accent) 34%, transparent);
+  border-radius: var(--bo-pill, 999px);
+  padding: 18px 48px;
+  box-shadow: var(--bo-shadow);
   opacity: 0;               /* cada item entra pelo JS, um a um */
 }
+.ave-bo-labels .bo-item .bo-idx {
+  font-family: var(--bo-font-display), Georgia, serif;
+  font-size: .62em; font-weight: 400;
+  color: var(--bo-accent);
+}
+.ave-bo-win.kit-italico .ave-bo-labels .bo-idx { font-style: italic; }
 
-/* ---- mídia pronta ---- */
+/* ---- mídia pronta: moldura de mockup + clip reveal ---- */
 .ave-bo-media {
+  border: var(--bo-frame, 6px) solid var(--bo-deep, #000);
   border-radius: 26px;
   overflow: hidden;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, .55);
-  background: var(--bo-deep, #0D2137);
+  box-shadow: var(--bo-shadow);
+  background: var(--bo-deep, #000);
 }
 .ave-bo-win.pos-full .ave-bo-media { width: 880px; }
 .ave-bo-win.pos-top .ave-bo-media,

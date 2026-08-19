@@ -593,8 +593,17 @@ O schema, em `edit-data.json`:
 - `media`: mesmo relógio do split (`data-media-start`), vídeo mudo, e o
   arquivo mora na RAIZ do projeto (`hyperframes/`).
 - As legendas pintam POR CIMA do scrim (ordem do DOM) — fala nunca some.
-- Look em `assets/styles/broll-overlay.css`, tempo em `broll-overlay.js`
-  (construtor `AVE_BROLL`, mesmo idioma do insert/split).
+- **O LOOK e o MOVIMENTO vêm de um MOTION KIT** (`helpers/motion_kit.py`):
+  `~/.avelin/motion/kit.json` do usuário quando existe (aprendido das
+  referências dele — LPs, CSS, SVGs, designkit), senão
+  `assets/motion/default.json` (vermelho/preto). A marca (`brand.json`) vence
+  as cores do kit; o kit manda em forma e movimento. O CSS/JS
+  (`broll-overlay.css/js`, construtor `AVE_BROLL`) só consomem variáveis e
+  `data-motion` — nunca decidem gosto. Para criar/atualizar um kit: leia as
+  referências apontadas pelo usuário, destile paleta/tipografia/formas/números
+  de movimento no schema do kit e grave em `~/.avelin/motion/kit.json`
+  (`--validar` confere). Campo extra por janela: `eyebrow` (rótulo editorial
+  em cima do conteúdo).
 
 ## Behind-the-subject (element between person and background)
 

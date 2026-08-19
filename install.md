@@ -277,11 +277,11 @@ Tell the user, in one short message:
 - That they should `cd` into their footage folder and start their agent there (e.g. `claude`).
 - That a good first message is: *"edit these into a launch video"* or *"inventory these takes and propose a strategy."*
 - **What the first video looks like from their side:** the editor opens on the
-  dropzone with the install checklist under it; dropping a file only *creates*
-  the project — the cut starts when they press **Gerar cortes**, and the screen
-  then shows a loading state with the Phase-1 steps while you work. Say this
-  explicitly: someone who expects the drop itself to start the work will sit
-  waiting on a screen that is waiting for them.
+  dropzone with the install checklist under it; dropping a file creates the
+  project **and starts the cut immediately**, following the source video's
+  aspect ratio — the screen goes straight to a loading state with the Phase-1
+  steps while you work. A different format or a briefing is asked for in the
+  chat, whenever the user wants.
 - That all outputs land in `<videos_dir>/edit/` — the repo stays clean.
 
 ## Keeping the skill current
