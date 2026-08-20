@@ -223,6 +223,19 @@ SERVER = Path.home() / ".avelin" / "server.json"
 BRAND = Path.home() / ".avelin" / "brand.json"
 BRAND_KEYS = ("accent", "textColor", "capColor", "fontMain", "fontAccent", "capFont")
 
+# AS ESCOLHAS DE ESTILO, lembradas entre projetos. O `brand.json` já guardava a
+# identidade (cor e letra); faltava o resto do que o usuário marca toda vez —
+# o formato do corte, a headline, o estilo de legenda, os elementos ligados.
+# Refazer as mesmas cinco escolhas em todo vídeo é trabalho que a ferramenta
+# podia poupar, e a divisão entre os dois arquivos é de SIGNIFICADO: um diz
+# quem ele é, o outro diz como ele costuma editar.
+#
+# Fora do clone, pela mesma razão do preferencias.json e do brand.json: gosto
+# de meses não pode morrer num `git clean` nem subir para um repositório que
+# outros clonam.
+ESTILO = Path.home() / ".avelin" / "estilo.json"
+ESTILO_KEYS = ("edit", "headline", "captions", "elements", "capDy")
+
 
 def _set_root(p: Path | None) -> None:
     """Trocar de projeto é uma coisa só: o root e o ponteiro publicado."""
@@ -697,6 +710,8 @@ class Handler(BaseHTTPRequestHandler):
             self._browse()
         elif path == "/api/brand":
             self._brand_get()
+        elif path == "/api/estilo":
+            self._estilo_get()
         elif path == "/api/localfonts":
             self._localfonts()
         elif path == "/download":
@@ -748,6 +763,7 @@ class Handler(BaseHTTPRequestHandler):
             name = "preview_approval.json"
         elif body.get("type") == "style-setup":
             name = "preview_style.json"
+            self._estilo_lembrar(body)
         else:
             name = "preview_edits.json"
         out = self.root / name
@@ -1009,6 +1025,44 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(exc)}, 500)
             return
         self._json({"ok": True, "brand": cur})
+
+    def _estilo_get(self) -> None:
+        try:
+            d = json.loads(ESTILO.read_text())
+        except (OSError, json.JSONDecodeError):
+            d = {}
+        self._json({k: d[k] for k in ESTILO_KEYS if k in d})
+
+    def _estilo_lembrar(self, body: dict) -> None:
+        """Guarda as escolhas do envio de estilo para o PRÓXIMO projeto.
+
+        Gravado aqui, no servidor, e não por uma chamada a mais do navegador:
+        a lembrança tem de acontecer no mesmo ato em que a escolha é enviada.
+        Como pedido separado, ela falharia sozinha — e o modo de falhar seria
+        silencioso, com o usuário descobrindo semanas depois que nada estava
+        sendo lembrado.
+
+        Só as chaves conhecidas, como no brand: o corpo vem do navegador, e
+        gravar o que ele mandar transformaria isto em depósito.
+        """
+        cur: dict = {}
+        try:
+            cur = json.loads(ESTILO.read_text())
+        except (OSError, json.JSONDecodeError):
+            cur = {}
+        for k in ESTILO_KEYS:
+            if k in body:
+                cur[k] = body[k]
+        cur["atualizado"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            ESTILO.parent.mkdir(parents=True, exist_ok=True)
+            tmp = ESTILO.with_suffix(".tmp")
+            tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2))
+            tmp.replace(ESTILO)
+        except OSError:
+            # lembrar é conforto, não contrato: um disco cheio não pode
+            # derrubar o envio do estilo, que é o que o usuário veio fazer
+            pass
 
     # ---- escolha de projeto ----
     def _projects(self) -> None:

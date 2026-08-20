@@ -1,0 +1,350 @@
+/* CARTELA — o motor das headlines de slots, com movimento.
+ *
+ * Vinte layouts, UMA estrutura. Toda cartela é o mesmo bloco: sobrancelha,
+ * algarismo, linhas, grade de rótulos e assinatura — mais peças opcionais
+ * (faixa, cartão, painel, listras, balão, réguas, vinheta, aspa). O que separa
+ * um layout do outro é quais peças existem e como cada uma é pintada, e isso
+ * é DADO: `variants.headlines.<id>` com `pecas`, `slots`, `paint` e `motion`.
+ *
+ * DUAS COISAS QUE ESTA FOLHA NÃO FAZ, e por quê:
+ *
+ *  · não conta tempo — entrada e saída são tween de GSAP no `cartela.js`. O
+ *    renderer salta para um quadro qualquer sem tempo de parede passar, e
+ *    transição ou @keyframes de CSS sairia congelada nesse salto. Só o piscar
+ *    do cursor e nada mais.
+ *  · não decide corpo de letra — o compositor MEDE o texto e escreve
+ *    `--hl-size`, como já fazia com os layouts antigos. Corpo fixo aqui faria
+ *    a frase longa estourar a largura segura sem erro nenhum.
+ *
+ * Medidas em referência de 1080px, multiplicadas por `--hl-scale` (a prévia do
+ * editor passa largura/1080, a composição passa 1) — a mesma regra do
+ * headline.css, e o que permite os dois lados usarem ESTA folha.
+ *
+ * O ACCENT VIAJA DUAS VEZES: `--hl-accent` (hex) e `--hl-accent-rgb` (trio
+ * separado por ESPAÇO), porque o halo do neon e as chapas translúcidas passam
+ * por `rgb(... / alpha)` — e sem o trio a regra cai calada.
+ */
+
+.ave-cartela {
+  --hl-scale: 1;
+  --hl-size: 100;
+  --hl-lh: 1.04;
+  --hl-top: 300;
+  --hl-main: #ffffff;
+  --hl-accent: #ff6b1a;
+  --hl-accent-rgb: 255 107 26;
+  --hl-accent-soft: #ffad7a;
+  --hl-deep: #0d2137;
+  --hl-papel: #f5f2ee;
+  --hl-sobre: #10202e;
+  --hl-azul: #7a95aa;
+  --hl-font: 'Poppins', sans-serif;
+  --hl-font-accent: 'Caveat', cursive;
+  --hl-serif: 'Libre Baskerville', Georgia, serif;
+  --hl-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--hl-font);
+  color: var(--hl-main);
+}
+
+/* O BLOCO. Nas cartelas de banda ele senta no `top` do layout; nas de tela
+   cheia ele É a tela, e quem manda no lugar é a folha. */
+.ave-cartela .ct-bloco {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--hl-top) * var(--hl-scale) * 1px);
+  text-align: center;
+}
+.ave-cartela.cheia .ct-bloco {
+  inset: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: calc(120px * var(--hl-scale)) calc(90px * var(--hl-scale));
+}
+
+.ave-cartela .hl-line {
+  --hl-k: 1;
+  font-size: calc(var(--hl-size) * var(--hl-k) * var(--hl-scale) * 1px);
+  line-height: var(--hl-lh);
+  letter-spacing: calc(-1px * var(--hl-scale));
+  white-space: pre;
+}
+
+.ave-cartela .ct-olho {
+  font-family: var(--hl-font);
+  font-weight: 700;
+  font-size: calc(30px * var(--hl-scale));
+  letter-spacing: calc(0.22em);
+  text-transform: uppercase;
+  color: var(--hl-accent);
+  margin-bottom: calc(38px * var(--hl-scale));
+}
+
+.ave-cartela .ct-num {
+  font-weight: 900;
+  line-height: 0.8;
+  color: var(--hl-accent);
+  font-size: calc(var(--hl-size) * 3.4 * var(--hl-scale) * 1px);
+}
+
+/* A CHAPA de fundo das cartelas de tela cheia. Elemento próprio e não
+   `background` do bloco: a saída (cortina, corte, desfoque) anima o FUNDO
+   sozinho em metade dos layouts, e um fundo pintado no bloco levaria o texto
+   junto. */
+.ave-cartela .ct-fundo {
+  position: absolute;
+  inset: 0;
+  background: var(--hl-deep);
+}
+
+/* ======================================================= 1 · FITA */
+.ave-cartela.ct-fita .ct-bloco { left: calc(-60px * var(--hl-scale)); right: calc(-60px * var(--hl-scale)); }
+.ave-cartela.ct-fita .ct-faixa {
+  background: var(--hl-accent);
+  transform: rotate(-5deg);
+  padding: calc(38px * var(--hl-scale)) 0;
+  box-shadow: 0 calc(26px * var(--hl-scale)) calc(60px * var(--hl-scale))
+    calc(-20px * var(--hl-scale)) rgba(0, 0, 0, 0.7);
+}
+.ave-cartela.ct-fita .hl-line { color: var(--hl-sobre); }
+
+/* ==================================================== 2 · JORNAL */
+.ave-cartela.ct-jornal .ct-bloco { left: calc(80px * var(--hl-scale)); right: calc(80px * var(--hl-scale)); }
+.ave-cartela.ct-jornal .ct-cartao {
+  background: #efe9df;
+  padding: calc(44px * var(--hl-scale)) calc(46px * var(--hl-scale)) calc(50px * var(--hl-scale));
+  transform: rotate(-1.4deg);
+  text-align: left;
+  box-shadow: 0 calc(30px * var(--hl-scale)) calc(70px * var(--hl-scale))
+    calc(-22px * var(--hl-scale)) rgba(0, 0, 0, 0.75);
+}
+.ave-cartela.ct-jornal .ct-olho {
+  font-family: var(--hl-mono);
+  font-weight: 500;
+  font-size: calc(26px * var(--hl-scale));
+  letter-spacing: 0.24em;
+  color: #8a7f70;
+  border-bottom: calc(2px * var(--hl-scale)) solid #cfc4b4;
+  padding-bottom: calc(14px * var(--hl-scale));
+  margin-bottom: calc(20px * var(--hl-scale));
+}
+.ave-cartela.ct-jornal .hl-line { font-family: var(--hl-serif); font-weight: 700; color: #151312; }
+
+/* ================================================== 3 · TERMINAL */
+.ave-cartela.ct-terminal .ct-bloco { left: calc(80px * var(--hl-scale)); right: calc(80px * var(--hl-scale)); }
+.ave-cartela.ct-terminal .ct-painel {
+  background: rgba(6, 10, 16, 0.94);
+  border: calc(2px * var(--hl-scale)) solid rgb(var(--hl-accent-rgb) / 0.55);
+  border-radius: calc(10px * var(--hl-scale));
+  padding: calc(34px * var(--hl-scale)) calc(36px * var(--hl-scale));
+  text-align: left;
+}
+.ave-cartela.ct-terminal .ct-pontos { display: flex; gap: calc(10px * var(--hl-scale)); margin-bottom: calc(26px * var(--hl-scale)); }
+.ave-cartela.ct-terminal .ct-pontos i {
+  width: calc(18px * var(--hl-scale)); height: calc(18px * var(--hl-scale));
+  border-radius: 50%; background: rgb(122 149 170 / 0.4);
+}
+.ave-cartela.ct-terminal .ct-pontos i:first-child { background: var(--hl-accent); }
+.ave-cartela.ct-terminal .hl-line { font-family: var(--hl-mono); font-weight: 700; }
+.ave-cartela.ct-terminal .hl-line:first-child::before { content: '> '; color: var(--hl-accent); }
+.ave-cartela .ct-cursor {
+  display: inline-block; width: 0.6em; height: 1em;
+  background: var(--hl-accent); transform: translateY(0.14em);
+}
+
+/* ==================================================== 4 · ALERTA */
+.ave-cartela.ct-alerta .ct-listras {
+  height: calc(26px * var(--hl-scale));
+  background: repeating-linear-gradient(-45deg, var(--hl-accent) 0 calc(24px * var(--hl-scale)),
+    #12202c calc(24px * var(--hl-scale)) calc(48px * var(--hl-scale)));
+}
+.ave-cartela.ct-alerta .ct-chapa { background: #0b1520; padding: calc(34px * var(--hl-scale)) calc(60px * var(--hl-scale)); }
+
+/* ==================================================== 5 · PLACAR */
+.ave-cartela.ct-placar .ct-bloco {
+  left: calc(80px * var(--hl-scale)); right: calc(80px * var(--hl-scale));
+  display: flex; align-items: center; gap: calc(38px * var(--hl-scale)); text-align: left;
+}
+.ave-cartela.ct-placar .ct-num { flex: none; }
+.ave-cartela.ct-placar .ct-linhas { flex: 1; }
+
+/* ============================================== 6 · SOMBRA LONGA */
+/* Oito degraus saídos de UM número (--ct-ext), que é o que o tween anima:
+   sombra é string, e string não interpola. A extrusão é dura de propósito —
+   sombra borrada é botão, sombra chapada é cartaz. */
+.ave-cartela.ct-sombra_longa .hl-line {
+  text-shadow:
+    calc(var(--ct-ext, 0) * 4px * var(--hl-scale)) calc(var(--ct-ext, 0) * 4px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(var(--ct-ext, 0) * 8px * var(--hl-scale)) calc(var(--ct-ext, 0) * 8px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(var(--ct-ext, 0) * 12px * var(--hl-scale)) calc(var(--ct-ext, 0) * 12px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(var(--ct-ext, 0) * 16px * var(--hl-scale)) calc(var(--ct-ext, 0) * 16px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(var(--ct-ext, 0) * 20px * var(--hl-scale)) calc(var(--ct-ext, 0) * 20px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(var(--ct-ext, 0) * 24px * var(--hl-scale)) calc(var(--ct-ext, 0) * 24px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(var(--ct-ext, 0) * 28px * var(--hl-scale)) calc(var(--ct-ext, 0) * 28px * var(--hl-scale)) 0 var(--hl-accent),
+    calc(var(--ct-ext, 0) * 32px * var(--hl-scale)) calc(var(--ct-ext, 0) * 32px * var(--hl-scale)) 0 var(--hl-accent);
+}
+
+/* ====================================================== 7 · NEON */
+.ave-cartela.ct-neon .hl-line {
+  color: transparent;
+  -webkit-text-stroke: calc(var(--hl-stroke, 3) * var(--hl-scale) * 1px) var(--hl-papel);
+  paint-order: stroke fill;
+  text-shadow:
+    0 0 calc(18px * var(--hl-scale)) rgb(var(--hl-accent-rgb) / var(--ct-halo, 0)),
+    0 0 calc(44px * var(--hl-scale)) rgb(var(--hl-accent-rgb) / calc(var(--ct-halo, 0) * 0.8)),
+    0 0 calc(90px * var(--hl-scale)) rgb(var(--hl-accent-rgb) / calc(var(--ct-halo, 0) * 0.45));
+}
+
+/* ===================================================== 8 · BALÃO */
+.ave-cartela.ct-balao .ct-bloco { left: calc(90px * var(--hl-scale)); right: calc(90px * var(--hl-scale)); }
+.ave-cartela.ct-balao .ct-balao {
+  position: relative;
+  background: var(--hl-papel);
+  border-radius: calc(34px * var(--hl-scale));
+  padding: calc(44px * var(--hl-scale)) calc(46px * var(--hl-scale));
+  transform-origin: 20% 100%;
+  box-shadow: 0 calc(30px * var(--hl-scale)) calc(70px * var(--hl-scale))
+    calc(-24px * var(--hl-scale)) rgba(0, 0, 0, 0.8);
+}
+.ave-cartela.ct-balao .hl-line { color: var(--hl-sobre); }
+.ave-cartela.ct-balao .ct-rabicho {
+  position: absolute; left: calc(76px * var(--hl-scale)); bottom: calc(-38px * var(--hl-scale));
+  border: calc(22px * var(--hl-scale)) solid transparent;
+  border-right-width: calc(40px * var(--hl-scale));
+  border-top-color: var(--hl-papel);
+}
+
+/* ==================================================== 9 · FILETE */
+.ave-cartela.ct-filete .ct-bloco { left: calc(110px * var(--hl-scale)); right: calc(110px * var(--hl-scale)); }
+.ave-cartela.ct-filete .ct-regua {
+  display: block; height: calc(3px * var(--hl-scale)); background: var(--hl-accent-soft);
+  transform-origin: center; transform: scaleX(0);
+}
+.ave-cartela.ct-filete .ct-linhas { padding: calc(30px * var(--hl-scale)) 0; }
+.ave-cartela.ct-filete .hl-line { font-family: var(--hl-serif); font-weight: 400; letter-spacing: 0.02em; }
+
+/* =================================================== 10 · ADESIVO */
+.ave-cartela.ct-adesivo .ct-bloco { left: calc(110px * var(--hl-scale)); right: calc(110px * var(--hl-scale)); }
+.ave-cartela.ct-adesivo .ct-adesivo {
+  background: var(--hl-accent);
+  border: calc(10px * var(--hl-scale)) solid var(--hl-papel);
+  border-radius: calc(26px * var(--hl-scale));
+  padding: calc(40px * var(--hl-scale)) calc(34px * var(--hl-scale));
+  box-shadow: 0 calc(26px * var(--hl-scale)) calc(60px * var(--hl-scale))
+    calc(-18px * var(--hl-scale)) rgba(0, 0, 0, 0.75);
+}
+.ave-cartela.ct-adesivo .hl-line { color: var(--hl-sobre); }
+
+/* ================================================================
+   TELA CHEIA
+   ================================================================ */
+
+/* 11 · CAPA */
+.ave-cartela.ct-capa .ct-bloco { justify-content: center; text-align: left; }
+
+/* 12 · CAPA DESFOCADA — o desfoque anda por variável: `backdrop-filter`
+   escrito direto não é animável por tween, e é a SAÍDA dele que revela o
+   vídeo. */
+.ave-cartela.ct-capa_blur .ct-blur {
+  position: absolute; inset: 0;
+  backdrop-filter: blur(calc(var(--ct-blur, 26) * var(--hl-scale) * 1px)) brightness(var(--ct-brilho, 0.42));
+}
+.ave-cartela.ct-capa_blur .ct-bloco { text-align: center; }
+
+/* 13 · CORTINA */
+.ave-cartela.ct-cortina .ct-fundo { background: var(--hl-accent); }
+.ave-cartela.ct-cortina .hl-line { color: var(--hl-sobre); }
+
+/* 14 · MEIA-TELA */
+.ave-cartela.ct-meia_tela .ct-fundo { bottom: 44%; }
+.ave-cartela.ct-meia_tela .ct-bloco {
+  bottom: 44%; top: 0; inset: auto 0 44% 0;
+  justify-content: flex-end; text-align: left;
+  padding: 0 calc(84px * var(--hl-scale)) calc(70px * var(--hl-scale));
+}
+.ave-cartela.ct-meia_tela .ct-olho { font-family: var(--hl-mono); font-weight: 500; }
+
+/* 15 · MOLDURA — a vinheta é uma BORDA que se anima até zero. Encolher o
+   a-roll brigaria com a câmera pelo mesmo transform. */
+.ave-cartela.ct-moldura .ct-vinheta {
+  position: absolute; inset: 0;
+  border-style: solid; border-color: var(--hl-deep);
+  border-width: calc(var(--ct-b-top, 520) * var(--hl-scale) * 1px)
+    calc(var(--ct-b-dir, 90) * var(--hl-scale) * 1px)
+    calc(var(--ct-b-bot, 240) * var(--hl-scale) * 1px)
+    calc(var(--ct-b-esq, 90) * var(--hl-scale) * 1px);
+  border-radius: calc(var(--ct-b-raio, 28) * var(--hl-scale) * 1px);
+}
+.ave-cartela.ct-moldura .ct-bloco {
+  inset: auto 0 auto 0; top: calc(var(--hl-top) * var(--hl-scale) * 1px);
+  display: block; padding: 0 calc(80px * var(--hl-scale));
+}
+
+/* 16 · CONTAGEM */
+.ave-cartela.ct-contagem .ct-bloco { align-items: center; justify-content: center; text-align: center; }
+.ave-cartela.ct-contagem .ct-num { font-size: calc(520px * var(--hl-scale)); margin-bottom: calc(20px * var(--hl-scale)); }
+.ave-cartela.ct-contagem .hl-line { letter-spacing: 0.08em; }
+
+/* 17 · KNOCKOUT — SVG com máscara: o furo tem de ser no FUNDO, e clip de
+   texto faz o contrário (preenche a letra). */
+.ave-cartela.ct-knockout .ct-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* 18 · PÔSTER */
+.ave-cartela.ct-poster .ct-fundo { background: var(--hl-papel); }
+.ave-cartela.ct-poster .ct-bloco {
+  justify-content: space-between; text-align: left;
+  padding: calc(150px * var(--hl-scale)) calc(80px * var(--hl-scale));
+}
+.ave-cartela.ct-poster .ct-linhas { display: flex; flex-direction: column; gap: calc(10px * var(--hl-scale)); height: 100%; justify-content: space-between; }
+
+/* 19 · ASPAS */
+.ave-cartela.ct-aspas .ct-aspa {
+  position: absolute; left: calc(60px * var(--hl-scale)); top: calc(210px * var(--hl-scale));
+  font-family: 'Playfair Display', Georgia, serif; font-weight: 900;
+  font-size: calc(560px * var(--hl-scale)); line-height: 0.6;
+  color: rgb(var(--hl-accent-rgb) / 0.22);
+}
+.ave-cartela.ct-aspas .ct-bloco { text-align: left; }
+.ave-cartela.ct-aspas .hl-line { font-family: var(--hl-serif); font-style: italic; font-weight: 400; }
+.ave-cartela.ct-aspas .ct-assin {
+  margin-top: calc(44px * var(--hl-scale));
+  font-family: var(--hl-font); font-weight: 700; font-size: calc(32px * var(--hl-scale));
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--hl-accent-soft);
+}
+
+/* 20 · FICHA */
+.ave-cartela.ct-ficha .ct-fundo { background: #0a1119; }
+.ave-cartela.ct-ficha .ct-bloco {
+  justify-content: flex-end; text-align: left;
+  padding: 0 calc(84px * var(--hl-scale)) calc(200px * var(--hl-scale));
+}
+.ave-cartela.ct-ficha .ct-linhas { margin-bottom: calc(60px * var(--hl-scale)); }
+.ave-cartela.ct-ficha .ct-fila {
+  display: flex; gap: calc(26px * var(--hl-scale)); align-items: baseline;
+  border-top: calc(2px * var(--hl-scale)) solid rgb(122 149 170 / 0.3);
+  padding: calc(22px * var(--hl-scale)) 0;
+}
+.ave-cartela.ct-ficha .ct-k {
+  font-family: var(--hl-mono); font-size: calc(26px * var(--hl-scale));
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--hl-azul);
+  width: calc(190px * var(--hl-scale)); flex: none;
+}
+.ave-cartela.ct-ficha .ct-v { font-weight: 700; font-size: calc(52px * var(--hl-scale)); }
+
+
+/* ================================================================
+   PAPÉIS DE COR E DE LETRA POR LINHA
+   `paint.lines` pode ser uma lista — o pôster pinta a terceira linha no accent
+   e as outras no escuro do papel. Como classe e não como estilo inline porque
+   quem repinta ao vivo no editor troca VARIÁVEL, e um inline venceria a troca.
+   ================================================================ */
+.ave-cartela .hl-line.ct-acc { color: var(--hl-accent); }
+.ave-cartela .hl-line.ct-escuro { color: var(--hl-sobre); }
+.ave-cartela .hl-line.ct-claro { color: var(--hl-papel); }
+.ave-cartela .hl-line.ct-serif { font-family: var(--hl-serif); font-style: italic; letter-spacing: 0; }

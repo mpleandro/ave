@@ -287,10 +287,32 @@ de qualquer instrumento acusar.
 - quando os dois limites se cruzam (rosto baixo demais no quadro), **diz que não
   há posição boa** em vez de escolher em silêncio — o conserto ali é reenquadrar.
 
-`phase2.py` roda isso sozinho antes de compor, e só para os estilos de **bloco
-central** (`dinamico`, `editorial`, `stacked`, `scatter`). Karaokê e as estáticas
-nascem ancoradas no rodapé, longe da cabeça, e não precisam. **Um `offsetY`
-escrito à mão no edit-data vence a medição** — a régua serve a quem não decidiu.
+`phase2.py` roda isso sozinho antes de compor, **para todo estilo** — e a
+medição responde "nada a mexer" quando a posição de fábrica já está certa, que é
+o caso comum de quem senta no rodapé. Medir sempre e corrigir só quando precisa
+é mais barato que manter uma lista de quem participa da regra: a lista
+envelheceu no primeiro estilo novo que nasceu no centro do quadro (`rotativo`).
+**Um `offsetY` ou `paddingBottom` escrito à mão no edit-data vence a medição** —
+a régua serve a quem não decidiu.
+
+**O que a régua errava até 19/08/2026** (achado ao portar os dezenove estilos do
+motor `palavra`, e consertado junto):
+
+- **Um número, quatro significados.** A âncora de cada estilo é uma coisa
+  diferente — px do fundo (`rodape`), fração até o TOPO do bloco (`topo`, o
+  dinâmico), fração até o CENTRO (`centro`, editorial/disperso/rotativo, todos
+  com `translateY(-50%)`), deslocamento a partir do meio do quadro
+  (`centroDelta`, o empilhado) — e o helper escrevia `offsetY` para todos
+  tratando-o como topo. O editorial e o disperso saíam corrigidos pela METADE de
+  um bloco (continuavam na boca) e o empilhado receberia um centro em 1,04, com
+  o bloco inteiro fora do quadro. A âncora agora é dado
+  (`variants.styles.<id>.ancora`) e a conversão é explícita.
+- **As alturas de bloco eram o dobro.** A tabela à mão dizia 0.08 para o
+  karaokê; medido no render, o bloco é 0.040. As alturas agora vêm medidas
+  (`blocoMedido: true` no variants.json) — e é a altura que decide se o bloco
+  cabe entre o queixo e o rodapé.
+- **O `cinema` nascia debaixo da interface.** Fundo do bloco em 0.12 do quadro,
+  com o rodapé da plataforma começando em 0.13. Subiu para 290px do fundo.
 
 ### The accent colour (`accent` in preview_style.json)
 

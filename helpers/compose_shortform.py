@@ -92,6 +92,14 @@ PENCIL_D = ("M 30 78 C 26 40, 120 20, 190 24 C 262 28, 300 52, 288 82 "
 def style_files(style_id: str, style: dict) -> list[str]:
     if style_id in ("scatter", "stacked", "editorial", "dinamico"):
         return [f"{style_id}.css", f"{style_id}.js"]
+    # A FOLHA DECLARADA vence o nome do estilo. Os estilos que partilham um
+    # motor (`css: "pop"`, `"revelar"`, `"palavra"`) são muitos e o motor é um;
+    # sem este ramo, `render_html` pedia styles/pop.css e o que ia para o
+    # projeto era o karaoke.css — a folha certa nunca chegava e a legenda saía
+    # crua, com o defeito aparecendo só no render final.
+    motor = style.get("css")
+    if motor:
+        return [f"{motor}.css", f"{motor}.js"]
     return ["karaoke.css", "karaoke.js"] if style["animated"] else ["static.css"]
 
 
@@ -635,14 +643,28 @@ def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
             events.append((s + vin * 0.4, "callout"))
         elif kind == "labels":
             itens = o.get("items") or []
-            # numeração "01" em display — o feature-num da referência
+            # CADA ETIQUETA PODE TER SEU INSTANTE. Item como texto entra na
+            # cadência fixa; item como {"t": "…", "at": 5.42} entra no tempo
+            # ABSOLUTO da fala. Foi o que o vídeo das "4 perguntas" exigiu: as
+            # perguntas são ditas com espaçamento irregular (3.8 · 5.42 · 6.79 ·
+            # 9.60) e uma cadência constante descolaria a lista da voz — o
+            # arquétipo existe para ACOMPANHAR a fala, não para desfilar sozinho.
+            def _txt(it):
+                return it.get("t", "") if isinstance(it, dict) else str(it)
+
+            def _at(it, k):
+                if isinstance(it, dict) and it.get("at") is not None:
+                    return float(it["at"])
+                return s + k * max(stag, 0.14)
+
             inner = ('<div class="ave-bo-labels">'
-                     + "".join(f'<div class="bo-item"><span class="bo-idx">{k + 1:02d}</span>'
-                               f'<span>{esc(str(t))}</span></div>'
-                               for k, t in enumerate(itens))
+                     + "".join(f'<div class="bo-item" data-at="{_at(it, k):.3f}">'
+                               f'<span class="bo-idx">{k + 1:02d}</span>'
+                               f'<span>{esc(_txt(it))}</span></div>'
+                               for k, it in enumerate(itens))
                      + '</div>')
-            for k in range(min(len(itens), 5)):
-                events.append((s + k * max(stag, 0.14), "tick"))
+            for k, it in enumerate(itens[:6]):
+                events.append((_at(it, k), "tick"))
         elif kind == "media":
             src = o.get("src", "")
             aspect = o.get("aspect", "16 / 9")
@@ -931,6 +953,26 @@ def build_cues(words: list[dict], st: dict, budget: float) -> list[list[dict]]:
     return cues
 
 
+def cola_cues(words: list[dict], minimo: int) -> list[list[dict]]:
+    """Deixas de UMA palavra, com as curtas grudadas na seguinte.
+
+    É o agrupamento do rotativo. Uma palavra por deixa é o estilo; um artigo
+    sozinho a 124px no meio do quadro é um defeito — a deixa dura o tempo de
+    fala de "o", pisca, e lê como falha de render. Então palavra de até
+    `minimo` letras não fecha grupo: ela viaja com a que vem depois.
+    """
+    out: list[list[dict]] = []
+    cur: list[dict] = []
+    for w in words:
+        cur.append(w)
+        if len(w["text"].strip(".,!?;:\u2014-")) > minimo:
+            out.append(cur)
+            cur = []
+    if cur:
+        out.append(cur)
+    return out
+
+
 def split_two_lines(cue: list[dict], st: dict, orphans: set[str],
                     penalty: float) -> list[list[dict]]:
     """Quebra a deixa em duas linhas: equilíbrio de largura, com pena por órfã.
@@ -966,6 +1008,21 @@ def time_cues(cues: list[list[dict]], fps: int, end_cap: float) -> list[dict]:
         if end > start:
             out.append({"start": start, "end": end, "cue": c})
     return out
+
+
+def rgb_trio(hexa: str) -> str:
+    """`#FF6B1A` -> `255 107 26`. Separado por ESPAÇO, que é a forma que
+    `rgb(var(--x) / .5)` aceita: sem o trio, todo halo e toda chapa
+    translúcida caem CALADOS — a cor não resolve e o CSS descarta a regra
+    inteira sem erro nenhum, que é o pior modo de falhar.
+    """
+    h = (hexa or "").lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    try:
+        return f"{int(h[0:2], 16)} {int(h[2:4], 16)} {int(h[4:6], 16)}"
+    except (ValueError, IndexError):
+        return "255 255 255"
 
 
 def esc(s: str) -> str:
@@ -1169,6 +1226,196 @@ def hl_hero_size(lines: list[str], h: dict, fonts: dict) -> float:
     return min(s, h["cap"])
 
 
+def cartela_slots(hook: dict, h: dict) -> dict:
+    """De onde sai cada pedaço do texto que o usuário digitou.
+
+    Uma cartela tem mais lugares que uma frase: sobrancelha, algarismo, grade
+    de rótulos, assinatura. Pedir cinco campos ao usuário mataria o gancho
+    rápido, então tudo sai do MESMO texto, pela barra que ele já usa para
+    quebrar linha — a convenção que a `etiqueta` estreou lendo a primeira linha
+    como rótulo. Aqui ela vira regra explícita (`slots` no variants.json):
+
+        primeira     a primeira parte é a sobrancelha
+        numero       a primeira parte, se for um algarismo, vira a figura
+        traco        a parte que começa com travessão é a assinatura
+        chave:valor  as partes com dois-pontos viram fileiras da grade
+
+    O que sobra é o título. Nada é obrigatório: sem barra nenhuma o layout cai
+    no bloco de linhas comum, que é o comportamento de todos os outros.
+    """
+    slots = h.get("slots") or {}
+    bruto = [x for x in (hook.get("lines") or []) if x] or [hook.get("text") or ""]
+    texto = " / ".join(x.strip() for x in bruto if x.strip())
+    partes = [x.strip() for x in texto.split("/") if x.strip()] or [""]
+
+    olho = numero = assin = None
+    meta: list[tuple[str, str]] = []
+
+    if slots.get("olho") == "primeira" and len(partes) > 1:
+        olho = partes.pop(0)
+    if slots.get("assinatura") == "traco":
+        for i, x in enumerate(partes):
+            if x[:1] in ("\u2014", "\u2013", "-") and len(partes) > 1:
+                assin = partes.pop(i).lstrip("\u2014\u2013- ").strip()
+                break
+    if slots.get("meta") == "chave:valor":
+        restam = []
+        for x in partes:
+            if ":" in x and len(partes) > 1:
+                k, v = x.split(":", 1)
+                meta.append((k.strip(), v.strip()))
+            else:
+                restam.append(x)
+        partes = restam or [""]
+    if slots.get("num") == "numero" and partes:
+        m = re.match(r"^\s*(\d+[\d\u00ba\u00aa\u00b0%]*)\b[\s:.\u2014-]*(.*)$", partes[0])
+        if m and m.group(1):
+            numero = m.group(1)
+            resto = m.group(2).strip()
+            partes = ([resto] if resto else []) + partes[1:] or [""]
+
+    return {"olho": olho, "num": numero, "assinatura": assin, "meta": meta,
+            "titulo": " / ".join(x for x in partes if x)}
+
+
+def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
+                   main_color: str, accent: str, end: float, top: float) -> tuple[str, str]:
+    """Bloco da headline com motor `cartela` — slots, peças e movimento.
+
+    A marcação é a mesma para os vinte layouts; o que muda é quais PEÇAS
+    existem (`pecas` no variants.json) e o que cada uma pinta, que é da folha.
+    """
+    partes = cartela_slots(hook, h)
+    # `linhaUnica`: a quebra automática é por LARGURA e sempre em duas — o que
+    # está certo para um bloco de texto e errado para uma faixa que atravessa o
+    # quadro. A barra do usuário continua valendo.
+    linhas = ([partes["titulo"]] if h.get("linhaUnica") and "/" not in partes["titulo"]
+              else hl_lines(partes["titulo"], h))
+    linhas = [x for x in linhas if x] or [""]
+    linhas = [x.upper() if hl_is_upper(i, len(linhas), h) else x
+              for i, x in enumerate(linhas)]
+    size = hl_fit(linhas, h, fonts)
+    ks = hl_ks(linhas, h)
+    pecas = h.get("pecas") or []
+    pintura = (h.get("paint") or {}).get("lines")
+    papeis = {"accent": "ct-acc", "sobre": "ct-escuro", "papelEscuro": "ct-escuro",
+              "papel": "ct-claro", "serif": "ct-serif"}
+    fr = h.get("fontRole") or []
+
+    def linha(i: int, txt: str) -> str:
+        cls = ["hl-line", "ct-anim"]
+        if isinstance(pintura, list):
+            cls.append(papeis.get(pintura[min(i, len(pintura) - 1)], ""))
+        elif isinstance(pintura, str) and pintura in papeis:
+            cls.append(papeis[pintura])
+        if fr and fr[min(i, len(fr) - 1)] == "serif":
+            cls.append("ct-serif")
+        wgt = hl_weight_for(hl_line_family(h, i, fonts), hl_line_weight(h, i))
+        fim = '<i class="ct-cursor"></i>' if ("cursor" in pecas and i == len(linhas) - 1) else ""
+        return (f'<div class="{" ".join(c for c in cls if c)}" data-text="{esc(txt)}" '
+                f'style="--hl-k:{ks[i]:.4f}; font-weight:{wgt}">{esc(txt)}{fim}</div>')
+
+    corpo_linhas = '<div class="ct-linhas">' + "".join(
+        linha(i, x) for i, x in enumerate(linhas)) + "</div>"
+
+    olho = (f'<div class="ct-olho ct-anim">{esc(partes["olho"])}</div>'
+            if partes["olho"] else "")
+    numero = (f'<div class="ct-num ct-anim">{esc(partes["num"])}</div>'
+              if partes["num"] else "")
+    assin = (f'<div class="ct-assin ct-anim">{esc(partes["assinatura"])}</div>'
+             if partes["assinatura"] else "")
+    grade = ""
+    if partes["meta"]:
+        grade = "".join(
+            f'<div class="ct-fila ct-anim"><span class="ct-k">{esc(k)}</span>'
+            f'<span class="ct-v">{esc(v)}</span></div>' for k, v in partes["meta"])
+
+    dentro = olho + numero + corpo_linhas + grade + assin
+    # QUEM DESENHA O TEXTO É O SVG no knockout — a letra ali é um FURO na
+    # chapa. Emitir o bloco também punha a mesma frase por cima, em branco
+    # opaco, e o recorte sumia atrás dela.
+    if "svg" in pecas:
+        dentro = ""
+
+    # AS PEÇAS. `ct-peca` marca o que se move como um corpo só na entrada —
+    # sem ela, uma faixa que desliza deixaria o texto para trás.
+    if "fita" in pecas:
+        dentro = f'<div class="ct-faixa ct-peca">{corpo_linhas}</div>'
+    elif "cartao" in pecas:
+        dentro = f'<div class="ct-cartao ct-peca">{olho}{corpo_linhas}</div>'
+    elif "painel" in pecas:
+        pontos = '<div class="ct-pontos"><i></i><i></i><i></i></div>' if "pontos" in pecas else ""
+        dentro = f'<div class="ct-painel ct-peca">{pontos}{corpo_linhas}</div>'
+    elif "listras" in pecas:
+        listra = '<div class="ct-listras"></div>'
+        dentro = (f'<div class="ct-peca">{listra}'
+                  f'<div class="ct-chapa">{corpo_linhas}</div>{listra}</div>')
+    elif "balao" in pecas:
+        rab = '<i class="ct-rabicho"></i>' if "rabicho" in pecas else ""
+        dentro = f'<div class="ct-balao ct-peca">{corpo_linhas}{rab}</div>'
+    elif "adesivo" in pecas:
+        dentro = f'<div class="ct-adesivo ct-peca">{corpo_linhas}</div>'
+    elif "reguas" in pecas:
+        dentro = ('<i class="ct-regua"></i>' + corpo_linhas + '<i class="ct-regua"></i>')
+
+    fora = ""
+    if h.get("cheia") and "svg" not in pecas and "blur" not in pecas:
+        fora += '<i class="ct-fundo"></i>'
+    if "blur" in pecas:
+        fora += '<i class="ct-blur"></i>'
+    if "vinheta" in pecas:
+        fora += '<i class="ct-vinheta"></i>'
+    if "aspa" in pecas:
+        fora += '<div class="ct-aspa">\u201c</div>'
+    if "svg" in pecas:
+        fora += cartela_svg(linhas, size, h, fonts)
+
+    deep = data.get("deep") or "#0D2137"
+    mo = json.dumps(h.get("motion") or {}, separators=(",", ":"))
+    cheia = " cheia" if h.get("cheia") else ""
+    bloco = (f'  <div id="hook" class="ave-cartela ct-{style_id}{cheia} clip" '
+             f'data-start="0" data-duration="{end:.3f}" '
+             f'data-track-index="{TRACK["hook"]}" '
+             f'style="--hl-scale:1; --hl-size:{size:.2f}; --hl-lh:{h["lh"]}; '
+             f'--hl-top:{top}; --hl-main:{main_color}; --hl-accent:{accent}; '
+             f'--hl-accent-rgb:{rgb_trio(accent)}; --hl-deep:{deep}; '
+             f'--hl-stroke:{h.get("stroke", 0)}; '
+             f'--hl-font:{hl_css_family(fonts["main"])}; '
+             f'--hl-font-accent:{hl_css_family(fonts["accent"])}"'
+             f" data-motion='{mo}'>"
+             f'{fora}<div class="ct-bloco">{dentro}</div></div>')
+    css = ('<link rel="stylesheet" href="styles/cartela.css">\n'
+           '<script src="styles/cartela.js"></script>'
+           + hl_fontface_css([fonts["main"], fonts["accent"]]))
+    return bloco, css
+
+
+def cartela_svg(linhas: list[str], size: float, h: dict, fonts: dict) -> str:
+    """O recorte do knockout: uma MÁSCARA, não um clip de texto.
+
+    O furo tem de ser no FUNDO — a chapa é que fica com buracos em forma de
+    letra, e o vídeo aparece por eles. `background-clip: text` faz o contrário
+    (preenche a letra com uma imagem) e não serve. Máscara SVG: branco mostra,
+    preto esconde; a letra vai preta.
+    """
+    fam = hl_css_family(fonts["main"]).split(",")[0].strip("'\"")
+    lh = float(h["lh"])
+    alt = len(linhas) * size * lh
+    y0 = 960 - alt / 2 + size * 0.78
+    tspans = "".join(
+        f'<tspan x="540" y="{y0 + i * size * lh:.1f}">{esc(x)}</tspan>'
+        for i, x in enumerate(linhas))
+    return (
+        '<svg class="ct-svg" viewBox="0 0 1080 1920" preserveAspectRatio="none">'
+        '<defs><mask id="ct-ko" maskUnits="userSpaceOnUse" x="0" y="0" width="1080" height="1920">'
+        '<rect width="1080" height="1920" fill="#fff"/>'
+        f'<text text-anchor="middle" font-family="{esc(fam)}" font-size="{size:.1f}" '
+        f'font-weight="{h["weights"][0]}" letter-spacing="-2" fill="#000">{tspans}</text>'
+        '</mask></defs>'
+        '<rect width="1080" height="1920" style="fill:var(--hl-deep)" mask="url(#ct-ko)"/>'
+        '</svg>')
+
+
 def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tuple[str, str]:
     """(markup, css_extra) do hook. Bloco próprio, id estável, tempo próprio."""
     hook = data.get("hook", {})
@@ -1211,6 +1458,13 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
         if w["start"] < end and w["end"] > 0:
             top = VARIANTS["split"][w["layout"]]["hookTop"]
             break
+
+    # As headlines com motor `cartela` (as vinte novas) saem por outro caminho:
+    # elas têm SLOTS e MOVIMENTO, e forçá-las no bloco de linhas antigo seria
+    # perder as duas coisas. Os layouts antigos não têm `motor` e seguem aqui.
+    if h.get("motor") == "cartela":
+        return cartela_markup(data, hook, h, style_id, fonts, main_color,
+                              accent, end, top)
 
     paint = h.get("paint") or {}
     out = []
@@ -1276,6 +1530,83 @@ def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty,
                 f'<div>{esc(" ".join(w["text"] for w in ln))}</div>' for ln in lines)
             blocks.append(f'<div class="ave-cue clip" {attrs}{dodge}>{inner}</div>')
     return "\n".join("    " + b for b in blocks)
+
+
+def palavra_markup(timed: list[dict], st: dict, orphans, penalty,
+                   splits: list[dict] | None = None) -> str:
+    """Deixas do motor PALAVRA: um clipe por deixa, e cada palavra com o seu
+    instante de fala (`data-at` absoluto) e a duração medida (`data-dur`).
+
+    A marcação é a mesma para os dezenove estilos — o que muda entre eles é o
+    que cada estado pinta, e isso vive no `pal` do variants.json, não aqui.
+    Os únicos nós a mais são os que uma animação exige ter no DOM: o traço do
+    marca-texto e o cursor da máquina não se animam por pseudo-elemento.
+    """
+    pal = st.get("pal") or {}
+    blocks = []
+    anterior: list[dict] = []
+    for t in timed:
+        dodge = ""
+        for w in (splits or []):
+            if t["start"] < w["end"] and t["end"] > w["start"]:
+                dodge = f' style="bottom:{w["captionBottom"]}px"'
+                break
+
+        # o DESTAQUE de uma legenda comum sai do comprimento, como no disperso:
+        # transcrição não traz papéis, e inventar um por posição destacaria uma
+        # preposição em toda deixa
+        hi = -1
+        if pal.get("destaque") == "maisLonga":
+            corte = pal.get("destaqueMin", 6) - 1
+            for i, w in enumerate(t["cue"]):
+                if len(w["text"].strip(".,!?;:")) > corte:
+                    hi, corte = i, len(w["text"].strip(".,!?;:"))
+
+        def span(w: dict, idx: int) -> str:
+            extra = ""
+            if pal.get("grifo"):
+                extra += '<i class="pal-grifo"></i>'
+            if pal.get("cursor"):
+                extra += '<i class="pal-cursor"></i>'
+            cls = "pal-w pal-hi" if idx == hi else "pal-w"
+            dur = max(0.08, (w.get("endMs", w["startMs"]) - w["startMs"]) / 1000)
+            return (f'<span class="{cls}" data-at="{w["startMs"] / 1000:.3f}" '
+                    f'data-dur="{dur:.3f}">{esc(w["text"])}{extra}</span>')
+
+        linhas = []
+        # A ROLAGEM redesenha a deixa ANTERIOR dentro do clipe atual, apagada.
+        # Deixar a anterior viva entre clipes poria dois clipes na mesma pista
+        # ao mesmo tempo, que é erro de render — e o efeito de teleprompter não
+        # precisa disso: precisa que a linha de cima ESTEJA ali, não que seja a
+        # mesma caixa de antes.
+        if pal.get("rola") and anterior:
+            linhas.append('<div class="pal-line pal-antiga">'
+                          + "".join(f'<span class="pal-w">{esc(w["text"])}</span>'
+                                    for w in anterior) + "</div>")
+        idx = 0
+        for ln in split_two_lines(t["cue"], st, orphans, penalty):
+            linhas.append('<div class="pal-line">'
+                          + "".join(span(w, idx + k) for k, w in enumerate(ln))
+                          + "</div>")
+            idx += len(ln)
+        corpo = "".join(linhas)
+        if pal.get("rola"):
+            corpo = f'<div class="pal-rolo">{corpo}</div>'
+        # a placa do vidro envolve o BLOCO: uma por linha vira duas placas
+        # desencontradas, que é o oposto do efeito
+        if pal.get("placa"):
+            corpo = f'<div class="pal-placa">{corpo}</div>'
+        if pal.get("filete"):
+            corpo = '<i class="pal-filete"></i>' + corpo
+        if pal.get("tarja"):
+            corpo = '<i class="pal-tarja"></i>' + corpo
+        anterior = t["cue"]
+
+        blocks.append(
+            f'    <div class="pal-cue clip" data-start="{t["start"]:.3f}" '
+            f'data-duration="{t["end"] - t["start"]:.3f}" '
+            f'data-track-index="{TRACK["caption"]}"{dodge}>{corpo}</div>')
+    return "\n".join(blocks)
 
 
 def tracking_path(data, W, H, duration, track_file: Path, step: int = 3):
@@ -1467,7 +1798,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     splits = split_windows(data, H, duration)
     hook_accent = accent
     hk = data.get("hook") or {}
-    if hk.get("enabled") and VARIANTS["headlines"].get(hk.get("style", "card"), {}).get("usesAccent"):
+    # A cartela de TELA CHEIA não mede o vídeo: o fundo dela é a chapa da marca,
+    # de cor conhecida, e o contraste ali é por construção. Medir a luminância
+    # do vídeo atrás de uma chapa opaca escolheria a cor pelo que ninguém vê.
+    _hkv = VARIANTS["headlines"].get(hk.get("style", "card"), {})
+    if hk.get("enabled") and _hkv.get("usesAccent") and not _hkv.get("cheia"):
         hv = Path(data.get("_proj", ".")) / data.get("_video", "preview.mp4")
         htop = VARIANTS["headlines"][hk["style"]]["top"] / H
         hook_accent = adaptive_accent(hv, accent, max(0.0, htop - 0.01), 0.14,
@@ -1568,6 +1903,38 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
                      f' --din-fig-shrink:{st.get("figShrink", 0.85)};'
                      f' --din-serif:{st.get("serifFamily", "serif")}"'
                      f" data-motion='{mo_attr}'>")
+    elif st.get("css") == "palavra":
+        cap_css = ('<link rel="stylesheet" href="styles/palavra.css">\n'
+                   '<script src="styles/palavra.js"></script>')
+        pal = st.get("pal") or {}
+        # a GEOMETRIA é do estilo (o cinema senta a 230px do fundo, a barra a
+        # 360): o padrão global só vale para quem não declara o seu
+        pal_bottom = cfg.get("paddingBottom", st.get("bottom", VARIANTS["bottom"]))
+        # As variáveis do `pal` (raio da tarja, margem esquerda, placa do vidro)
+        # são aplicadas pelo MOTOR a partir do `data-pal`, não traduzidas aqui:
+        # o mesmo mapa em Python e em JS divergiria no primeiro ajuste.
+        # A FAIXA SEGURA vence a posição de fábrica também nos estilos de bloco
+        # central (o rotativo). Entra pelo próprio `pal`, e não como variável
+        # solta no `style`: quem traduz `pal` em variáveis de CSS é o motor, e
+        # uma variável escrita aqui seria sobrescrita por ele no primeiro
+        # quadro — em silêncio.
+        if pal.get("centro") is not None and cfg.get("offsetY") is not None:
+            pal = {**pal, "centro": cfg["offsetY"]}
+        pal_attr = json.dumps(pal, separators=(",", ":"))
+        mo_attr = json.dumps(st.get("motion") or {}, separators=(",", ":"))
+        # a FAMÍLIA sempre desce: são dezenove estilos sobre uma folha só, e o
+        # padrão dela não pode ser o de um deles. `fam_var` (a escolha do
+        # usuário) vem depois e vence.
+        container = (f'<div class="ave-pal pal-{style_id}" style="--cap-scale:1;'
+                     f' --cap-family:{st["cssFamily"]};{fam_var}'
+                     f' --cap-color:{cap_color}; --cap-color-rgb:{rgb_trio(cap_color)};'
+                     f' --cap-accent:{accent or "#ff6b1a"};'
+                     f' --cap-accent-rgb:{rgb_trio(accent or "#ff6b1a")};'
+                     f' --cap-size:{st["size"]}; --cap-bottom:{pal_bottom};'
+                     f' --cap-weight:{st.get("weight", 600)};'
+                     f' --cap-track:{st.get("tracking", 0)};'
+                     f' --cap-lh:{st.get("lineHeight", 1.26)};"'
+                     f" data-pal='{pal_attr}' data-motion='{mo_attr}'>")
     elif st.get("css") == "pop":
         # Os TRÊS estilos de estouro compartilham a folha e o script: a curva é
         # a mesma (medida do CapCut, idêntica byte a byte entre eles) e o que
@@ -1611,12 +1978,19 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         parts.append("  AVE_EDITORIAL.buildTimeline(document.getElementById('root'), gsap, tl);")
     elif style_id == "dinamico":
         parts.append("  AVE_DINAMICO.buildTimeline(document.getElementById('root'), gsap, tl);")
+    elif st.get("css") == "palavra":
+        parts.append("  AVE_PALAVRA.buildTimeline(document.getElementById('root'), gsap, tl);")
     elif st.get("css") == "pop":
         parts.append("  AVE_POP.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif st.get("css") == "revelar":
         parts.append("  AVE_REVELAR.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif st["animated"]:
         parts.append("  AVE_KARAOKE.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
+    # a cartela tem entrada e saída — e a SAÍDA dela é a entrega do vídeo,
+    # então ela precisa da timeline mesmo quando nada mais se move
+    if (data.get("hook") or {}).get("enabled") and \
+            VARIANTS["headlines"].get(data["hook"].get("style", "card"), {}).get("motor") == "cartela":
+        parts.append("  AVE_CARTELA.buildTimeline(document.getElementById('root'), gsap, tl);")
     if track_js:
         parts.append(track_js)
     if cam_js:
@@ -1905,7 +2279,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 {sfx_html}
 
   {container}
-{data["_stackedMarkup"] if style_id == "stacked" else (data.get("_editorialMarkup", "") if style_id == "editorial" else (data.get("_dinamicoMarkup", "") if style_id == "dinamico" else (scatter_markup(timed, st) if style_id == "scatter" else markup(timed, st, style_id, orphans, penalty, splits))))}
+{data["_stackedMarkup"] if style_id == "stacked" else (data.get("_editorialMarkup", "") if style_id == "editorial" else (data.get("_dinamicoMarkup", "") if style_id == "dinamico" else (scatter_markup(timed, st) if style_id == "scatter" else (palavra_markup(timed, st, orphans, penalty, splits) if st.get("css") == "palavra" else markup(timed, st, style_id, orphans, penalty, splits)))))}
   </div>
 </div>
 
@@ -1953,7 +2327,14 @@ def main() -> None:
     (proj / "styles").mkdir(exist_ok=True)
     files = style_files(style_id, st)
     if data.get("hook", {}).get("enabled"):
-        files.append("headline.css")
+        # a folha do motor vai junto quando o layout escolhido é do motor:
+        # o HTML pede `styles/cartela.css` e um arquivo que não foi copiado
+        # não dá erro nenhum — a headline só sai crua no render final
+        _hk = VARIANTS["headlines"].get(data["hook"].get("style", "card"), {})
+        if _hk.get("motor") == "cartela":
+            files += ["cartela.css", "cartela.js"]
+        else:
+            files.append("headline.css")
     if data.get("splitInserts"):
         files += ["split.css", "split.js"]
     if data.get("brollOverlays"):
@@ -2104,7 +2485,9 @@ def main() -> None:
             if c.get("figure") and c["figure"]["fromMs"] / 1000 < duration]
     elif cfg.get("enabled", True):
         budget = (cfg.get("safeWidth") if tuned_for else None) or st["maxW"]
-        cues = build_cues(words, st, budget)
+        _pal = st.get("pal") or {}
+        cues = (cola_cues(words, int(_pal["cola"])) if _pal.get("cola")
+                else build_cues(words, st, budget))
         timed = time_cues(cues, fps, duration)
 
     orphans = set(VARIANTS["orphansPt"])

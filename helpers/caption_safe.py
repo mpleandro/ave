@@ -3,11 +3,11 @@
 
     uv run python helpers/caption_safe.py <edit> [--aplicar] [--json]
 
-Por que existe: um estilo de legenda traz uma altura de fábrica (o `offsetY` do
-`variants.json`), e essa altura é uma média de material nenhum. No PV a legenda
-`dinamico` nasce a 47% da altura e o queixo do apresentador está a 51,6% —
-resultado: texto em cima da boca, que é o defeito que o usuário viu antes de
-qualquer instrumento acusar.
+Por que existe: um estilo de legenda traz uma altura de fábrica (o `bottom` ou o
+`offsetY` do `variants.json`), e essa altura é uma média de material nenhum. No
+PV a legenda `dinamico` nasce a 47% da altura e o queixo do apresentador está a
+51,6% — resultado: texto em cima da boca, que é o defeito que o usuário viu
+antes de qualquer instrumento acusar.
 
 O que se mede, em amostras ao longo do corte (Haar frontal, o mesmo detector do
 `face_track.py`):
@@ -20,6 +20,25 @@ E o teto de baixo é o RODAPÉ DA PLATAFORMA (~13% no Reels/TikTok/Shorts): a
 legenda tem de caber ENTRE o queixo e a interface do app. Quando os dois limites
 se cruzam — rosto baixo demais no quadro — não existe posição boa, e isso é dito
 em vez de resolvido em silêncio.
+
+TRÊS COISAS QUE ESTAVAM ERRADAS AQUI, e que valem como regra (19/08/2026):
+
+1. **Um número, quatro significados.** Cada estilo é ancorado de um jeito —
+   px do fundo, fração até o topo do bloco, fração até o CENTRO, deslocamento a
+   partir do meio do quadro — e este arquivo escrevia `offsetY` para todos
+   tratando-o como topo. Resultado: o editorial e o disperso eram corrigidos
+   pela METADE de um bloco (continuavam na boca) e o empilhado receberia um
+   centro em 1,04 — o bloco inteiro fora do quadro. Agora a âncora é dado
+   (`variants.styles.<id>.ancora`) e a conversão é explícita em `valor_para()`.
+
+2. **As alturas eram o dobro.** A tabela à mão dizia 0.08 para o karaokê; o
+   bloco mede 0.040 no render. Agora são MEDIDAS (`blocoMedido: true`), o que
+   importa porque é a altura que decide se cabe entre o queixo e o rodapé.
+
+3. **Corrigir sempre é pior que corrigir quando precisa.** Uma legenda de rodapé
+   com o rosto no meio do quadro já está certa, e reposicioná-la "para aplicar a
+   regra" só a aproximaria da cabeça. A medição responde onde o bloco está, se
+   isso invade queixo ou rodapé, e só então para onde ele vai.
 """
 from __future__ import annotations
 
@@ -30,10 +49,18 @@ from pathlib import Path
 
 MARGEM = 0.022          # respiro entre o queixo e o topo da legenda (≈42px em 1920)
 RODAPE_PLATAFORMA = 0.13  # faixa de baixo tomada pela interface do Instagram/TikTok
-# altura do bloco por estilo, em fração da altura do quadro (medida nos renders)
-BLOCO = {"dinamico": 0.17, "editorial": 0.16, "stacked": 0.20, "scatter": 0.18,
-         "karaoke": 0.08, "simples": 0.08, "serifada": 0.08, "classica": 0.11,
-         "pop": 0.09, "popLinha": 0.09, "popBloco": 0.11, "revelar": 0.09}
+ALTURA = 1920
+
+# A ALTURA DO BLOCO E A ÂNCORA vêm do `variants.json`, onde moram os outros
+# números dos estilos. Estavam aqui, numa tabela à mão, e o preço foi duplo:
+# as alturas eram o dobro das reais (karaokê a 0.08 quando o bloco mede 0.040,
+# medido no render) e a ÂNCORA nem existia — os quatro estilos cobertos têm
+# três significados diferentes para o mesmo número, e este arquivo tratava
+# todos como "topo do bloco". Ver `_ancoras_readme` no variants.json.
+VARIANTS = json.loads(
+    (Path(__file__).resolve().parent.parent / "assets" / "styles" / "variants.json").read_text())
+ESTILOS = VARIANTS["styles"]
+RODAPE_PADRAO = VARIANTS["bottom"]
 
 
 def medir(video: Path, amostras: int = 40) -> dict:
@@ -63,18 +90,92 @@ def medir(video: Path, amostras: int = 40) -> dict:
             "queixoMediana": round(queixos[len(queixos) // 2], 4)}
 
 
+def geometria(estilo: str) -> dict:
+    """Onde o bloco DESTE estilo está hoje, em frações da altura do quadro.
+
+    Converte a âncora de cada estilo — que são quatro coisas diferentes — em um
+    par (topo, fundo) comparável. É o que faltava para a medição do rosto poder
+    falar de todos os estilos na mesma língua.
+    """
+    st = ESTILOS.get(estilo) or {}
+    bloco = st.get("bloco") or 0.09
+    anc = st.get("ancora", "rodape")
+    if anc == "rodape":
+        fundo = 1.0 - (st.get("bottom", RODAPE_PADRAO) / ALTURA)
+        topo = fundo - bloco
+    elif anc == "topo":
+        topo = st.get("offsetY", 0.47)
+        fundo = topo + bloco
+    elif anc == "centroDelta":
+        centro = 0.5 + st.get("offsetY", 0.0)
+        topo, fundo = centro - bloco / 2, centro + bloco / 2
+    else:  # centro
+        centro = st.get("offsetY")
+        if centro is None:
+            centro = (st.get("pal") or {}).get("centro", 0.5)
+        topo, fundo = centro - bloco / 2, centro + bloco / 2
+    return {"bloco": bloco, "ancora": anc, "topo": topo, "fundo": fundo,
+            "medido": bool(st.get("blocoMedido"))}
+
+
+def valor_para(estilo: str, topo: float, bloco: float) -> tuple[str, float]:
+    """O número que ESTE estilo lê, para o bloco começar em `topo`.
+
+    Devolve (chave do edit-data, valor). A chave muda com a âncora: quem senta
+    no rodapé é movido por `paddingBottom` em px, e escrever `offsetY` para ele
+    não teria efeito nenhum — silenciosamente.
+    """
+    anc = (ESTILOS.get(estilo) or {}).get("ancora", "rodape")
+    if anc == "rodape":
+        return "paddingBottom", round((1.0 - (topo + bloco)) * ALTURA)
+    if anc == "topo":
+        return "offsetY", round(topo, 4)
+    if anc == "centroDelta":
+        return "offsetY", round(topo + bloco / 2 - 0.5, 4)
+    return "offsetY", round(topo + bloco / 2, 4)
+
+
 def faixa(medida: dict, estilo: str) -> dict:
-    bloco = BLOCO.get(estilo, 0.14)
-    teto_baixo = 1.0 - RODAPE_PLATAFORMA - bloco      # topo máximo antes de a legenda entrar no rodapé
+    """A posição segura, e — o ponto — SÓ quando a de fábrica não é.
+
+    Uma legenda de rodapé com o rosto no meio do quadro já está certa; mexer
+    nela para "aplicar a regra" só a aproximaria da cabeça. Então a medição
+    responde três coisas e não uma: onde o bloco está, se isso invade o queixo
+    ou o rodapé da plataforma, e — só nesse caso — para onde ele vai.
+    """
+    g = geometria(estilo)
+    bloco = g["bloco"]
+    fundo_max = 1.0 - RODAPE_PLATAFORMA
+    topo_max = fundo_max - bloco
+
     if not medida.get("rosto"):
-        return {"offsetY": round(min(0.62, teto_baixo), 3), "motivo": "sem rosto detectado — faixa padrão baixa"}
-    piso = medida["queixoP90"] + MARGEM               # topo mínimo para não invadir o queixo
-    if piso > teto_baixo:
-        return {"offsetY": round(teto_baixo, 3), "conflito": True,
-                "motivo": (f"queixo em {medida['queixoP90']:.3f} não deixa espaço acima do rodapé "
-                           f"({teto_baixo:.3f}) — legenda no limite de baixo; considere reenquadrar")}
-    return {"offsetY": round(piso, 3), "motivo": (f"queixo p90 {medida['queixoP90']:.3f} + margem "
-                                                  f"{MARGEM} (bloco {bloco} · rodapé {RODAPE_PLATAFORMA})")}
+        # sem medida não há correção: o padrão do estilo é o melhor palpite que
+        # existe, e sobrescrevê-lo com um número inventado seria pior que nada
+        return {**g, "mexer": False,
+                "motivo": "nenhum rosto detectado — a posição de fábrica fica"}
+
+    topo_min = medida["queixoP90"] + MARGEM
+    invade_rosto = g["topo"] < topo_min
+    invade_rodape = g["fundo"] > fundo_max
+    if not invade_rosto and not invade_rodape:
+        return {**g, "mexer": False,
+                "motivo": (f"bloco em {g['topo']:.3f}–{g['fundo']:.3f} já está abaixo do "
+                           f"queixo ({medida['queixoP90']:.3f}) e acima do rodapé "
+                           f"({fundo_max:.3f})")}
+
+    conflito = topo_min > topo_max
+    topo = topo_max if conflito else max(topo_min, min(g["topo"], topo_max))
+    chave, valor = valor_para(estilo, topo, bloco)
+    motivo = (f"queixo p90 {medida['queixoP90']:.3f} + margem {MARGEM}" if invade_rosto
+              else f"bloco entrava no rodapé da plataforma ({fundo_max:.3f})")
+    out = {**g, "mexer": True, "topoNovo": round(topo, 4), "chave": chave, "valor": valor,
+           "motivo": motivo}
+    if conflito:
+        out["conflito"] = True
+        out["motivo"] = (f"queixo em {medida['queixoP90']:.3f} não deixa espaço acima do "
+                         f"rodapé ({fundo_max:.3f}) — legenda no limite de baixo, "
+                         f"ainda encostando na cabeça; considere reenquadrar")
+    return out
 
 
 def caixa_bate_no_rosto(video, top_px: int, altura_px: int = 320) -> dict:
@@ -139,9 +240,15 @@ def main() -> None:
                   f"{medida['queixoMediana']:.3f} · p90 {medida['queixoP90']:.3f}")
         else:
             print("nenhum rosto detectado no corte")
-        print(f"estilo {estilo} → offsetY {rec['offsetY']}  ({rec['motivo']})")
-    if args.aplicar and dp.exists():
-        data.setdefault("captions", {})["offsetY"] = rec["offsetY"]
+        alt = "medida" if rec.get("medido") else "estimada"
+        print(f"estilo {estilo} · âncora {rec['ancora']} · bloco {rec['bloco']} ({alt}) "
+              f"· {rec['topo']:.3f}–{rec['fundo']:.3f}")
+        if rec["mexer"]:
+            print(f"  → {rec['chave']} = {rec['valor']}  ({rec['motivo']})")
+        else:
+            print(f"  → nada a mexer  ({rec['motivo']})")
+    if args.aplicar and dp.exists() and rec["mexer"]:
+        data.setdefault("captions", {})[rec["chave"]] = rec["valor"]
         dp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
         print(f"  aplicado em {dp.name}")
 

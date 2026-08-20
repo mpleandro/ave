@@ -39,7 +39,10 @@
       "sy": 1,
       "tracking": -1,
       "maxW": 720,
-      "gapEm": 0.2368
+      "gapEm": 0.2368,
+      "bloco": 0.04,
+      "blocoMedido": true,
+      "ancora": "rodape"
     },
     "simples": {
       "_note": "Poppins não tem corte condensado, então o sx 0.9 é uma regular distorcida — ela afina as hastes nos dois sentidos. Se ficar leve demais, subir o peso, nunca comprimir mais.",
@@ -54,7 +57,10 @@
       "sx": 0.9,
       "sy": 0.9,
       "tracking": -3,
-      "maxW": 860
+      "maxW": 860,
+      "bloco": 0.044,
+      "blocoMedido": true,
+      "ancora": "rodape"
     },
     "serifada": {
       "animated": false,
@@ -68,7 +74,10 @@
       "sx": 1,
       "sy": 1,
       "tracking": -1,
-      "maxW": 860
+      "maxW": 860,
+      "bloco": 0.05,
+      "blocoMedido": true,
+      "ancora": "rodape"
     },
     "classica": {
       "_note": "Legenda clássica de duas linhas. maxWords alto de propósito: quem manda aqui é a largura, não a contagem.",
@@ -83,7 +92,10 @@
       "sx": 1,
       "sy": 1,
       "tracking": 0,
-      "maxW": 840
+      "maxW": 840,
+      "bloco": 0.062,
+      "blocoMedido": true,
+      "ancora": "rodape"
     },
     "scatter": {
       "_note": "Disperso. O bloco vive sobre o PEITO (0.72 da altura), não no centro — o meio do quadro é o rosto. maxWords alto porque a deixa ocupa várias linhas irregulares.",
@@ -103,7 +115,10 @@
       "hiScale": 1.62,
       "spread": 0.45,
       "offsetY": 0.72,
-      "hiMinLen": 7
+      "hiMinLen": 7,
+      "bloco": 0.18,
+      "blocoMedido": false,
+      "ancora": "centro"
     },
     "stacked": {
       "_note": "Empilhado. Lê caption-cues.json (preparado por caption_style.py), não captions.json. Ancorado no CENTRO do bloco — trocar pela ancoragem de baixo do karaokê põe a legenda na boca de quem fala.",
@@ -125,7 +140,10 @@
       "soloFitFactor": 0.6,
       "minSoloMs": 340,
       "orange": "#ff3b30",
-      "needsCues": true
+      "needsCues": true,
+      "bloco": 0.2,
+      "blocoMedido": false,
+      "ancora": "centroDelta"
     },
     "pop": {
       "animated": true,
@@ -143,7 +161,10 @@
       "_note": "Bounce Out — cada PALAVRA estoura na vez dela.",
       "css": "pop",
       "js": "pop",
-      "grupo": "palavra"
+      "grupo": "palavra",
+      "bloco": 0.043,
+      "blocoMedido": true,
+      "ancora": "rodape"
     },
     "popLinha": {
       "animated": true,
@@ -161,7 +182,10 @@
       "_note": "Multi-Line — a LINHA inteira estoura junto.",
       "css": "pop",
       "js": "pop",
-      "grupo": "linha"
+      "grupo": "linha",
+      "bloco": 0.043,
+      "blocoMedido": true,
+      "ancora": "rodape"
     },
     "popBloco": {
       "animated": true,
@@ -179,7 +203,10 @@
       "_note": "Multiline Combo — o BLOCO todo estoura junto.",
       "css": "pop",
       "js": "pop",
-      "grupo": "bloco"
+      "grupo": "bloco",
+      "bloco": 0.085,
+      "blocoMedido": true,
+      "ancora": "rodape"
     },
     "revelar": {
       "animated": true,
@@ -197,7 +224,10 @@
       "_note": "Multiline — varredura progressiva, 1733ms.",
       "css": "revelar",
       "js": "revelar",
-      "grupo": "varredura"
+      "grupo": "varredura",
+      "bloco": 0.084,
+      "blocoMedido": true,
+      "ancora": "rodape"
     },
     "editorial": {
       "_note": "Editorial — papéis por palavra (caption-editorial.json, do caption_style_editorial.py). Bloco ancorado à ESQUERDA — metade do que o faz ler como editorial e não como legenda. Papéis e movimento vêm do kit Avelin (styles.local.js BRAND): conectivo apagado, acento serif ITÁLICO, punch no accent, algarismo gigante.",
@@ -277,7 +307,10 @@
         },
         "exit": 0.2
       },
-      "weight": 400
+      "weight": 400,
+      "bloco": 0.16,
+      "blocoMedido": false,
+      "ancora": "centro"
     },
     "dinamico": {
       "_note": "Dinâmico — o primo ACUMULATIVO do editorial (caption-dinamico.json, do caption_style_dinamico.py), mapeado quadro a quadro da referência Vd-1.mp4. Bloco CENTRAL diagramado inteiro e revelado palavra a palavra: a sans nasce APAGADA e acende quando a próxima palavra cai (litMs do diretor); a serif itálica entra letra a letra vinda da direita com escala 1.42; um algarismo solto ('2', '5 mil') vira figure pendurada à esquerda e o texto encolhe (figShrink) para lhe dar altura. figEmShort/figEmLong: corpo da figure em múltiplos de size, por comprimento do texto (≤2 caracteres ganham o gigante).",
@@ -348,7 +381,783 @@
           "blur": 6
         },
         "exit": 0.2
-      }
+      },
+      "bloco": 0.17,
+      "blocoMedido": false,
+      "ancora": "topo"
+    },
+    "marcador": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;600;700",
+      "weight": 600,
+      "size": 58,
+      "maxWords": 5,
+      "lines": 1,
+      "maxW": 900,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Marcador — uma linha com o texto INTEIRO visível e uma tarja no accent que desliza por trás da palavra dita. A tarja TRANSICIONA posição e largura (não salta): saltar seco lê como falha de render, e o que vende o efeito é o percurso. A letra sobre a tarja vira `sobre` (azul-noite) porque branco sobre laranja não passa em contraste.",
+      "pal": {
+        "tarja": {
+          "forma": "caixa",
+          "padX": 14,
+          "padY": 10,
+          "raio": 12
+        },
+        "antes": {
+          "cor": "corpo"
+        },
+        "ativa": {
+          "cor": "sobre"
+        },
+        "dita": {
+          "cor": "corpo"
+        }
+      },
+      "motion": {
+        "dur": 0.18,
+        "tarja": 0.19,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.038,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "marcadorDuplo": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;600;700",
+      "weight": 600,
+      "size": 54,
+      "maxWords": 9,
+      "lines": 2,
+      "maxW": 880,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Marcador em DUAS linhas — a tarja salta de linha quando a fala vira. A quebra passa pelo `orphansPt` como as estáticas: sem isso a linha acaba em 'de' e a tarja atravessa o quadro para pegar duas letras.",
+      "pal": {
+        "tarja": {
+          "forma": "caixa",
+          "padX": 12,
+          "padY": 8,
+          "raio": 10
+        },
+        "antes": {
+          "cor": "corpo"
+        },
+        "ativa": {
+          "cor": "sobre"
+        },
+        "dita": {
+          "cor": "corpo"
+        }
+      },
+      "motion": {
+        "dur": 0.18,
+        "tarja": 0.19,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.071,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "marcaTexto": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;700",
+      "weight": 700,
+      "size": 60,
+      "maxWords": 6,
+      "lines": 2,
+      "maxW": 880,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Marca-texto — o realce não salta, CRESCE dentro da palavra da esquerda para a direita na duração medida da fala dela, e fica. O traço vive num nó próprio (.pal-grifo) dentro do span: pseudo-elemento não se anima por GSAP, e sem tween o render congela no primeiro quadro.",
+      "pal": {
+        "grifo": {
+          "altura": 0.52,
+          "raio": 3,
+          "sangra": 8,
+          "opacidade": 0.92
+        },
+        "antes": {
+          "cor": "corpo"
+        },
+        "ativa": {
+          "cor": "corpo"
+        },
+        "dita": {
+          "cor": "corpo"
+        }
+      },
+      "motion": {
+        "dur": 0.16,
+        "ease": "none"
+      },
+      "bloco": 0.079,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "sublinhado": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;600;700",
+      "weight": 600,
+      "size": 58,
+      "maxWords": 6,
+      "lines": 2,
+      "maxW": 880,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Sublinhado vivo — um filete de 10px viaja por baixo das palavras e a ativa sobe 4px. É o realce que corre com o menor peso visual: cabe em vídeo sério, onde a tarja cheia já é demais.",
+      "pal": {
+        "tarja": {
+          "forma": "filete",
+          "altura": 10,
+          "desloca": 4,
+          "sangra": 6,
+          "raio": 4
+        },
+        "antes": {
+          "cor": "corpo"
+        },
+        "ativa": {
+          "cor": "corpo",
+          "y": -4
+        },
+        "dita": {
+          "cor": "corpo",
+          "y": 0
+        }
+      },
+      "motion": {
+        "dur": 0.18,
+        "tarja": 0.19,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.076,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "progressivo": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@800",
+      "weight": 800,
+      "size": 64,
+      "maxWords": 6,
+      "lines": 2,
+      "maxW": 880,
+      "tracking": -1,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Progressivo — o texto É a barra de progresso: o dito fica no accent, o que falta em 30% de opacidade. Nenhum elemento além das palavras, o que o torna o mais barato de renderizar e o mais seguro em fundo sujo.",
+      "pal": {
+        "antes": {
+          "cor": "corpo",
+          "opacidade": 0.3
+        },
+        "ativa": {
+          "cor": "accent",
+          "opacidade": 1,
+          "y": -2
+        },
+        "dita": {
+          "cor": "accent",
+          "opacidade": 1,
+          "y": 0
+        }
+      },
+      "motion": {
+        "dur": 0.2,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.084,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "foco": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@800",
+      "weight": 800,
+      "size": 66,
+      "maxWords": 5,
+      "lines": 2,
+      "maxW": 880,
+      "tracking": -1,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Foco — tudo em cinza-aço, só a palavra dita em branco pleno com 7% de escala; ela volta a apagar quando a próxima chega. Karaokê adulto: lê como texto, não como enfeite.",
+      "pal": {
+        "antes": {
+          "cor": "apagado"
+        },
+        "ativa": {
+          "cor": "corpo",
+          "escala": 1.07
+        },
+        "dita": {
+          "cor": "apagado",
+          "escala": 1
+        }
+      },
+      "motion": {
+        "dur": 0.18,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.087,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "focoBlur": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;700",
+      "weight": 700,
+      "size": 62,
+      "maxWords": 5,
+      "lines": 2,
+      "maxW": 880,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Foco com profundidade de campo — o que ainda não foi dito está DESFOCADO, entra em foco na fala e fica nítido. Precisa de fala pausada: em corte rápido o blur não tem tempo de ser lido.",
+      "pal": {
+        "antes": {
+          "cor": "corpo",
+          "opacidade": 0.5,
+          "blur": 4
+        },
+        "ativa": {
+          "cor": "corpo",
+          "opacidade": 1,
+          "blur": 0,
+          "escala": 1.04
+        },
+        "dita": {
+          "cor": "corpo",
+          "opacidade": 0.62,
+          "blur": 0,
+          "escala": 1
+        }
+      },
+      "motion": {
+        "dur": 0.22,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.081,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "contorno": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@900",
+      "weight": 900,
+      "size": 70,
+      "maxWords": 4,
+      "lines": 2,
+      "maxW": 880,
+      "tracking": -1,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Contorno → cheio — a palavra nasce VAZADA (só o traço) e é preenchida quando é dita: accent na ativa, corpo nas já ditas. O único estilo do grupo que se sustenta sobre fundo CLARO, porque o traço não depende de sombra para existir.",
+      "pal": {
+        "traco": 2,
+        "antes": {
+          "cor": "vazio",
+          "traco": 0.62
+        },
+        "ativa": {
+          "cor": "accent",
+          "traco": 0,
+          "escala": 1.04
+        },
+        "dita": {
+          "cor": "corpo",
+          "traco": 0,
+          "escala": 1
+        }
+      },
+      "motion": {
+        "dur": 0.2,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.092,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "neon": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@800",
+      "weight": 800,
+      "size": 64,
+      "maxWords": 4,
+      "lines": 2,
+      "maxW": 880,
+      "tracking": -1,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Neon — a palavra ativa acende com halo em três camadas e apaga quando passa. O halo é text-shadow escalado por --pal-glow, um número que o GSAP anima; sombra escrita direto no CSS não se anima e o efeito sairia ligado o tempo todo.",
+      "pal": {
+        "antes": {
+          "cor": "corpo",
+          "opacidade": 0.72,
+          "glow": 0
+        },
+        "ativa": {
+          "cor": "brilho",
+          "opacidade": 1,
+          "glow": 1
+        },
+        "dita": {
+          "cor": "corpo",
+          "opacidade": 0.72,
+          "glow": 0
+        }
+      },
+      "motion": {
+        "dur": 0.18,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.084,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "chapa": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@800",
+      "weight": 800,
+      "size": 60,
+      "maxWords": 4,
+      "lines": 2,
+      "maxW": 860,
+      "tracking": -1,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Bloco sólido — cada palavra sobre chapa azul-noite; a ativa troca a chapa por accent. É o que aguenta o fundo mais sujo sem perder uma letra, e o preço é ocupar mais quadro que qualquer outro.",
+      "pal": {
+        "caixaAlta": true,
+        "antes": {
+          "cor": "corpo",
+          "fundo": "chapa"
+        },
+        "ativa": {
+          "cor": "sobre",
+          "fundo": "accent"
+        },
+        "dita": {
+          "cor": "corpo",
+          "fundo": "chapa"
+        }
+      },
+      "motion": {
+        "dur": 0.16,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.094,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "chips": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;700",
+      "weight": 700,
+      "size": 52,
+      "maxWords": 4,
+      "lines": 2,
+      "maxW": 860,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Chips — uma pílula de vidro por palavra; a ativa infla e vira accent. O ar entre as palavras é o ponto: sobre tela cheia de informação a legenda corrida some, e a pílula devolve o contorno.",
+      "pal": {
+        "antes": {
+          "cor": "corpo",
+          "fundo": "vidro"
+        },
+        "ativa": {
+          "cor": "sobre",
+          "fundo": "accent",
+          "escala": 1.09
+        },
+        "dita": {
+          "cor": "corpo",
+          "fundo": "vidro",
+          "escala": 1
+        }
+      },
+      "motion": {
+        "dur": 0.18,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.09,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "vidro": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;600;700",
+      "weight": 600,
+      "size": 50,
+      "maxWords": 8,
+      "lines": 2,
+      "maxW": 820,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Vidro — uma placa fosca atrás do BLOCO inteiro (não por palavra), texto limpo e a ativa no accent claro. O mais sóbrio dos estilos com fundo; o blur é do CSS e não anima, então não custa quadro.",
+      "pal": {
+        "placa": {
+          "raio": 26,
+          "padX": 34,
+          "padY": 26,
+          "blur": 20
+        },
+        "antes": {
+          "cor": "corpo"
+        },
+        "ativa": {
+          "cor": "suave"
+        },
+        "dita": {
+          "cor": "corpo"
+        }
+      },
+      "motion": {
+        "dur": 0.18,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.094,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "onda": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@800",
+      "weight": 800,
+      "size": 64,
+      "maxWords": 4,
+      "lines": 1,
+      "maxW": 880,
+      "tracking": -1,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Onda — a palavra dita pula da linha de base com giro leve e volta, com sobra elástica (back.out). Uma linha de propósito: em duas, o pulo de uma palavra da linha de cima encosta na de baixo.",
+      "pal": {
+        "antes": {
+          "cor": "corpo",
+          "y": 0,
+          "escala": 1,
+          "rot": 0
+        },
+        "ativa": {
+          "cor": "accent",
+          "y": -18,
+          "escala": 1.14,
+          "rot": -2.5
+        },
+        "dita": {
+          "cor": "corpo",
+          "y": 0,
+          "escala": 1,
+          "rot": 0
+        }
+      },
+      "motion": {
+        "dur": 0.26,
+        "ease": "back.out(1.7)",
+        "saida": 0.2
+      },
+      "bloco": 0.042,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "rotativo": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Poppins",
+      "cssFamily": "'Poppins', sans-serif",
+      "gfont": "family=Poppins:wght@900",
+      "weight": 900,
+      "size": 124,
+      "maxWords": 1,
+      "lines": 1,
+      "maxW": 980,
+      "tracking": -3,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Rotativo — UMA palavra por vez, gigante, no centro do quadro, trocando com blur e escala. `cola` gruda palavra de até duas letras na seguinte: sem isso o quadro pisca um 'o' sozinho a 124px, que lê como defeito. Deixa curta e corpo grande: é estilo de retenção, não de leitura.",
+      "pal": {
+        "caixaAlta": true,
+        "centro": 0.5,
+        "cola": 2,
+        "entrada": {
+          "opacidade": 0,
+          "escala": 1.22,
+          "blur": 10
+        },
+        "antes": {
+          "cor": "corpo"
+        },
+        "ativa": {
+          "cor": "corpo"
+        },
+        "dita": {
+          "cor": "corpo"
+        }
+      },
+      "motion": {
+        "dur": 0.26,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.081,
+      "blocoMedido": true,
+      "ancora": "centro"
+    },
+    "maquina": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "JetBrains Mono",
+      "cssFamily": "'JetBrains Mono', ui-monospace, monospace",
+      "gfont": "family=JetBrains+Mono:wght@500",
+      "weight": 500,
+      "size": 48,
+      "maxWords": 6,
+      "lines": 2,
+      "maxW": 820,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Máquina de escrever — nada aparece antes de ser dito e um cursor bloco pisca depois da última palavra digitada. O cursor é MOVIDO no DOM para depois da palavra ativa; deixado no fim da linha ele piscaria no vazio à direita de um texto que ainda não chegou lá.",
+      "pal": {
+        "esquerda": 100,
+        "cursor": true,
+        "antes": {
+          "opacidade": 0
+        },
+        "ativa": {
+          "opacidade": 1,
+          "cor": "suave"
+        },
+        "dita": {
+          "opacidade": 1,
+          "cor": "corpo"
+        }
+      },
+      "motion": {
+        "dur": 0.08,
+        "ease": "none"
+      },
+      "bloco": 0.064,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "rolagem": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;600;700",
+      "weight": 600,
+      "size": 48,
+      "maxWords": 5,
+      "lines": 1,
+      "maxW": 860,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Rolagem — teleprompter: a linha nova entra por baixo e empurra a anterior, que fica a 34%. A deixa anterior é REDESENHADA dentro do clipe atual em vez de sobreviver entre clipes: dois clipes vivos na mesma pista ao mesmo tempo é erro de render, não continuidade.",
+      "pal": {
+        "rola": {
+          "anterior": 0.34,
+          "entra": 0.34
+        },
+        "antes": {
+          "cor": "corpo"
+        },
+        "ativa": {
+          "cor": "accent"
+        },
+        "dita": {
+          "cor": "corpo"
+        }
+      },
+      "motion": {
+        "dur": 0.18,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.063,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "cinema": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;500",
+      "weight": 500,
+      "size": 44,
+      "maxWords": 9,
+      "lines": 2,
+      "maxW": 820,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Cinema — duas linhas brancas, SEM karaokê nenhum, sombra suave, entrando e saindo por frase. É o modo 'não quero que a legenda apareça' — a única do lote sem estado por palavra, e por isso a única que nunca disputa atenção com a fala.",
+      "bottom": 290,
+      "pal": {
+        "bloco": true,
+        "entrada": {
+          "opacidade": 0
+        }
+      },
+      "motion": {
+        "dur": 0.14,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.058,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "manchete": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Libre Baskerville",
+      "cssFamily": "'Libre Baskerville', Georgia, serif",
+      "gfont": "family=Libre+Baskerville:ital,wght@0,400;1,400",
+      "weight": 400,
+      "size": 56,
+      "maxWords": 7,
+      "lines": 2,
+      "maxW": 840,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Manchete serif — filete accent em cima, bloco à ESQUERDA, palavras surgindo na fala e a mais longa da deixa em itálico laranja. O destaque sai do comprimento (como no disperso) porque legenda comum não traz papéis: quem quer papel escolhido a dedo usa o editorial.",
+      "pal": {
+        "esquerda": 92,
+        "filete": {
+          "largura": 96,
+          "altura": 4,
+          "vao": 26
+        },
+        "destaque": "maisLonga",
+        "destaqueMin": 5,
+        "antes": {
+          "opacidade": 0.32
+        },
+        "ativa": {
+          "opacidade": 1
+        },
+        "dita": {
+          "opacidade": 1
+        }
+      },
+      "motion": {
+        "dur": 0.3,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.089,
+      "blocoMedido": true,
+      "ancora": "rodape"
+    },
+    "barra": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Open Sans",
+      "cssFamily": "'Open Sans', system-ui, sans-serif",
+      "gfont": "family=Open+Sans:wght@400;600;700",
+      "weight": 600,
+      "size": 48,
+      "maxWords": 7,
+      "lines": 2,
+      "maxW": 800,
+      "tracking": 0,
+      "sx": 1,
+      "sy": 1,
+      "_note": "Barra lateral — bloco à esquerda com barra accent grossa, no terço inferior. Nasceu para conviver com quem fala à direita do quadro e com o lower-third do longform, onde a legenda centrada bate no nome de quem está falando.",
+      "bottom": 360,
+      "pal": {
+        "esquerda": 90,
+        "barra": {
+          "largura": 8,
+          "vao": 28
+        },
+        "antes": {
+          "cor": "corpo"
+        },
+        "ativa": {
+          "cor": "suave"
+        },
+        "dita": {
+          "cor": "corpo"
+        }
+      },
+      "motion": {
+        "dur": 0.18,
+        "ease": "cubic-bezier(.2,.8,.2,1)"
+      },
+      "bloco": 0.063,
+      "blocoMedido": true,
+      "ancora": "rodape"
     }
   },
   "_headlines_readme": "Números de CADA layout de headline, lidos pela prévia do editor E pelo compositor. `paint` diz quem recebe a cor PRINCIPAL e quem recebe o DESTAQUE — por linha, por palavra ou no fundo. `gradient` é regra do MODELO, não escolha do usuário: quando existe, a cor escolhida vira a parada de cima e a de baixo é DERIVADA dela (escurecendo ou clareando por `amount`), para o usuário escolher uma cor e receber um degradê coerente em vez de ter de casar duas pontas na mão. `sizes` por linha (multiplicadores do corpo ajustado) é o que permite layouts com uma linha herói — sem ele toda headline é um bloco de linhas do mesmo tamanho.",
@@ -622,6 +1431,835 @@
         ]
       },
       "upperLines": null
+    },
+    "fita": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 96,
+      "safeW": 940,
+      "lh": 1.0,
+      "top": 300,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "sobre",
+        "fita": "accent"
+      },
+      "pecas": [
+        "fita"
+      ],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "desliza",
+          "de": "esq",
+          "dur": 0.52,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "desliza",
+          "para": "dir",
+          "dur": 0.42,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Fita — faixa no accent atravessando o quadro inclinada, frase em azul-noite dentro dela. Entra deslizando de fora e SAI pelo outro lado: a headline é um gesto com direção, e direção é o que o olho segue. Uma linha só — em duas, a faixa vira bloco e o gesto morre. `linhaUnica` desliga a quebra automática: sem ela, uma frase curta saía em duas linhas e a faixa deixava de atravessar o quadro.",
+      "linhaUnica": true
+    },
+    "jornal": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 84,
+      "safeW": 800,
+      "lh": 1.06,
+      "top": 250,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "papelEscuro"
+      },
+      "pecas": [
+        "cartao"
+      ],
+      "slots": {
+        "olho": "primeira"
+      },
+      "motion": {
+        "entra": {
+          "tipo": "carimbo",
+          "dur": 0.34,
+          "de": 1.08,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.28,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Recorte de jornal — cartão off-white torto, olho em monoespaçada e manchete serifada preta. A PRIMEIRA linha do texto é o olho (mesma convenção da etiqueta): quem escreve decide o que é rótulo pondo a primeira barra ali. Entra como carimbo, que é o gesto de impresso — não de software.",
+      "fonte": "serif"
+    },
+    "terminal": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 62,
+      "safeW": 780,
+      "lh": 1.34,
+      "top": 280,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "prompt": "accent"
+      },
+      "pecas": [
+        "painel",
+        "pontos",
+        "cursor"
+      ],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "fade",
+          "dur": 0.3,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.24,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Terminal — painel escuro com borda accent, três bolinhas e a frase em monoespaçada com cursor piscando. Para conteúdo de código, dado e ferramenta, onde a Poppins de sempre soa marketing. O cursor pisca por TWEEN em passos, não por animação de CSS: animação de CSS vence estilo inline e o cursor sairia aceso em todo quadro do render.",
+      "fonte": "mono"
+    },
+    "alerta": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 94,
+      "safeW": 880,
+      "lh": 1.04,
+      "top": 300,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "listras": "accent"
+      },
+      "pecas": [
+        "listras",
+        "chapa"
+      ],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "flash",
+          "dur": 0.28,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.26,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Alerta — tarjas de risco em cima e embaixo de uma chapa preta, tipografia pesadíssima e um flash de dois quadros na entrada. É a mais barulhenta do lote: urgência declarada. Usar onde a urgência é verdadeira, senão queima."
+    },
+    "placar": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 78,
+      "safeW": 620,
+      "lh": 1.06,
+      "top": 330,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "num": "accent"
+      },
+      "pecas": [],
+      "slots": {
+        "num": "numero"
+      },
+      "motion": {
+        "entra": {
+          "tipo": "estoura",
+          "dur": 0.5,
+          "atraso": 0.2,
+          "ease": "back.out(1.5)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.28,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Placar — o número sai do texto e vira FIGURA: algarismo enorme no accent à esquerda, frase empilhada à direita entrando 0,2s depois. É a headline nativa de vídeo de lista. O algarismo é a primeira linha quando ela é um número; sem número, o layout cai no bloco de linhas comum."
+    },
+    "sombra_longa": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 118,
+      "safeW": 920,
+      "lh": 1.02,
+      "top": 320,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "extrude": "accent"
+      },
+      "pecas": [],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "extrude",
+          "dur": 0.5,
+          "degraus": 8,
+          "passo": 4,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.3,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Sombra longa — caixa alta pesada com extrusão CHAPADA a 45° que cresce em oito degraus na entrada. Prima do relevo, com a profundidade caindo para o lado: leitura de cartaz, não de botão. A extrusão é text-shadow empilhado — pseudo-elemento duplicado perderia o preenchimento."
+    },
+    "neon": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 104,
+      "safeW": 900,
+      "lh": 1.06,
+      "top": 330,
+      "upper": true,
+      "stroke": 3,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "vazado",
+        "halo": "accent"
+      },
+      "pecas": [],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "pisca",
+          "dur": 0.6,
+          "ease": "none"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.3,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Neon tubo — letra vazada com halo em três camadas e um piscar de tubo velho nos primeiros quadros. Só se sustenta sobre imagem ESCURA: em fundo claro o halo some e sobra um contorno fino. O halo é alfa sobre --hl-accent-rgb; sem o trio separado por espaço a regra cai calada."
+    },
+    "balao": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 80,
+      "safeW": 800,
+      "lh": 1.1,
+      "top": 300,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "papelEscuro",
+        "balao": "papel"
+      },
+      "pecas": [
+        "balao",
+        "rabicho"
+      ],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "estoura",
+          "dur": 0.46,
+          "origem": "20% 100%",
+          "ease": "back.out(1.6)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.26,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Balão de fala — balão claro com rabicho apontando para quem fala, texto escuro. Entra do PRÓPRIO rabicho (origem 20% 100%), como se a frase tivesse acabado de sair da boca. Não vai em caixa alta: balão é fala, e fala escrita em caixa alta lê como grito."
+    },
+    "filete": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 68,
+      "safeW": 820,
+      "lh": 1.28,
+      "top": 360,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "reguas": "accent"
+      },
+      "pecas": [
+        "reguas"
+      ],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "risca",
+          "dur": 0.44,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.28,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Filete duplo — dois riscos que se abrem do CENTRO emoldurando uma linha serifada. A mais quieta das vinte: ensaio, documentário e qualquer vídeo onde gritar custa credibilidade.",
+      "fonte": "serif"
+    },
+    "adesivo": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 90,
+      "safeW": 760,
+      "lh": 1.04,
+      "top": 320,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "sobre",
+        "adesivo": "accent"
+      },
+      "pecas": [
+        "adesivo"
+      ],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "cola",
+          "dur": 0.55,
+          "ease": "back.out(2)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.26,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Adesivo — etiqueta torta com borda clara grossa e sombra dura, que QUICA ao colar (−16° → +2° → −3°). Lê como algo colado na tela por uma pessoa, não desenhado por um software — e é exatamente para isso que serve."
+    },
+    "capa": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 150,
+      "safeW": 900,
+      "lh": 0.96,
+      "top": 0,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "fundo": "deep",
+        "olho": "accent"
+      },
+      "pecas": [],
+      "slots": {
+        "olho": "primeira"
+      },
+      "motion": {
+        "entra": {
+          "tipo": "sobe",
+          "dur": 0.5,
+          "escalona": 0.1,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "corte",
+          "dur": 0.033,
+          "ease": "none"
+        }
+      },
+      "_note": "Capa sólida — quadro inteiro na cor profunda da marca, sobrancelha em caixa alta e título gigante entrando de baixo em dois tempos. Sai em CORTE SECO: o silêncio visual antes da primeira fala é o que segura o dedo, e um fade o desmancharia. A primeira linha do texto é a sobrancelha."
+    },
+    "capa_blur": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 140,
+      "safeW": 900,
+      "lh": 0.98,
+      "top": 0,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main"
+      },
+      "pecas": [
+        "blur"
+      ],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "fade",
+          "dur": 0.4,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "desfoca",
+          "dur": 0.7,
+          "blur": 26,
+          "brilho": 0.42,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Capa desfocada — o fundo é o PRÓPRIO vídeo, desfocado e escurecido, com o título por cima; o desfoque se dissolve e a imagem entra em foco. A transição É a revelação, sem cartela nenhuma para carregar. O desfoque anda por variável de CSS (--ct-blur), porque backdrop-filter escrito direto não é animável por tween."
+    },
+    "cortina": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 132,
+      "safeW": 900,
+      "lh": 0.98,
+      "top": 0,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "sobre",
+        "fundo": "accent"
+      },
+      "pecas": [],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "fade",
+          "dur": 0.3,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "cortina",
+          "dir": "cima",
+          "dur": 0.55,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Cortina — chapa no accent cobrindo tudo, que SOBE como cortina e descobre o vídeo (clip-path de baixo para cima). A saída não é um fade: é movimento com direção, e direção é o que o olho segue."
+    },
+    "meia_tela": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 118,
+      "safeW": 880,
+      "lh": 0.98,
+      "top": 0,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "fundo": "deep",
+        "olho": "accent"
+      },
+      "pecas": [],
+      "slots": {
+        "olho": "primeira"
+      },
+      "motion": {
+        "entra": {
+          "tipo": "sobe",
+          "dur": 0.45,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "sobeFora",
+          "dur": 0.5,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Meia-tela — metade de cima é cartela com a headline, metade de baixo já mostra o vídeo, e a cartela sobe e sai. Dá o gancho SEM esconder quem fala, que é a objeção real a cartela de tela cheia. Primeira linha = sobrancelha."
+    },
+    "moldura": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 96,
+      "safeW": 880,
+      "lh": 1.0,
+      "top": 150,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "vinheta": "deep"
+      },
+      "pecas": [
+        "vinheta"
+      ],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "sobe",
+          "dur": 0.45,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "abre",
+          "dur": 0.6,
+          "ease": "cubic-bezier(.2,.8,.2,1)",
+          "de": [
+            520,
+            90,
+            240,
+            90
+          ],
+          "raio": 28
+        }
+      },
+      "_note": "Moldura — o vídeo aparece dentro de uma moldura arredondada sobre a cor da marca, com o título em cima; depois a moldura se abre e o vídeo toma o quadro. Quem encolhe é a VINHETA (uma borda que se anima até zero), nunca o a-roll: mexer no vídeo brigaria com a câmera pelo mesmo transform."
+    },
+    "contagem": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 74,
+      "safeW": 800,
+      "lh": 1.0,
+      "top": 0,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "fundo": "deep",
+        "num": "accent"
+      },
+      "pecas": [],
+      "slots": {
+        "num": "numero"
+      },
+      "motion": {
+        "entra": {
+          "tipo": "estoura",
+          "dur": 0.5,
+          "ease": "back.out(1.4)"
+        },
+        "sai": {
+          "tipo": "corte",
+          "dur": 0.033,
+          "ease": "none"
+        }
+      },
+      "_note": "Contagem — algarismo ocupando o quadro inteiro com o rótulo embaixo. Para série numerada e vídeo de lista: o número entra antes da fala e o espectador já sabe quantas paradas faltam. Primeira linha numérica = o algarismo; o resto é o rótulo."
+    },
+    "knockout": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 200,
+      "safeW": 960,
+      "lh": 0.9,
+      "top": 0,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "fundo": "deep"
+      },
+      "pecas": [
+        "svg"
+      ],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "fade",
+          "dur": 0.35,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "cortina",
+          "dir": "cima",
+          "dur": 0.5,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Knockout — chapa na cor da marca cobrindo tudo, e a letra é um RECORTE por onde o vídeo aparece. Sai em SVG com máscara, e não em background-clip: o recorte precisa que o furo seja no FUNDO, e clip de texto faz o contrário (preenche a letra). É o gancho que não se faz no editor do celular."
+    },
+    "poster": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 170,
+      "safeW": 920,
+      "lh": 0.92,
+      "top": 0,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": [
+        0.46,
+        1.0,
+        1.0,
+        0.38
+      ],
+      "fontRole": [
+        "main",
+        "main",
+        "main",
+        "serif"
+      ],
+      "paint": {
+        "lines": [
+          "papelEscuro",
+          "papelEscuro",
+          "accent",
+          "papelEscuro"
+        ],
+        "fundo": "papel"
+      },
+      "pecas": [],
+      "slots": {},
+      "motion": {
+        "entra": {
+          "tipo": "sobe",
+          "dur": 0.5,
+          "escalona": 0.08,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.3,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Pôster tipográfico — fundo claro e quatro linhas de borda a borda alternando peso, corpo e família, entrando escalonadas. Editorial de revista virado gancho, e a ÚNICA do lote em fundo claro — o que a torna a saída quando o vídeo é escuro e toda cartela escura some nele. Pede QUATRO partes separadas por barra — é um layout de quatro tempos (rótulo, verbo, remate, explicação), e com duas ele vira duas linhas soltas nas pontas do quadro.",
+      "upperLines": [
+        0,
+        1,
+        2
+      ]
+    },
+    "aspas": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 92,
+      "safeW": 880,
+      "lh": 1.28,
+      "top": 0,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "fundo": "deep",
+        "aspa": "accent",
+        "assinatura": "accentSoft"
+      },
+      "pecas": [
+        "aspa"
+      ],
+      "slots": {
+        "assinatura": "traco"
+      },
+      "motion": {
+        "entra": {
+          "tipo": "sobe",
+          "dur": 0.5,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.32,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Aspas — aspa gigante translúcida ao fundo e a frase em serif itálico, com a assinatura embaixo. Para abrir com a fala mais forte do vídeo: o gancho é a frase, e o desenho só a emoldura. A linha que começa com travessão vira assinatura.",
+      "fonte": "serif"
+    },
+    "ficha": {
+      "motor": "cartela",
+      "cheia": true,
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 126,
+      "safeW": 900,
+      "lh": 0.98,
+      "top": 0,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "paint": {
+        "lines": "main",
+        "fundo": "deepEscuro",
+        "chave": "blueLight"
+      },
+      "pecas": [],
+      "slots": {
+        "meta": "chave:valor"
+      },
+      "motion": {
+        "entra": {
+          "tipo": "sobe",
+          "dur": 0.5,
+          "escalona": 0.1,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.3,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Ficha técnica — título grande e, abaixo, uma grade de rótulos entrando linha a linha. Abertura de documentário: promete o CONTEÚDO em vez de prometer emoção. Cada linha escrita como `chave: valor` vira uma fileira da grade."
     }
   },
   "headlineFamily": "Poppins",
@@ -1034,5 +2672,7 @@
     "limiteChamada": 60,
     "limitePergunta": 72,
     "_limites": "Tetos de caracteres do usuário (2026-08-19): 60 na faixa escura, 72 no corpo branco. São o que cabe legível no adesivo em 1080 de largura — passar disso encolhe a fonte ou estoura a caixa, e as duas saídas estragam o formato. Valem na INTERFACE (o campo trava) e no COMPOSITOR (dado escrito à mão também obedece)."
-  }
+  },
+  "_ancoras_readme": "`ancora` diz o que o número de posição do estilo SIGNIFICA, e existe porque os quatro significados diferentes estavam implícitos no CSS de cada um: `rodape` = px do fundo até a base do bloco (--cap-bottom); `topo` = fração da altura até o TOPO do bloco (o dinâmico, que não tem translateY); `centro` = fração até o CENTRO (editorial, disperso, rotativo — todos com translateY(-50%)); `centroDelta` = deslocamento a partir do meio do quadro (o empilhado, cujo top é calc((0.5 + offset) * 100%)). O caption_safe.py media o queixo e escrevia UM número para todos, tratando-o como topo: corrigia o editorial e o disperso pela metade de um bloco e jogaria o empilhado para fora do quadro. `bloco` é a altura do bloco em fração da altura do quadro, MEDIDA no render quando `blocoMedido` é verdadeiro.",
+  "_cartela_readme": "As headlines com `motor: cartela` rodam em assets/styles/cartela.css + cartela.js — um bloco de slots (olho, algarismo, linhas, grade, assinatura) mais peças opcionais (`pecas`), com entrada e saída em tween de GSAP. `cheia: true` marca as que tomam o QUADRO INTEIRO e devolvem o vídeo na saída; para elas o `top` não vale, quem posiciona é a folha. `slots` diz de onde sai cada pedaço do texto que o usuário digitou — mesma convenção da etiqueta, que já lia a primeira linha como rótulo: `primeira` (a primeira linha), `numero` (a primeira linha, se for um algarismo), `traco` (a linha que começa com travessão) e `chave:valor` (as linhas com dois-pontos). Os layouts antigos não têm `motor` e continuam saindo pelo caminho de sempre."
 }

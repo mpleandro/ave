@@ -100,11 +100,14 @@
                        s + IN + STAG * 2);
       }
 
-      /* etiquetas: entram como reveals, uma por vez, numeradas */
+      /* etiquetas: entram como reveals, numeradas. `data-at` manda quando
+         existe — é o que deixa a lista acompanhar a FALA em vez de desfilar
+         numa cadência constante que descola da voz. */
       el.querySelectorAll('.ave-bo-labels .bo-item').forEach(function (it, i) {
+        var at = parseFloat(it.getAttribute('data-at'));
+        if (isNaN(at)) at = s + i * Math.max(STAG, 0.14);
         tl.fromTo(it, { opacity: 0, y: rev.y, x: -30 },
-                  { opacity: 1, y: 0, x: 0, duration: rev.dur * 0.7, ease: 'power3.out' },
-                  s + i * Math.max(STAG, 0.14));
+                  { opacity: 1, y: 0, x: 0, duration: rev.dur * 0.7, ease: 'power3.out' }, at);
       });
 
       /* mídia: clip reveal de cima para baixo, na moldura de mockup */

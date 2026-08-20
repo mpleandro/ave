@@ -98,12 +98,48 @@ const ICON = {
 // O que já existe de verdade no motor. O catálogo abaixo descreve o produto
 // inteiro; este mapa diz o que dele está pronto hoje. Manter os dois separados
 // é de propósito: o catálogo é a promessa, isto é o estado.
+/* Os dezenove estilos do motor `palavra` (assets/styles/palavra.*): um estado
+   por palavra — antes de ser dita, ativa, já dita — e o que cada estado pinta
+   vindo do `pal` no variants.json. A ORDEM aqui é a ordem do cartão na aba, e
+   está agrupada por família: realce que corre, foco por luz, caixa, ritmo,
+   editorial. */
+const PAL = [
+  ['marcador', 'Marcador'], ['marcadorDuplo', 'Marcador duplo'],
+  ['marcaTexto', 'Marca-texto'], ['sublinhado', 'Sublinhado'],
+  ['progressivo', 'Progressivo'],
+  ['foco', 'Foco'], ['focoBlur', 'Foco desfocado'], ['contorno', 'Contorno'],
+  ['neon', 'Neon'],
+  ['chapa', 'Bloco sólido'], ['chips', 'Chips'], ['vidro', 'Vidro'],
+  ['onda', 'Onda'], ['rotativo', 'Rotativo'], ['maquina', 'Máquina de escrever'],
+  ['rolagem', 'Rolagem'],
+  ['cinema', 'Cinema'], ['manchete', 'Manchete'], ['barra', 'Barra lateral'],
+];
+const PAL_IDS = new Set(PAL.map((p) => p[0]));
+
+/* As vinte headlines do motor `cartela` (assets/styles/cartela.*): um bloco de
+   slots com entrada e saída em tween. As dez primeiras entram SOBRE o vídeo;
+   as dez últimas (`cheia`) tomam o quadro inteiro e o devolvem na saída — é o
+   gancho que vira cold open. */
+const CARTELAS = [
+  ['fita', 'Fita'], ['jornal', 'Recorte de jornal'], ['terminal', 'Terminal'],
+  ['alerta', 'Alerta'], ['placar', 'Placar'], ['sombra_longa', 'Sombra longa'],
+  ['neon', 'Neon tubo'], ['balao', 'Balão de fala'], ['filete', 'Filete duplo'],
+  ['adesivo', 'Adesivo'],
+  ['capa', 'Capa sólida'], ['capa_blur', 'Capa desfocada'], ['cortina', 'Cortina'],
+  ['meia_tela', 'Meia-tela'], ['moldura', 'Moldura'], ['contagem', 'Contagem'],
+  ['knockout', 'Knockout'], ['poster', 'Pôster tipográfico'], ['aspas', 'Aspas'],
+  ['ficha', 'Ficha técnica'],
+];
+const CT_IDS = new Set(CARTELAS.map((c) => c[0]));
+
 const PORTED = {
   captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked',
-                     'pop', 'popLinha', 'popBloco', 'revelar', 'editorial', 'dinamico']),
+                     'pop', 'popLinha', 'popBloco', 'revelar', 'editorial', 'dinamico',
+                     ...PAL.map((p) => p[0])]),
   headlines: new Set(['', 'outline', 'card', 'realce', 'misto',
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
-                      'relevo', 'grifo', 'contorno_duplo']),
+                      'relevo', 'grifo', 'contorno_duplo',
+                      ...CARTELAS.map((c) => c[0])]),
   edits: new Set(['limpa', 'split', 'split2', 'brollOverlay', 'caixinha']),
 };
 
@@ -225,6 +261,8 @@ const STYLE_CATALOG = {
     {id: 'relevo', name: 'Relevo', hl: 'relevo'},
     {id: 'grifo', name: 'Grifo', hl: 'grifo'},
     {id: 'contorno_duplo', name: 'Contorno duplo', hl: 'contorno_duplo'},
+    // as vinte do motor `cartela`, banda primeiro e tela cheia depois
+    ...CARTELAS.map(([id, name]) => ({id, name, ct: id})),
     /* SEM HEADLINE precisa ser uma ESCOLHA, não a ausência de uma.
      *
      * Até aqui as onze opções eram todas estilos e `outline` vinha marcada por
@@ -264,6 +302,8 @@ const STYLE_CATALOG = {
     {id: 'popLinha', name: 'Estouro (linha)', demo: 'popLinha'},
     {id: 'pop', name: 'Estouro (palavra)', demo: 'pop'},
     {id: 'revelar', name: 'Revelação', demo: 'revelar'},
+    // os dezenove do motor `palavra`, na ordem das famílias
+    ...PAL.map(([id, name]) => ({id, name, demo: id})),
   ],
   elements: [
     {
@@ -353,10 +393,54 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 let capAnims = []; // step(nowSeconds) per visible caption demo
 
+/* O QUADRO DO PROJETO — largura e altura do vídeo DECODIFICADO, a mesma fonte
+   que decide `body.portrait`. Os cartões de estilo e as prévias vivem nele: um
+   cartão que não é o quadro mostra a letra e esconde o lugar, que é metade da
+   escolha. Sem vídeo carregado, o padrão é o 9:16 do short-form, que é o que a
+   aba Estilo serve. */
+function quadroProj() {
+  const w = video.videoWidth || 1080;
+  const h = video.videoHeight || 1920;
+  return { w, h, retrato: h >= w };
+}
+
+/* A ESCALA das prévias. As folhas são autoradas em referência de 1080px e a
+   composição passa `--cap-scale: 1` — então o fator do editor é
+   `largura em tela / largura do QUADRO`, e não `/1080` fixo: num projeto
+   horizontal (1920 de largura) o fixo faria a legenda sair quase o dobro do
+   tamanho que ela terá no render. */
+const projW = () => quadroProj().w;
+
+/* O tamanho do cartão, escrito como variável de CSS. Retrato manda na altura
+   (o quadro é alto e estreito); paisagem manda na largura, senão um 16:9 com
+   196px de altura sairia com 348px e caberiam dois por fileira. */
+function aplicarQuadro() {
+  const q = quadroProj();
+  const [w, h] = q.retrato
+    ? [Math.round(196 * q.w / q.h), 196]
+    : [232, Math.round(232 * q.h / q.w)];
+  const r = document.documentElement.style;
+  r.setProperty('--quadro-w', `${w}px`);
+  r.setProperty('--quadro-h', `${h}px`);
+}
+
+/* Onde a deixa deste estilo senta, em px de referência — o mesmo número que o
+   compositor lê (`bottom` do estilo, ou o global). */
+function capOffset(id, def) {
+  const st = ((LIVE.variants || {}).styles || {})[id] || {};
+  return st.offsetY != null ? st.offsetY : def;
+}
+
+function capBottom(id) {
+  const v = LIVE.variants || {};
+  const st = (v.styles || {})[id] || {};
+  return st.bottom || v.bottom || 430;
+}
+
 // Karaoke: lines of ≤3 words (captions.maxWords), Poppins 900 white, each word
 // rises 34px and fades in over 7 frames; the line is replaced by the next one.
 function buildKaraokeDemo(host) {
-  const s = host.clientWidth / 1080;
+  const s = host.clientWidth / projW();
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
   const words = CAP_TEXT.split(' ');
@@ -367,8 +451,13 @@ function buildKaraokeDemo(host) {
   const rise = 34 * s;
   const built = [];
   let t = 0;
+  const bot = capBottom('karaoke') * s;
   for (const ln of lines) {
     const box = el('div', 'kar-line', wrap);
+    // no LUGAR do render: a 430px do fundo, não centrada no cartão
+    box.style.bottom = `${bot}px`;
+    box.style.left = '0';
+    box.style.right = '0';
     box.style.fontSize = `${76 * s}px`;
     const spans = ln.map((w) => {
       const sp = el('span', '', box);
@@ -406,10 +495,17 @@ const STK_LINES = [
   { words: ['irá', 'aparecer'], style: 2 },
 ];
 function buildStackedDemo(host) {
-  const s = host.clientWidth / 1080;
+  const s = host.clientWidth / projW();
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
   const cue = el('div', 'stk-cue', wrap);
+  /* NO LUGAR DO RENDER. A folha do render ancora a pilha em
+     `top: calc((0.5 + offset) * 100%)` com translateY(-50%) — o número vem do
+     variants.json, aqui como estilo inline. Pôr a classe `ave-stacked` no
+     contêiner traria junto `height: 0`, que é o que a folha usa para ancorar, e
+     colapsaria o cartão. */
+  cue.style.top = `${(0.5 + capOffset('stacked', 0.156)) * 100}%`;
+  cue.style.transform = 'translateY(-50%)';
 
   const STEP = 0.2, ENTER = 8 / FPS_REF, HOLD = 0.8, EXIT = 7 / FPS_REF;
   const rise = 46 * s, blurIn = 5 * s, upY = 55 * s, cueBlur = 14 * s;
@@ -730,6 +826,16 @@ function paintHeadlines() {
     const id = [...box.classList].find((c) => c !== 'ave-hook');
     paintHook(box, hlStyle(id), main, accent);
   });
+  /* As cartelas repintam por VARIÁVEL — elas não têm `paint` por classe como
+     os layouts antigos, a folha é que decide quem recebe qual cor. Sem esta
+     linha os vinte cartões novos ficavam presos na cor de fábrica enquanto o
+     usuário arrastava a roda, que é o defeito que `paintHeadlines` existe para
+     não ter. */
+  document.querySelectorAll('#opt-headlines .ave-cartela').forEach((box) => {
+    box.style.setProperty('--hl-main', main);
+    box.style.setProperty('--hl-accent', accent);
+    box.style.setProperty('--hl-accent-rgb', trioRGB(accent));
+  });
 }
 
 /* Monta uma headline REAL — a mesma marcação e as mesmas classes que o
@@ -740,7 +846,7 @@ function buildHeadline(host, styleId, text, opts) {
   const S = hlStyle(styleId);
   const fonts = { main: o.fontMain || FONT_MAIN_DEF, accent: o.fontAccent || FONT_ACCENT_DEF };
   ensureFonts([fonts.main, fonts.accent]);
-  const s = (o.width || host.clientWidth) / 1080;
+  const s = (o.width || host.clientWidth) / projW();
   host.innerHTML = '';
   const box = el('div', `ave-hook ${styleId}`, host);
   box.style.setProperty('--hl-scale', s);
@@ -788,11 +894,61 @@ function buildHeadline(host, styleId, text, opts) {
   return box;
 }
 
+/* Prévia das headlines do motor `cartela`. Usa `/styles/cartela.*` — a MESMA
+ * folha, o MESMO script e a mesma marcação do render, com a cartela ASSENTADA
+ * (entrada terminada, saída ainda não começada). O movimento não roda aqui de
+ * propósito: esta prévia responde "como fica", e o quadro do meio de uma
+ * entrada de 500ms não é como fica. */
+function buildCartelaDemo(host, styleId) {
+  const C = window.AVE_CARTELA;
+  const h = hlStyle(styleId);
+  host.innerHTML = '';
+  if (!C || !h || h.motor !== 'cartela') return () => {};
+  const fonts = { main: S.style.fontMain || FONT_MAIN_DEF,
+                  accent: S.style.fontAccent || FONT_ACCENT_DEF };
+  ensureFonts([fonts.main, fonts.accent]);
+  const sc = host.clientWidth / projW();
+
+  const partes = C.fatiar(S.style.headlineText || HEADLINE_TEXT, h);
+  let linhas = (h.linhaUnica && partes.titulo.indexOf('/') < 0)
+    ? [partes.titulo] : hlLines(partes.titulo, h);
+  linhas = linhas.filter(Boolean).map((l, i) => (hlUpper(i, linhas.length, h) ? l.toUpperCase() : l));
+  if (!linhas.length) linhas = [''];
+  const size = hlFit(linhas, h, fonts);
+  const ks = hlKs(linhas, h);
+  const dados = {
+    olho: partes.olho, num: partes.num, assinatura: partes.assinatura, meta: partes.meta,
+    size, familia: fonts.main,
+    linhas: linhas.map((l, i) => ({
+      txt: l, k: ks[i],
+      peso: nearestWeight(hlFamily(h, i, fonts), hlWeight(h, i)),
+    })),
+  };
+  const box = C.montar(host, h, styleId, dados);
+  box.style.setProperty('--hl-scale', sc);
+  box.style.setProperty('--hl-size', size);
+  box.style.setProperty('--hl-lh', h.lh);
+  box.style.setProperty('--hl-top', h.top || 0);
+  box.style.setProperty('--hl-stroke', h.stroke || 0);
+  box.style.setProperty('--hl-font', cssFamily(fonts.main));
+  box.style.setProperty('--hl-font-accent', cssFamily(fonts.accent));
+  const main = normHex(S.style.textColor) || '#FFFFFF';
+  const acc = normHex(S.style.accent) || ACCENT_DEFAULT;
+  box.style.setProperty('--hl-main', main);
+  box.style.setProperty('--hl-accent', acc);
+  box.style.setProperty('--hl-accent-rgb', trioRGB(acc));
+  C.assentar(box);
+  return () => {};
+}
+
 function buildHeadlineDemo(host, styleId) {
   const wrap = el('div', 'cap-demo', host);
   const fit = el('div', 'hl-fit', wrap);
   buildHeadline(fit, styleId, S.style.headlineText || HEADLINE_TEXT, {
     width: host.clientWidth,
+    // no ALTO do quadro, onde ela vai aparecer — o cartão agora tem altura para
+    // isso, e a altura era a única razão de ela vir com top 0
+    top: (hlStyle(styleId) || {}).top || 0,
     main: S.style.textColor,
     accent: S.style.accent,
     fontMain: S.style.fontMain,
@@ -819,10 +975,13 @@ const SCAT = { base: 72, hiScale: 1.62, gap: 12, spread: 0.45, safeW: 820 };
 const scatHash = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
 function buildScatterDemo(host) {
-  const s = host.clientWidth / 1080;
+  const s = host.clientWidth / projW();
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
   const cue = el('div', 'scat-cue', wrap);
+  // o disperso vive sobre o PEITO (0.72 da altura), não no meio do quadro
+  cue.style.top = `${capOffset('scatter', 0.72) * 100}%`;
+  cue.style.transform = 'translateY(-50%)';
 
   const words = CAP_TEXT.toLowerCase().split(' ');
   // highlight = longest word of the cue, and only if it carries weight (>6)
@@ -894,7 +1053,7 @@ const ORPHAN_PT = /^(o|a|os|as|e|é|de|do|da|em|no|na|um|uma|que|se|ao|à|por|co
 
 function buildStaticDemo(host, id) {
   const V = STATIC_VARIANTS[id];
-  const s = host.clientWidth / 1080;
+  const s = host.clientWidth / projW();
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
   const words = CAP_TEXT.split(' ');
@@ -925,6 +1084,10 @@ function buildStaticDemo(host, id) {
       lines = [cue.slice(0, best), cue.slice(best)];
     }
     const box = el('div', 'stat-demo', wrap);
+    // no rodapé real do estilo, como o render — não centrada no cartão
+    box.style.bottom = `${capBottom(id) * s}px`;
+    box.style.left = '0';
+    box.style.right = '0';
     box.style.fontFamily = V.family;
     box.style.fontWeight = String(V.weight);
     box.style.fontSize = `${V.size * s}px`;
@@ -952,7 +1115,7 @@ function buildStaticDemo(host, id) {
  * AVE_POP/AVE_REVELAR, que são os mesmos módulos que a composição carrega.
  * Uma prévia que anima com outra curva é pior que nenhuma prévia. */
 function buildCapCutDemo(host, tipo, grupo) {
-  const s = host.clientWidth / 1080;
+  const s = host.clientWidth / projW();
   host.innerHTML = '';
   const wrap = el('div', 'cap-demo', host);
   const raiz = el('div', tipo === 'pop' ? `ave-pop grupo-${grupo}` : 'ave-rev', wrap);
@@ -973,9 +1136,12 @@ function buildCapCutDemo(host, tipo, grupo) {
   const linhasTx = [palavras.slice(0, metade), palavras.slice(metade)];
   const rows = [];
   const spans = [];
+  const bot = capBottom(tipo === 'pop' ? 'pop' : 'revelar') * s;
+  const lh = 76 * 1.08 * s;   // corpo x entrelinha do estilo
   linhasTx.forEach((ws, li) => {
     const row = el('div', 'ave-cap-line', raiz);
-    row.style.bottom = li === 0 ? '56%' : '38%';
+    // as duas linhas empilhadas SOBRE a base real, em vez de 56%/38% do cartão
+    row.style.bottom = `${bot + (li === 0 ? lh : 0)}px`;
     rows.push(row);
     for (const w of ws) {
       const sp = el('span', spans.length === 1 ? 'hi' : '', row);
@@ -1017,6 +1183,98 @@ function buildCapCutDemo(host, tipo, grupo) {
   };
 }
 
+/* A frase de exemplo com TEMPO DE FALA. Os estilos do motor `palavra` são
+   todos karaokê de alguma forma — o que eles mostram é a palavra chegando na
+   voz — então um exemplo sem tempo mostraria uma legenda parada, que é
+   justamente o que nenhum deles é. Duração por palavra proporcional ao
+   comprimento, com um piso: é o que a fala faz, e é o que faz "a" passar
+   depressa e "aparecer" segurar. */
+function palRoteiro(palavras) {
+  let t = 0;
+  return palavras.map((w) => {
+    const d = Math.max(0.2, Math.min(0.62, 0.13 + w.length * 0.055));
+    const item = {texto: w, at: t, dur: d};
+    t += d + 0.05;
+    return item;
+  });
+}
+
+/* A quebra do exemplo obedece ao ESTILO: `maxWords` é teto de palavras e
+   `lines` de linhas. Sem isto o rotativo (uma palavra) mostraria sete e o
+   cinema (nove) mostraria três — e a prévia estaria mentindo sobre a única
+   coisa que ela existe para mostrar. */
+function palLinhas(v) {
+  const todas = palRoteiro(CAP_TEXT.split(' '));
+  const cola = (v.pal || {}).cola;
+  let cap = Math.max(1, Math.min(v.maxWords || 5, todas.length));
+  // com `cola` (o rotativo), palavra curta não fecha a deixa: senão o cartão
+  // do estilo seria a palavra "É" sozinha, que não mostra estilo nenhum
+  if (cola) {
+    cap = 1;
+    while (cap < todas.length && todas[cap - 1].texto.length <= cola) cap++;
+  }
+  const usadas = todas.slice(0, cap);
+  if ((v.lines || 1) < 2 || usadas.length < 2) return [usadas];
+  const meio = Math.ceil(usadas.length / 2);
+  return [usadas.slice(0, meio), usadas.slice(meio)];
+}
+
+/* Prévia dos estilos do motor `palavra`. Usa `/styles/palavra.*` — a MESMA
+   folha e o MESMO script do render, montando a mesma marcação e pintando os
+   mesmos estados. O que muda é só quem conta o tempo: aqui é o relógio do
+   cartão, no render é o seek do GSAP. */
+function buildPalavraDemo(host, id) {
+  const s = host.clientWidth / projW();
+  host.innerHTML = '';
+  const wrap = el('div', 'cap-demo', host);
+  const P = window.AVE_PALAVRA;
+  const v = ((LIVE.variants && LIVE.variants.styles) || {})[id] || {};
+  const cfg = v.pal || {};
+  const box = el('div', `ave-pal pal-${id}`, wrap);
+  if (!P || !v.pal) { box.textContent = ''; return () => {}; }
+  vestirPal(box, id, v, s);
+  const linhas = palLinhas(v);
+  const cue = P.montar(box, linhas, cfg, id);
+  const cores = P.paleta(box);
+  const ult = linhas[linhas.length - 1];
+  const ciclo = ult[ult.length - 1].at + ult[ult.length - 1].dur + 0.9;
+  return (now) => { P.pintar(cue, cfg, v.motion || {}, now % ciclo, s, cores); };
+}
+
+/* As variáveis do contêiner — o que o compositor escreve no `style` da deixa.
+   As do `pal` ficam com o motor (`varsPal`); aqui vai só o que é comum a
+   qualquer legenda: corpo, cor, letra e peso. */
+function vestirPal(box, id, v, escala) {
+  box.style.position = 'absolute';
+  box.style.inset = '0';
+  box.style.setProperty('--cap-scale', escala);
+  box.style.setProperty('--cap-size', v.size || 58);
+  box.style.setProperty('--cap-weight', v.weight || 600);
+  box.style.setProperty('--cap-track', v.tracking || 0);
+  box.style.setProperty('--cap-lh', v.lineHeight || 1.26);
+  const cor = S.style.capColor || '#F5F2EE';
+  const acc = S.style.accent || ACCENT_DEFAULT;
+  box.style.setProperty('--cap-color', cor);
+  box.style.setProperty('--cap-color-rgb', trioRGB(cor));
+  box.style.setProperty('--cap-accent', acc);
+  box.style.setProperty('--cap-accent-rgb', trioRGB(acc));
+  const fam = S.style.capFont ? cssFamily(S.style.capFont) : v.cssFamily;
+  if (S.style.capFont) ensureFonts([S.style.capFont]);
+  if (fam) box.style.setProperty('--cap-family', fam);
+  window.AVE_PALAVRA.varsPal(box, v.pal || {});
+}
+
+/* `#FF6B1A` -> `255 107 26`. Espelha o `rgb_trio` do compositor: sem o trio
+   separado por espaço, `rgb(var(--x) / .5)` não resolve e a regra cai CALADA —
+   o halo do neon e a chapa translúcida simplesmente não aparecem. */
+function trioRGB(hex) {
+  let h = String(hex || '').replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h, 16);
+  if (!isFinite(n) || h.length !== 6) return '255 255 255';
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+}
+
 const CAP_BUILDERS = {
   karaoke: buildKaraokeDemo, stacked: buildStackedDemo, scatter: buildScatterDemo,
   pop: (h) => buildCapCutDemo(h, 'pop', 'palavra'),
@@ -1024,6 +1282,7 @@ const CAP_BUILDERS = {
   popBloco: (h) => buildCapCutDemo(h, 'pop', 'bloco'),
   revelar: (h) => buildCapCutDemo(h, 'revelar'),
 };
+for (const [id] of PAL) CAP_BUILDERS[id] = (h) => buildPalavraDemo(h, id);
 
 // Largura da calha = deslocamento x das pistas dentro do conteúdo rolável.
 // Lida do token `--label-w` em vez de repetida aqui: era um número duplicado em
@@ -1067,6 +1326,7 @@ let S = {
   pendingIn: null, // an IN is open, waiting for its OUT
   editingNote: null, // id of the note the editor is bound to
   style: null, // current picks {edit, captions, elements:{…}, note}
+  prefs: null, // as escolhas da última vez (~/.avelin/estilo.json)
   jcut: null, // jcut_timeline from edl.json — real output positions per take
   // A1/A2 live folded inside the audio track. They answer "where is the J-cut",
   // which is a question you ask once — so the default is closed, and the choice
@@ -1577,8 +1837,15 @@ async function applyState(data) {
      novo já nasce com as do usuário em vez do laranja de fábrica. Mas o que o
      PROJETO gravou vence sempre: reabrir um vídeo entregue tem de mostrar as
      cores com que ele foi entregue, e não as de hoje. */
-  S.style = { ...defaultStyle(), ...(S.brand || {}), ...(S.state.style || {}) };
-  S.style.elements = { ...defaultStyle().elements, ...((S.state.style || {}).elements || {}) };
+  /* Quatro camadas, nesta ordem: o padrão de fábrica, as ESCOLHAS da última
+     vez, a marca (cor e letra), e por último o que o projeto gravou. As
+     escolhas vêm antes da marca porque a marca é mais específica — ela é sobre
+     quem faz, não sobre como se costuma fazer — e as duas antes do projeto,
+     que vence sempre. */
+  S.style = { ...defaultStyle(), ...(S.prefs || {}), ...(S.brand || {}),
+              ...(S.state.style || {}) };
+  S.style.elements = { ...defaultStyle().elements, ...((S.prefs || {}).elements || {}),
+                       ...((S.state.style || {}).elements || {}) };
   $('setupNote').value = S.style.note || '';
   // a skill pediu uma escolha de estilo → leva o usuário para a Finalização,
   // onde o painel de camadas agora mora
@@ -2172,6 +2439,20 @@ async function loadBrand() {
   } catch (e) { S.brand = null; }
 }
 
+/* AS ESCOLHAS DA ÚLTIMA VEZ (~/.avelin/estilo.json): formato do corte,
+   headline, estilo de legenda, elementos ligados e o deslocamento da legenda.
+   Escrito pelo servidor no mesmo ato do envio do estilo — aqui só se lê.
+   Existe pela mesma razão do brand: refazer as mesmas escolhas em todo projeto
+   é trabalho que a ferramenta pode poupar. E vale a MESMA ordem: o que o
+   projeto gravou continua vencendo, senão reabrir um vídeo entregue mostraria
+   o gosto de hoje no lugar do que foi entregue. */
+async function loadEstilo() {
+  try {
+    const d = await (await fetch('/api/estilo')).json();
+    S.prefs = d && typeof d === 'object' ? d : null;
+  } catch (e) { S.prefs = null; }
+}
+
 async function saveBrand(btn) {
   const body = {};
   for (const k of BRAND_KEYS) if (S.style[k]) body[k] = S.style[k];
@@ -2294,6 +2575,9 @@ const onProxy = () => /(^|\/)preview_proxy\.mp4$/.test(S.state.video || '');
 const setupApplies = () => !!(S.state.awaitingStyle || S.state.style) && !onProxy();
 
 function renderSetup() {
+  // o tamanho do cartão é o do quadro, e tem de estar escrito ANTES de os
+  // construtores medirem `clientWidth` para calcular a escala
+  aplicarQuadro();
   /* O REBUILD NÃO PODE ROUBAR O CURSOR. Esta função recria o painel inteiro —
      inclusive o textarea da headline e o campo hex — e é chamada no debounce da
      própria digitação: sem isto, cada pausa de 260ms destruía o elemento
@@ -2380,9 +2664,12 @@ function renderSetup() {
       if (off) card.title = 'ainda não disponível';
       // headline previews are two short lines — they do not need the caption
       // box's height, and with four groups on one screen that height is scarce
-      const kind = o.mock ? 'frame' : o.hl ? 'cap hlbox' : 'cap';
+      const kind = o.mock ? 'frame' : o.ct ? 'cap ctbox' : o.hl ? 'cap hlbox' : 'cap';
       const prev = el('div', `opt-preview ${kind}`, card);
-      if (o.demo) capAnims.push(CAP_BUILDERS[o.demo](prev));
+      // um `demo` sem construtor deixa o cartão parado em vez de derrubar a
+      // aba inteira: a lista de estilos é dado, e dado erra
+      if (o.demo && CAP_BUILDERS[o.demo]) capAnims.push(CAP_BUILDERS[o.demo](prev));
+      else if (o.ct) buildCartelaDemo(prev, o.ct);
       else if (o.hl) buildHeadlineDemo(prev, o.hl);
       else if (o.stat) {
         const step = buildStaticDemo(prev, o.stat);
@@ -2727,6 +3014,16 @@ $('layersPanel').addEventListener('click', (e) => {
        mesmo incômodo que a rolagem preservada existe para eliminar. */
     const revelou = doHeadline && !S.style.headlinePicked;
     if (doHeadline) S.style.headlinePicked = true;
+    /* ESCOLHER TEM DE MOSTRAR. O gancho vive nos primeiros segundos do corte;
+       com o ponteiro em 00:40 o usuário clicaria num layout e o vídeo não
+       mudaria nada — escolher sem ver a escolha é o mesmo que não ter
+       escolhido. Só move quando está FORA da janela: dentro dela, mexer no
+       ponteiro seria tirar a pessoa de onde ela estava olhando. */
+    if (doHeadline && video.videoWidth
+        && renderedToDraft(video.currentTime || 0) > GANCHO_SEC) {
+      video.currentTime = draftToRendered(0.6);
+    }
+    LIVE.hookKey = null;   // o layout mudou: a prévia ao vivo remonta
     renderSetup();
     if (revelou || revelouCap) {
       // desce até o acabamento sem tirar da tela o estilo que acabou de ser
@@ -3147,7 +3444,7 @@ function renderChips() {
  * deixa de exemplo enquanto a Fase 2 não tiver gerado as de verdade. A tarja
  * embaixo avisa quando é exemplo — uma prévia que não conta que está inventando
  * é exatamente a mentira que ela existe para evitar. */
-const LIVE = { variants: null, css: new Set(), key: null };
+const LIVE = { variants: null, css: new Set(), key: null, hookKey: null };
 
 /* A FOLHA DE CADA ESTILO, para a legenda AO VIVO sobre o vídeo.
    Faltar aqui não dá erro: `liveCss(undefined)` sai calado, o estilo cai no
@@ -3160,6 +3457,7 @@ const CAP_CSS = {
   pop: 'pop.css', popLinha: 'pop.css', popBloco: 'pop.css',
   revelar: 'revelar.css', editorial: 'editorial.css', dinamico: 'dinamico.css',
 };
+for (const [id] of PAL) CAP_CSS[id] = 'palavra.css';
 
 // os estilos medidos do CapCut, e o grupo de cada um
 const POP_GRUPO = { pop: 'palavra', popLinha: 'linha', popBloco: 'bloco' };
@@ -3210,7 +3508,65 @@ function liveCue(t, v) {
   return { text: SAMPLE_WORDS.slice(0, n).join(' '), sample: true };
 }
 
+/* A JANELA DO GANCHO. O compositor usa `hook.endSec` e o padrão dele é 4s —
+   fora dessa janela o gancho não existe no vídeo, e a prévia diz isso
+   apagando-o em vez de escondê-lo. */
+const GANCHO_SEC = 4.0;
+
+/* O GANCHO AO VIVO sobre o vídeo (pedido do usuário, 2026-08-19): clicar num
+   layout tem de MOSTRAR o layout no vídeo, não só no cartão. Caixa própria,
+   irmã da legenda, porque o overlay da legenda é reconstruído a cada troca de
+   deixa — a headline não pode nascer e morrer sessenta vezes por segundo junto
+   com ela. */
+function renderLiveHook() {
+  const ov = $('liveOverlay');
+  const frame = video.parentElement;
+  if (!ov || !frame) return;
+  const id = (S.style && S.style.headline) || '';
+  const on = setupApplies() && video.videoWidth > 0 && !S.showFinal && !!id;
+  let box = document.getElementById('liveHook');
+  if (!on) {
+    if (box) box.remove();
+    LIVE.hookKey = null;
+    return;
+  }
+  syncOverlay();
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'liveHook';
+    box.style.position = 'absolute';
+    box.style.overflow = 'hidden';
+    box.style.pointerEvents = 'none';
+    frame.appendChild(box);
+  }
+  // a MESMA caixa da legenda: o retângulo do vídeo, não o da moldura
+  for (const k of ['left', 'top', 'width', 'height']) box.style[k] = ov.style[k];
+  const w = box.clientWidth;
+  if (!w) return;
+
+  const h = hlStyle(id);
+  const texto = (S.style.headlineText || '').trim() || HEADLINE_TEXT;
+  const dentro = renderedToDraft(video.currentTime || 0) <= GANCHO_SEC;
+  const key = [id, texto, Math.round(w), dentro, S.style.accent, S.style.textColor,
+               S.style.fontMain, S.style.fontAccent].join('|');
+  if (key === LIVE.hookKey) return;
+  LIVE.hookKey = key;
+
+  box.innerHTML = '';
+  const host = el('div', `live-hook${dentro ? '' : ' fora'}`, box);
+  if (h && h.motor === 'cartela') {
+    buildCartelaDemo(host, id);
+  } else {
+    buildHeadline(host, id, texto, {
+      width: w, top: (h || {}).top || 0,
+      main: S.style.textColor, accent: S.style.accent,
+      fontMain: S.style.fontMain, fontAccent: S.style.fontAccent,
+    });
+  }
+}
+
 function renderLive() {
+  renderLiveHook();
   const ov = $('liveOverlay');
   if (!ov) return;
   /* Com o render final na tela a legenda JÁ ESTÁ QUEIMADA nele — desenhar por
@@ -3342,6 +3698,33 @@ function renderLive() {
          sem forçar 1, a legenda inteira fica INVISÍVEL — e um estilo que some
          na prévia lê como quebrado, não como "ainda não animou". */
       sp.style.setProperty('--rev-w', 1);
+    }
+  } else if (PAL_IDS.has(id)) {
+    /* O motor `palavra` ao vivo. A deixa é mostrada com a ÚLTIMA palavra ativa
+       — a frase inteira já dita, o realce onde ele para. É a mesma escolha do
+       estouro: esta prévia responde "como fica", e o quadro do meio de uma
+       animação de 190ms não é como fica. O movimento se vê nos cartões, que
+       rodam em laço. */
+    const P = window.AVE_PALAVRA;
+    const box = el('div', `ave-pal pal-${id}`, ov);
+    if (P && v.pal) {
+      vestirPal(box, id, v, sc);
+      box.style.position = 'absolute';
+      box.style.inset = '0';
+      applyCapDy(box, id, v);
+      let t = 0;
+      const linha = words.map((w) => {
+        const item = {texto: w, at: t, dur: 0.3};
+        t += 0.35;
+        return item;
+      });
+      const linhas = (v.lines || 1) > 1 && linha.length > 2
+        ? [linha.slice(0, Math.ceil(linha.length / 2)), linha.slice(Math.ceil(linha.length / 2))]
+        : [linha];
+      const cue = P.montar(box, linhas, v.pal, id);
+      // medir depois de estar no documento: a tarja é posicionada contra a
+      // caixa da deixa, e uma caixa fora da árvore mede zero
+      requestAnimationFrame(() => P.pintar(cue, v.pal, v.motion || {}, t, sc, P.paleta(box)));
     }
   } else if (id === 'karaoke') {
     const box = vestir(el('div', 'ave-cap', ov));
@@ -3505,6 +3888,8 @@ function applyOrientation() {
   }
   if (portrait === document.body.classList.contains('portrait')) return;
   document.body.classList.toggle('portrait', portrait);
+  // os cartões de estilo seguem o QUADRO: mesma fonte, mesmo instante
+  aplicarQuadro();
   // the timeline's width just changed — re-fit after layout settles
   requestAnimationFrame(() => { fitZoom(); renderAll(); });
 }
@@ -4115,7 +4500,7 @@ $('jcutToggle').addEventListener('click', () => {
 
 // a marca ANTES do primeiro poll: ela entra na montagem do estilo, e chegando
 // depois o painel abriria no laranja de fábrica e trocaria de cor sozinho
-Promise.all([loadBrand(), loadLocalFonts()]).then(poll);
+Promise.all([loadBrand(), loadEstilo(), loadLocalFonts()]).then(poll);
 rafLoop();
 // the headline fit is MEASURED, so it is wrong until Poppins is actually
 // loaded — rebuild once the fonts land
@@ -4123,7 +4508,15 @@ if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => { if (S.style) renderSetup(); });
 fetch('/styles/variants.json')
   .then((r) => r.json())
-  .then((v) => { LIVE.variants = v; LIVE.key = null; renderLive(); })
+  .then((v) => {
+    LIVE.variants = v;
+    LIVE.key = null;
+    renderLive();
+    // os cartões do motor `palavra` são desenhados a partir DESTES números
+    // (corpo, teto de palavras, papéis de estado). Montados antes do fetch,
+    // saíam vazios e ficavam assim — a aba mostrava dezenove retângulos pretos.
+    if (S.style) renderSetup();
+  })
   .catch(() => { /* sem os números a prévia cai no CSS puro, que já é honesto */ });
 }
 
@@ -4396,6 +4789,13 @@ const CAP_ANCHOR = {
   stacked: { var: '--stk-offset-y', base: 0.156, dir: -1, scale: 1 / 1920 },
   scatter: { var: '--scat-offset-y', base: 0.72, dir: -1, scale: 1 / 1920 },
 };
+// os do motor `palavra` sentam no rodapé como o karaokê — menos o rotativo,
+// que vive no CENTRO do quadro e por isso se move pela fração, não pelos px
+for (const [id] of PAL) {
+  CAP_ANCHOR[id] = id === 'rotativo'
+    ? { var: '--pal-centro', base: 0.5, dir: +1, scale: 1 / 1920 }
+    : { var: '--cap-bottom', base: 430, dir: +1, scale: 1 };
+}
 
 function applyCapDy(box, id, v) {
   const a = CAP_ANCHOR[id];
@@ -4410,7 +4810,7 @@ function applyCapDy(box, id, v) {
    possibilidade de clicar no vídeo. */
 let capDrag = null;
 $('liveOverlay').addEventListener('pointerdown', (e) => {
-  const box = e.target.closest('.ave-cap, .ave-cap-static, .ave-stacked, .ave-scatter');
+  const box = e.target.closest('.ave-cap, .ave-cap-static, .ave-stacked, .ave-scatter, .ave-pal');
   if (!box) return;
   const w = $('liveOverlay').clientWidth || 1;
   capDrag = { y0: e.clientY, dy0: S.style.capDy || 0, sc: w / 1080 };

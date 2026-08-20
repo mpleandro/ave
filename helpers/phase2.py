@@ -347,9 +347,15 @@ def main() -> None:
     # de detecção duvidosa jogaria a legenda no rodapé) e escreve `captions.offsetY`.
     # Só age quando o estilo é de BLOCO CENTRAL; karaokê e estáticas já nascem
     # ancoradas no rodapé, longe da cabeça. Valor posto à mão vence a medição.
+    # Vale para TODOS os estilos, não só os de bloco central. Um rosto baixo no
+    # quadro (plano fechado, pessoa sentada no canto de baixo) põe o queixo
+    # abaixo do topo da legenda de rodapé também — e o caption_safe agora
+    # responde "nada a mexer" quando a posição de fábrica já está certa, que é
+    # o caso comum. Medir sempre e corrigir só quando precisa é mais barato que
+    # manter uma lista de quem participa da regra, que envelhece a cada estilo
+    # novo (e envelheceu: o `rotativo` nasce no CENTRO do quadro).
     caps = data.get("captions") or {}
-    if caps.get("enabled", True) and caps.get("style") in ("dinamico", "editorial", "stacked", "scatter") \
-            and "offsetY" not in caps:
+    if caps.get("enabled", True) and "offsetY" not in caps and "paddingBottom" not in caps:
         print("  medindo a faixa segura da legenda…")
         progress.step(edit, detail="medindo a faixa segura da legenda")
         run([sys.executable, str(SKILL / "helpers" / "caption_safe.py"), str(edit), "--aplicar"],

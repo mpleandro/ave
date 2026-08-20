@@ -1,0 +1,262 @@
+/* PALAVRA — o motor das legendas com estado POR PALAVRA.
+ *
+ * Dezenove estilos, UMA máquina. O que todos fazem é o mesmo: a deixa nasce
+ * diagramada, cada palavra tem um instante de fala (`data-at`) e três estados
+ * — ANTES de ser dita, ATIVA, e JÁ DITA. O que os separa é só o que cada
+ * estado pinta. Por isso uma folha e um script, e não dezenove pares: era o
+ * mesmo argumento do pop.css, onde três estilos partilham a curva e mudam só
+ * o agrupamento.
+ *
+ * QUEM DECIDE O QUÊ. Esta folha desenha os estados PARADOS; o `palavra.js`
+ * anima a passagem entre eles, com os números vindos de
+ * `variants.styles.<id>.pal` e `.motion`. Nada de tempo aqui: transição de CSS
+ * não sobrevive ao seek do renderer — ele salta para um quadro qualquer sem
+ * tempo de parede passar, e a transição sairia congelada no meio.
+ *
+ * MEDIDAS EM REFERÊNCIA DE 1080px, multiplicadas por `--cap-scale` — a mesma
+ * regra do karaoke.css e do pop.css, e o que permite a prévia do editor usar
+ * ESTA folha em vez de uma imitação. O que é proporcional ao corpo da letra
+ * vai em `em` e não precisa de fator nenhum.
+ *
+ * O ACCENT VIAJA DUAS VEZES: `--cap-accent` (hex, para preencher) e
+ * `--cap-accent-rgb` (trio separado por ESPAÇO, para `rgb(... / alpha)`).
+ * Sem o trio, todo halo e toda chapa translúcida cairiam calados — o CSS não
+ * fatia um hex numa função de cor.
+ */
+
+.ave-pal {
+  --cap-scale: 1;
+  --cap-size: 58;
+  --cap-bottom: 430;
+  --cap-lh: 1.26;
+  --cap-color: #f5f2ee;
+  --cap-accent: #ff6b1a;
+  --cap-accent-rgb: 255 107 26;
+  --cap-family: 'Open Sans', system-ui, sans-serif;
+
+  /* os papéis de cor do motor, resolvidos pelo script em cores concretas */
+  --pal-dim: #6c7a88;        /* apagado — o que ainda não foi dito */
+  --pal-sobre: #10202e;      /* letra SOBRE a tarja/chapa: branco no laranja não passa */
+  --pal-chapa: rgba(13, 33, 55, 0.94);
+  --pal-vidro: rgba(255, 255, 255, 0.12);
+  --pal-suave: #ffad7a;
+  --pal-brilho: #ffd9bc;
+  --pal-esq: 90;             /* margem esquerda dos estilos ancorados à esquerda */
+  --pal-glow: 0;
+
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--cap-family);
+}
+
+/* A DEIXA. Âncora de posicionamento de tudo que se move: a tarja mede os
+   deslocamentos contra ESTA caixa, então ela é a única `position` da árvore
+   além dos próprios spans — pôr `relative` na linha faria a tarja medir
+   contra a linha e errar a segunda. */
+.ave-pal .pal-cue {
+  position: absolute;
+  left: calc(80px * var(--cap-scale));
+  right: calc(80px * var(--cap-scale));
+  bottom: calc(var(--cap-bottom) * var(--cap-scale) * 1px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: calc(var(--cap-size) * var(--cap-scale) * 1px);
+  line-height: var(--cap-lh);
+  font-weight: var(--cap-weight, 600);
+  letter-spacing: calc(var(--cap-track, 0) * var(--cap-scale) * 1px);
+}
+
+.ave-pal .pal-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  column-gap: 0.3em;
+  row-gap: 0.1em;
+  max-width: 100%;
+}
+
+.ave-pal .pal-w {
+  display: inline-block;
+  position: relative;
+  white-space: pre;
+  color: var(--cap-color);
+  z-index: 1;
+  /* SOMBRA DUPLA, a mesma do editorial: uma curta quase preta que descola a
+     letra do vídeo e uma longa azul-noite que dá volume. Os estilos com chapa
+     própria a dispensam — ali quem descola é o fundo. */
+  text-shadow:
+    0 calc(2px * var(--cap-scale)) calc(5px * var(--cap-scale)) rgba(0, 0, 0, 0.9),
+    0 calc(10px * var(--cap-scale)) calc(28px * var(--cap-scale)) rgba(13, 33, 55, 0.8);
+}
+
+/* A TARJA que corre — caixa ou filete. Nasce sem tamanho: quem lhe dá posição
+   e largura é o script, palavra a palavra. Uma tarja com tamanho no CSS
+   apareceria no canto da deixa no quadro anterior à primeira palavra. */
+.ave-pal .pal-tarja {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-radius: calc(var(--pal-raio, 12) * var(--cap-scale) * 1px);
+  background: var(--cap-accent);
+  z-index: 0;
+  opacity: 0;
+}
+
+/* ============================================================ 1 · MARCADOR */
+.ave-pal.pal-marcador .pal-w,
+.ave-pal.pal-marcadorDuplo .pal-w { text-shadow: none; }
+
+/* O marca-texto perde a sombra LONGA: ela é pintada acima do nó do traço e
+   deixava o laranja marrom. Fica a curta, que é a que descola a letra. */
+.ave-pal.pal-marcaTexto .pal-w {
+  text-shadow: 0 calc(2px * var(--cap-scale)) calc(4px * var(--cap-scale)) rgba(0, 0, 0, 0.55);
+}
+
+/* ======================================================== 3 · MARCA-TEXTO */
+/* O traço vive num nó PRÓPRIO dentro do span (e não num ::before) porque o
+   GSAP não anima pseudo-elemento — e sem tween o crescimento não sobrevive ao
+   seek. `scaleX` a partir da esquerda é o gesto de caneta. */
+.ave-pal .pal-grifo {
+  position: absolute;
+  left: calc(var(--pal-sangra, 8) * var(--cap-scale) * -1px);
+  right: calc(var(--pal-sangra, 8) * var(--cap-scale) * -1px);
+  /* Ancorado na ALTURA-DE-X, não na caixa da linha: `bottom: 0` é o pé do
+     bloco de linha (abaixo do descendente e da metade da entrelinha), e o
+     traço saía flutuando debaixo das letras como um sublinhado grosso em vez
+     de passar POR DENTRO delas, que é o que uma caneta faz. */
+  bottom: 0.16em;
+  height: calc(var(--pal-grifo-h, 0.5) * 1em);
+  background: var(--cap-accent);
+  opacity: var(--pal-grifo-o, 0.92);
+  border-radius: calc(var(--pal-raio, 3) * var(--cap-scale) * 1px);
+  transform: scaleX(0);
+  transform-origin: left center;
+  z-index: -1;
+}
+
+/* ========================================================= 8 · CONTORNO */
+.ave-pal.pal-contorno .pal-w {
+  -webkit-text-stroke: calc(var(--pal-traco, 2) * var(--cap-scale) * 1px)
+    rgb(var(--cap-color-rgb, 245 242 238) / var(--pal-traco-o, 0.62));
+  paint-order: stroke fill;
+  color: transparent;
+}
+
+/* ============================================================= 9 · NEON */
+.ave-pal.pal-neon .pal-w {
+  text-shadow:
+    0 0 calc(12px * var(--cap-scale)) rgb(var(--cap-accent-rgb) / var(--pal-glow)),
+    0 0 calc(34px * var(--cap-scale)) rgb(var(--cap-accent-rgb) / calc(var(--pal-glow) * 0.85)),
+    0 0 calc(68px * var(--cap-scale)) rgb(var(--cap-accent-rgb) / calc(var(--pal-glow) * 0.5)),
+    0 calc(2px * var(--cap-scale)) calc(6px * var(--cap-scale)) rgba(0, 0, 0, 0.8);
+}
+
+/* =================================================== 10 · BLOCO SÓLIDO */
+/* A chapa não é `background` do span: um `padding` lateral separaria as
+   palavras com buraco entre as caixas. `box-shadow` horizontal estende a
+   chapa para os lados sem mexer na caixa de layout, e as palavras encostam
+   como num bloco só. */
+.ave-pal.pal-chapa .pal-line { text-transform: uppercase; column-gap: 0.42em; }
+.ave-pal.pal-chapa .pal-w {
+  background: var(--pal-chapa);
+  padding: 0.12em 0.16em;
+  box-shadow:
+    calc(0.14em) 0 0 var(--pal-chapa),
+    calc(-0.14em) 0 0 var(--pal-chapa);
+  text-shadow: none;
+}
+
+/* ============================================================ 11 · CHIPS */
+.ave-pal.pal-chips .pal-line { column-gap: 0.24em; row-gap: 0.22em; }
+.ave-pal.pal-chips .pal-w {
+  background: var(--pal-vidro);
+  border: calc(1px * var(--cap-scale)) solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 0.18em 0.4em;
+  text-shadow: none;
+  backdrop-filter: blur(calc(10px * var(--cap-scale)));
+}
+
+/* ============================================================ 12 · VIDRO */
+.ave-pal.pal-vidro .pal-placa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(13, 33, 55, 0.42);
+  border: calc(1px * var(--cap-scale)) solid rgba(255, 255, 255, 0.16);
+  border-radius: calc(var(--pal-placa-raio, 26) * var(--cap-scale) * 1px);
+  padding: calc(var(--pal-placa-py, 26) * var(--cap-scale) * 1px)
+    calc(var(--pal-placa-px, 34) * var(--cap-scale) * 1px);
+  backdrop-filter: blur(calc(var(--pal-placa-blur, 20) * var(--cap-scale) * 1px));
+  box-shadow: 0 calc(16px * var(--cap-scale)) calc(40px * var(--cap-scale))
+    calc(-16px * var(--cap-scale)) rgba(0, 0, 0, 0.6);
+}
+.ave-pal.pal-vidro .pal-w { text-shadow: none; }
+
+/* ============================================================= 13 · ONDA */
+.ave-pal.pal-onda .pal-w { transform-origin: 50% 80%; }
+
+/* ========================================================= 14 · ROTATIVO */
+.ave-pal.pal-rotativo .pal-cue {
+  bottom: auto;
+  top: calc(var(--pal-centro, 0.5) * 100%);
+  transform: translateY(-50%);
+}
+.ave-pal.pal-rotativo .pal-line { text-transform: uppercase; }
+.ave-pal.pal-rotativo .pal-w { transform-origin: 50% 50%; }
+
+/* ========================================================== 15 · MÁQUINA */
+.ave-pal.pal-maquina .pal-cue,
+.ave-pal.pal-manchete .pal-cue,
+.ave-pal.pal-barra .pal-cue {
+  align-items: flex-start;
+  left: calc(var(--pal-esq) * var(--cap-scale) * 1px);
+  text-align: left;
+}
+.ave-pal.pal-maquina .pal-line,
+.ave-pal.pal-manchete .pal-line,
+.ave-pal.pal-barra .pal-line { justify-content: flex-start; }
+
+.ave-pal .pal-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  background: var(--cap-accent);
+  margin-left: 0.12em;
+  transform: translateY(0.12em);
+  opacity: 0;
+  /* O PISCAR É DO GSAP, não do CSS. Como animação de CSS: ela venceu o estilo
+     inline do tween — todo cursor da deixa acendia junto, inclusive os das
+     palavras que ainda não tinham sido ditas, e o quadro saía com cinco
+     cursores. Como tween em passos, quem está aceso é só o da palavra ativa,
+     e o quadro é o mesmo em dois renders. */
+}
+
+/* ========================================================== 16 · ROLAGEM */
+.ave-pal.pal-rolagem .pal-cue { overflow: hidden; }
+.ave-pal.pal-rolagem .pal-rolo { display: flex; flex-direction: column; align-items: center; }
+.ave-pal.pal-rolagem .pal-line.pal-antiga { opacity: var(--pal-antiga, 0.34); }
+
+/* ========================================================= 18 · MANCHETE */
+.ave-pal.pal-manchete .pal-filete {
+  width: calc(var(--pal-filete-w, 96) * var(--cap-scale) * 1px);
+  height: calc(var(--pal-filete-h, 4) * var(--cap-scale) * 1px);
+  background: var(--cap-accent);
+  margin-bottom: calc(var(--pal-filete-vao, 26) * var(--cap-scale) * 1px);
+  flex: none;
+}
+/* O DESTAQUE do estilo: itálico no accent. Itálico muda a largura da palavra,
+   então ele é decidido na MARCAÇÃO (uma vez, no compositor) e não animado —
+   uma palavra que vira itálica no meio da deixa reflui a linha inteira. */
+.ave-pal.pal-manchete .pal-w.pal-hi { font-style: italic; color: var(--cap-accent); }
+
+/* ============================================================ 19 · BARRA */
+.ave-pal.pal-barra .pal-cue {
+  border-left: calc(var(--pal-barra-w, 8) * var(--cap-scale) * 1px) solid var(--cap-accent);
+  padding-left: calc(var(--pal-barra-vao, 28) * var(--cap-scale) * 1px);
+}

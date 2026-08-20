@@ -1,6 +1,6 @@
 ---
 name: ave
-description: Avelin — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — HyperFrames visuals from a data-driven template: short-form gets karaoke captions, a static hook, a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
+description: Avelin — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — HyperFrames visuals from a data-driven template: short-form gets karaoke captions, a hook headline (a band over the video or a full-screen cartela that hands the video over on exit), a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
 ---
 
 # Avelin — editor de vídeo
@@ -159,6 +159,7 @@ Phase 1:
 - **`detect_restarts.py <edit> [--edl] [--json]`** — FRASE REFEITA, por n-grama repetido em janela curta. Quatro delas foram para um corte final estando escritas, em português, no `takes_packed.md` que o editor leu. Três regras, nesta ordem: **truncada** (a primeira versão morre em palavra funcional — "é um negócio DE") → remove sozinho; **idêntica** → fica a última; **semântica** → PERGUNTA. `--edl` roda sobre o corte e pega repetição que atravessa emenda. Todo hit semântico sai marcado `precisa_julgamento`: repetição também é anáfora ("com um sistema impecável" / "Um sistema eficiente"), e separar as duas é significado, não string — é o único ponto do pipeline onde julgar é o trabalho certo.
 - **`perguntar.py <edit> [--contexto NOME] [--teto N]`** — o que perguntar ao usuário, e o que NÃO perguntar. **A pergunta nunca mostra um número** ("hesitação de 0,38s abaixo do limiar" descreve o instrumento, não a escolha): mostra o áudio, com timestamp para clicar no editor que já está no ar, e a consequência. **Uma pergunta por classe, não por ocorrência** — sete respiros viram uma pergunta com três exemplos. Consulta o `preferencias.py`: confiança alta aplica calado, média aplica e informa, baixa pergunta.
 - **`preferencias.py [--mostrar|--aprender <edit>|--consultar F C|--reset]`** — o que ESTE usuário costuma querer, aprendido das decisões dele. Mora em `~/.avelin/preferencias.json`, **fora do clone** (preferência de meses não pode morrer num `git clean`). O limiar é o ponto médio entre o maior vão que ele MANTEVE e o menor que ele REMOVEU; faixas que se cruzam derrubam a confiança em vez de inventar um número. `--aprender` lê o `preview_edits.json` — o que ele corrigiu à mão depois da entrega, que é o sinal mais forte que existe e estava sendo descartado. Confiança governa autonomia (<5 pergunta, 5–15 informa, >15 calado), e contradizer um limiar confiante derruba a confiança: discordar do usuário custa autonomia à ferramenta, nunca o contrário.
+- **A ABA ESTILO LEMBRA.** As escolhas do último envio (formato do corte, headline, estilo de legenda, elementos ligados, deslocamento da legenda) ficam em `~/.avelin/estilo.json`, escritas pelo servidor no mesmo ato do envio — fora do clone, como o `brand.json` e o `preferencias.json`. O editor empilha quatro camadas nesta ordem: padrão de fábrica → escolhas da última vez → marca (cor e letra) → **o que o projeto gravou, que vence sempre**. Reabrir um vídeo entregue tem de mostrar como ele foi entregue, não o gosto de hoje.
 - **`verify_takes.py <edit> [--video preview_proxy.mp4]`** — **OUVE o corte pronto** e acusa frase repetida, sem confiar em transcrito nenhum. Existe porque o `detect_restarts.py` lê o TEXTO e o Whisper **engole a segunda passada**: quatro repetições chegaram ao usuário num corte cujo `takes_packed.md` mostrava duas frases emendando perfeitamente, enquanto o áudio dizia *"Isso explica muito, isso explica muito, porque você ganha"*. Re-transcrever o corte inteiro NÃO resolve — com contexto o modelo suaviza de novo (verificado: a passada completa sobre o render saiu limpa). O que funciona é **janela curta e ISOLADA**, em várias larguras (2,4/4,0/6,0s), ficando com a menor em que cada achado apareceu. Roda local com mlx-whisper — grátis, offline, ~1min num corte de 40s. Exit 1 se achar algo.
 
 - **`portao_fase1.py <edit> [--pular-render]`** — **O PORTÃO. Exit 1 = o corte não vai para aprovação.** Checa, nesta ordem: `spacing` medido (sem ele a seleção de tomada foi às cegas e o resto é teatro), reinício sobrevivente, `quote` × conteúdo real do range, e `verify_cut` sobre o render. Existe porque os auditores já existiam quando dez defeitos de fala chegaram ao usuário — não faltava ferramenta, faltava obrigação. A diferença entre recomendação e portão é o exit code.
@@ -759,7 +760,10 @@ not — verified in the render. Any other error still blocks.
 | | |
 |---|---|
 | Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` `pop` `popLinha` `popBloco` `revelar` `editorial` `dinamico` |
+| Legendas · motor `palavra` | `marcador` `marcadorDuplo` `marcaTexto` `sublinhado` `progressivo` · `foco` `focoBlur` `contorno` `neon` · `chapa` `chips` `vidro` · `onda` `rotativo` `maquina` `rolagem` · `cinema` `manchete` `barra` |
 | Headlines | `outline` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` |
+| Headlines · motor `cartela` (banda) | `fita` `jornal` `terminal` `alerta` `placar` `sombra_longa` `neon` `balao` `filete` `adesivo` |
+| Headlines · motor `cartela` (TELA CHEIA) | `capa` `capa_blur` `cortina` `meia_tela` `moldura` `contagem` `knockout` `poster` `aspas` `ficha` |
 | Edição | `limpa` `split` `split2` |
 | Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash |
 | Curta | inserts, palavras em destaque, gráficos sob medida |
@@ -776,6 +780,78 @@ split-screen, which already pins the face by itself.
 
 `empilhado` is the only style with a prep step (a director groups the words and
 picks the orange serif accent). `phase2.py` generates it when missing.
+
+**A aba Estilo mostra o QUADRO, e escolher aplica no vídeo** (pedido do
+usuário, 2026-08-19). Duas coisas que valem para qualquer estilo novo:
+
+- **O cartão é o quadro do projeto**, na orientação do vídeo DECODIFICADO — a
+  mesma fonte que decide `body.portrait`, para os dois nunca discordarem
+  (`--quadro-w/h`). Era uma tira de 64px com o texto centrado nela: dava para
+  comparar as letras e não para ver como fica. Cada estilo aparece onde vai
+  aparecer — a legenda a 22% do fundo, o cinema mais embaixo, o rotativo no
+  centro, a headline no `top` dela, a cartela cheia tomando tudo. E a escala das
+  prévias é `largura em tela / largura do QUADRO`, nunca `/1080` fixo: num
+  projeto horizontal o fixo faria a legenda sair quase do dobro do tamanho.
+- **Clicar aplica no vídeo, na hora.** A legenda já vinha ao vivo sobre o
+  player; a headline agora também, em caixa própria (`#liveHook`) — irmã da
+  legenda, porque o overlay da legenda é refeito a cada troca de deixa e a
+  headline não pode nascer e morrer junto com ela. Fora da janela do gancho ela
+  continua desenhada, apagada: sumir faria o usuário achar que a escolha não
+  pegou. E escolher um layout com o ponteiro além da janela LEVA o ponteiro para
+  dentro dela — escolher sem ver a escolha é o mesmo que não ter escolhido.
+
+**Vinte headlines, um motor — e dez delas tomam a tela.** Tudo que a tabela
+lista sob `cartela` roda em `assets/styles/cartela.css` + `cartela.js`. A
+estrutura é uma só: sobrancelha, algarismo, linhas, grade de rótulos e
+assinatura, mais as peças que o layout declarar (`pecas`: faixa, cartão,
+painel, listras, balão, réguas, vinheta, aspa, svg). Um layout novo é uma
+entrada no `variants.json`.
+
+**De onde sai o texto de cinco lugares se o usuário digita um só.** Pela barra
+que ele já usa para quebrar linha — a convenção que a `etiqueta` estreou lendo
+a primeira linha como rótulo, agora explícita em `slots`: `primeira` (a
+sobrancelha), `numero` (o algarismo que vira figura), `traco` (a assinatura da
+citação), `chave:valor` (as fileiras da ficha técnica). Sem barra nenhuma, todo
+layout cai no bloco de linhas comum. Pedir cinco campos mataria o gancho
+rápido, que é a coisa que o gancho tem de ser.
+
+**A saída da cartela de tela cheia é a entrega do vídeo.** `cortina` sobe a
+chapa, `corte` a apaga num quadro, `desfoca` dissolve o borrão, `abre` afasta a
+moldura, `sobeFora` empurra a meia-tela para cima. Não é enfeite de saída: é a
+transição do gancho para a primeira fala, e é ela que o espectador lê como
+"começou". Três coisas que essa família obriga, e que valem para qualquer
+cartela nova:
+
+- **Quem encolhe é a vinheta, nunca o a-roll.** A `moldura` parece encolher o
+  vídeo; o que se anima é uma BORDA que vai a zero. Mexer no `#a-roll` faria a
+  cartela e a câmera disputarem o mesmo transform.
+- **O recorte do `knockout` é máscara SVG, não `background-clip: text`.** O furo
+  tem de ser no FUNDO — a chapa é que fica com buracos em forma de letra. Clip
+  de texto faz o contrário (preenche a letra) e o efeito não existe.
+- **A cartela cheia não mede o vídeo para escolher o accent.** O fundo dela é a
+  chapa da marca, de cor conhecida; medir a luminância do que está ATRÁS de uma
+  chapa opaca escolheria a cor pelo que ninguém vê.
+
+**Dezenove estilos, um motor.** Tudo que a tabela lista sob `palavra` roda em
+`assets/styles/palavra.css` + `palavra.js`: a deixa nasce diagramada, cada
+palavra carrega o seu instante de fala (`data-at`) e tem TRÊS estados — antes de
+ser dita, ativa, já dita. O que separa um estilo do outro é só o que cada estado
+pinta, e isso é DADO: `variants.styles.<id>.pal` (cor, fundo, escala, blur,
+halo, tarja que corre, traço que cresce) mais `.motion` (duração e easing). Um
+estilo novo é uma entrada no `variants.json` e, quando muda o desenho parado,
+um bloco de CSS — nunca um par de arquivos novo nem um ramo no compositor.
+
+Duas regras que o motor carrega e que valem para qualquer estilo novo:
+
+- **Transição de CSS não sobrevive ao seek.** O renderer salta para um quadro
+  qualquer sem tempo de parede passar, e a transição sai congelada no meio. O
+  que carrega significado passa por tween de GSAP em tempo ABSOLUTO. O mesmo
+  vale para `@keyframes`: animação de CSS VENCE estilo inline, e foi ela que
+  acendia todos os cursores da máquina de escrever de uma vez.
+- **O accent viaja duas vezes:** `--cap-accent` (hex, para preencher) e
+  `--cap-accent-rgb` (trio separado por ESPAÇO, para `rgb(... / alpha)`). Sem o
+  trio, halo e chapa translúcida caem calados — a cor não resolve e o CSS
+  descarta a regra inteira sem erro nenhum.
 
 ### The two things that decide whether it looks right
 
@@ -1130,7 +1206,7 @@ starts sounding like a different microphone.
 The cut is approved and the user picked the style in the UI (`preview_style.json`)
 → load **one** file and build exactly what was picked:
 
-- **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, static hook headline, dynamic camera, inserts, behind-the-subject, SFX, soundtrack.
+- **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, hook headline (band or full-screen cartela), dynamic camera, inserts, behind-the-subject, SFX, soundtrack.
 - **Horizontal / YouTube / tutorial / vlog → read `references/longform.md`.** Retention cut is there too (read it BEFORE Phase 1 on longform jobs), B-roll, lower-thirds, chapter cards, callouts, .srt + chapters, soundtrack.
 
 Both tracks: `helpers/phase2.py <edit>` faz tudo — aplica a escolha da aba Estilo, monta o projeto, compõe, roda o `check`, renderiza, normaliza a loudness e devolve os caminhos ao editor. A edição inteira é o `edit-data.json`; nada de código por sessão fora dos gráficos sob medida em `compositions/`. **Não carregue a skill `remotion-best-practices`.** Não é o motor desta skill.

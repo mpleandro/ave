@@ -1187,9 +1187,22 @@ kbd {
 .opt-preview.frame svg { height: 100%; width: 100%; display: block; }
 /* + .opt padding (7px × 2) + border (1px × 2) */
 #optEdit .opt { width: calc(var(--mock-w) + 16px); }
-/* caption demos: a crop of the caption band, at the real proportions */
-.opt-preview.cap { height: 64px; width: 182px; }
-.opt-preview.hlbox { height: 64px; }
+/* O CARTÃO É O QUADRO, na orientação do vídeo carregado (pedido do usuário,
+   2026-08-19). Era uma tira de 64px com a legenda centrada nela: dava para
+   comparar as LETRAS, não para ver como fica. A legenda vive a 22% do fundo, a
+   headline a 15% do topo e metade das cartelas toma a tela inteira — num
+   quadro, cada estilo aparece onde vai aparecer.
+
+   As medidas vêm de `--quadro-w/h`, escritas pelo JS a partir do quadro
+   DECODIFICADO do vídeo — a mesma fonte que decide `body.portrait`, para os
+   dois nunca discordarem. */
+.opt-preview.cap,
+.opt-preview.hlbox,
+.opt-preview.ctbox {
+  width: var(--quadro-w, 110px);
+  height: var(--quadro-h, 196px);
+}
+.opt-preview.ctbox .ave-cartela { position: absolute; inset: 0; }
 
 /* Short panes (the preview often lives in a half-height pane): shrink the
    previews instead of scrolling. The demos are rebuilt on resize, so their
@@ -1199,8 +1212,10 @@ kbd {
   .setup-head h2 { font-size: 16px; }
   .setup-head p { display: none; }
   .opt-grid { --mock-h: 108px; }
-  .opt-preview.cap { height: 76px; width: 162px; }
-  .opt-preview.hlbox { height: 64px; }
+  /* painel baixo: o quadro encolhe, mas continua sendo um quadro */
+  .opt-preview.cap,
+  .opt-preview.hlbox,
+  .opt-preview.ctbox { transform: scale(.84); transform-origin: top center; }
   .chk { padding: 7px 12px 7px 10px; }
 }
 /* very short panes: the summary line is the first thing to go — the cards and
@@ -1291,14 +1306,21 @@ kbd {
    posicionamento do render valer jogava o cartão meia largura para a direita,
    por cima do próprio seletor.
    Neutralizar aqui, e não mexer na folha do render: ela descreve o vídeo. */
-#opt-headlines .ave-hook {
-  position: static;
-  left: auto; right: auto; top: auto;
-}
-#opt-headlines .ave-hook.card { transform: none; }
+/* A headline volta ao LUGAR dela — e a folha do render já sabe qual é: ela
+   declara `position: absolute; left/right/top` e cada layout ajusta o que
+   precisa (o `card` centra por `left: 50%` + translateX(-50%)). Então aqui NÃO
+   vai regra nenhuma: a neutralização existia só porque o cartão era uma tira de
+   64px, e forçar `left: 0` de volta cortava o card pela metade — com o
+   translateX dele intacto, o box saía meia largura para fora do quadro. */
 /* A escala de encaixe: uma headline de três linhas é mais alta que o cartão, e
    com o `/` isso deixou de ser exceção. Medida no JS e escrita aqui. */
-#opt-headlines .cap-demo > .hl-fit { transform: scale(var(--hl-fit, 1)); }
+#opt-headlines .cap-demo > .hl-fit { position: absolute; inset: 0; transform: scale(var(--hl-fit, 1)); transform-origin: top center; }
+
+/* Nada de neutralizar posição: o cartão é o quadro, então a deixa senta onde
+   vai sentar no vídeo — a 22% do fundo, ou no centro no rotativo. Era o
+   contrário enquanto o cartão era uma tira, e aquilo escondia justamente a
+   informação que faz escolher: onde o texto cai. */
+.opt-preview.cap .ave-pal { position: absolute; inset: 0; }
 
 /* ---- restos da cópia antiga do visual, mantidos só para as demos de legenda ---- */
 .hl-demo {
@@ -2066,3 +2088,11 @@ button.tl-chip:disabled { cursor: default; }
   color: var(--dim);
 }
 .cx-count.no-limite { color: var(--mark); font-weight: 600; }
+
+
+/* O GANCHO AO VIVO sobre o vídeo, junto da legenda. Fora da janela dele (os
+   primeiros segundos do corte) ele continua desenhado, apagado: sumir faria o
+   usuário achar que a escolha não pegou, e mostrar cheio mentiria sobre quando
+   ele aparece. */
+#liveOverlay .live-hook { position: absolute; inset: 0; pointer-events: none; transition: opacity .18s linear; }
+#liveOverlay .live-hook.fora { opacity: .3; }
