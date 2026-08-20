@@ -1795,6 +1795,10 @@ function refreshActionBar() {
 }
 
 // ---------- data loading ----------
+/* Quando ESTA página nasceu, em segundos de relógio de parede — a régua do
+   aviso de página velha logo abaixo. Servidor e navegador são a mesma máquina
+   (localhost), então comparar Date.now() com mtime de arquivo é honesto. */
+const PAGE_BORN = Date.now() / 1000;
 async function poll() {
   try {
     const res = await fetch('/api/state');
@@ -1817,6 +1821,14 @@ async function poll() {
     if (data.serverStale && !S.staleWarned) {
       S.staleWarned = true;
       toast('O servidor de preview está desatualizado em relação ao editor — reinicie-o para liberar o que é novo', 9000);
+    }
+    // O ESPELHO: página velha com arquivos novos no disco. Um estilo que
+    // entrou no catálogo depois desta aba carregar não existe aqui — sem
+    // erro, sem 404, o cartão só não aparece (medido: a cartela `noticia`).
+    // Os 2s de folga evitam acusar a própria carga da página.
+    if (data.appMtime && data.appMtime > PAGE_BORN + 2 && !S.pageStaleWarned) {
+      S.pageStaleWarned = true;
+      toast('O editor foi atualizado desde que esta aba abriu — recarregue a página (⌘R) para ver o que é novo', 9000);
     }
     checkProcessing();
     if (sig !== S.lastSig) {

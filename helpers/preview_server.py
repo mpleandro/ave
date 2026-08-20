@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import array
+import hashlib
 import json
 import os
 import re
@@ -512,6 +513,28 @@ def _stale() -> bool:
         return max(f.stat().st_mtime for f in watched if f.exists()) > STARTED_AT
     except (OSError, ValueError):
         return False
+
+
+def _page_assets_mtime() -> float:
+    """O mtime mais novo entre os arquivos de que uma PÁGINA carregada depende.
+
+    É o espelho do `_stale()`: aquele pega o servidor mais velho que os
+    arquivos; este pega a ABA mais velha que os arquivos. Sem ele, um estilo
+    novo no catálogo (app.js, variants.json, cartela.js…) simplesmente não
+    existe numa aba aberta antes da mudança — sem erro, sem 404, sem aviso.
+    Medido em 2026-08-20: a cartela `noticia` entrou no catálogo e a aba
+    aberta continuou sem ela. Inclui a camada de estilo porque o catálogo
+    mora nela, não só no app.js."""
+    files: list[Path] = []
+    for d in (APP_DIR, STYLE_DIR):
+        try:
+            files += [f for f in d.iterdir() if f.is_file()]
+        except OSError:
+            pass
+    try:
+        return max(f.stat().st_mtime for f in files)
+    except (OSError, ValueError):
+        return 0.0
 
 
 def probe_duration(path: Path) -> float:
@@ -1416,6 +1439,7 @@ class Handler(BaseHTTPRequestHandler):
                 "state": {}, "edl": None, "mtimes": {}, "videoDuration": 0,
                 "hasPendingEdits": False, "progress": None,
                 "serverStale": _stale(),
+                "appMtime": _page_assets_mtime(),
                 "keys": {"groq": _has_key("GROQ_API_KEY"),
                          "elevenlabs": _has_key("ELEVENLABS_API_KEY"),
                          "pexels": _has_key("PEXELS_API_KEY"),
@@ -1467,6 +1491,9 @@ class Handler(BaseHTTPRequestHandler):
             # o app compara com o que ele mesmo é: servidor mais VELHO que os
             # arquivos servidos = funcionalidade na tela que a rota não atende
             "serverStale": _stale(),
+            # e a comparação inversa: página mais VELHA que os arquivos no
+            # disco = catálogo novo que a aba aberta não tem como mostrar
+            "appMtime": _page_assets_mtime(),
             # o que a ferramenta PODE oferecer nesta máquina. Presença, não valor.
             "keys": {"groq": _has_key("GROQ_API_KEY"),
                      "elevenlabs": _has_key("ELEVENLABS_API_KEY"),
@@ -1495,17 +1522,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def _words(self) -> None:
         """O transcrito do corte. Caro de gerar — roda detector de fala em cada
-        fonte — então é cacheado pelo mtime do edl.json, que é exatamente o que
-        muda quando o corte muda."""
+        fonte — então é cacheado pelo HASH do edl.json, que só muda quando o
+        CORTE muda. Era o mtime, e o mtime mentia: o render regrava o edl.json
+        (frame-align, jcut_timeline) mesmo sem mudança, e cada iteração pagava
+        o detector de novo pelo mesmo resultado."""
         edl = self.root / "edl.json"
         if not edl.exists():
             self._json({"words": [], "error": "sem edl.json"}, 200)
             return
         out = self.root / ".preview_cache" / "words.json"
+        try:
+            edl_hash = hashlib.sha1(edl.read_bytes()).hexdigest()
+        except OSError:
+            edl_hash = None
         stale = True
-        if out.exists():
+        if out.exists() and edl_hash:
             try:
-                stale = json.loads(out.read_text()).get("edlMtime") != edl.stat().st_mtime
+                stale = json.loads(out.read_text()).get("edlHash") != edl_hash
             except json.JSONDecodeError:
                 pass
         if stale:

@@ -150,6 +150,17 @@ def main() -> None:
     pedido = (payload.get("request") or "").strip()
     if pedido:
         notes = list(notes) + [{"text": pedido, "request": True}]
+    # PALAVRAS RISCADAS e RESPIROS também são pedidos que exigem leitura (o
+    # corte é na FONTE, com a folga medida — não nos tempos do Whisper), e eles
+    # sofriam a mesma corrida que criou o pending_notes.json: este script não
+    # os aplica, apagava o preview_edits.json em ~100ms, e o watcher (sonda de
+    # 2s) nunca via o arquivo. O usuário via "✓ Enviado" e remarcava tudo.
+    # Viram pendências marcadas por `kind`, que o watcher sabe anunciar.
+    notes = list(notes)
+    for w in payload.get("cutWords") or []:
+        notes.append({**w, "kind": "word"})
+    for b in payload.get("cutBreaths") or []:
+        notes.append({**b, "kind": "breath"})
     has_edl = bool(payload.get("edl"))
     has_data = bool(payload.get("editData"))
 
@@ -190,31 +201,52 @@ def main() -> None:
         dp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
         print("posições de inserts/hook atualizadas")
 
+    state = load(edit / "state.json", {})
+
     if has_edl and not args.no_render:
-        print("\nrefazendo o corte…")
+        # O RENDER SEGUE O TIER DA FASE. `state.video` diz o que o editor está
+        # mostrando: na Fase 1 é o preview_proxy.mp4, e é NELE que a iteração
+        # acontece (720p/veryfast, 3,2× mais barato por segmento — a regra que o
+        # SKILL.md já mandava e este script ignorava, pagando o encode 1080p
+        # full-length a cada save). Escrever no arquivo do state também conserta
+        # o preview: renderizar sempre em preview.mp4 deixava a tela — que serve
+        # o state.video — mostrando o corte ANTIGO depois de aplicar.
+        # Pós-aprovação o state aponta preview.mp4 e o render volta a ser final,
+        # porque é sobre ele que a Fase 2 compõe.
+        out_name = state.get("video") or "preview.mp4"
+        out_video = edit / out_name
+        proxy_iter = "proxy" in Path(out_name).name
+        print(f"\nrefazendo o corte… ({'proxy 720p' if proxy_iter else '1080p final'})")
         cmd = [sys.executable, str(HELPERS / "render.py"), str(edit / "edl.json"),
-               "-o", str(edit / "preview.mp4")]
+               "-o", str(out_video)]
         if args.draft:
             cmd.append("--draft")
+        elif proxy_iter:
+            cmd.append("--proxy")
         r = subprocess.run(cmd)
         if r.returncode != 0:
             sys.exit("o render falhou — o edl novo está salvo, o corte antigo continua no lugar")
         print("\nconferindo…")
         subprocess.run([sys.executable, str(HELPERS / "verify_cut.py"),
-                        str(edit / "edl.json"), str(edit / "preview.mp4")])
+                        str(edit / "edl.json"), str(out_video)])
 
-    state = load(edit / "state.json", {})
     state["message"] = ("Corte atualizado a partir do editor"
                         if has_edl else state.get("message", ""))
     (edit / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2))
 
     if notes:
         (edit / "pending_notes.json").write_text(json.dumps(notes, ensure_ascii=False, indent=2))
-        print(f"\n{len(notes)} marcação(ões) escrita(s) — estas NÃO foram aplicadas, "
-              f"porque são pedidos em texto e precisam de leitura:")
+        print(f"\n{len(notes)} pendência(s) — estas NÃO foram aplicadas, "
+              f"porque são pedidos que precisam de leitura:")
         for n in notes:
             if n.get("request"):
                 print(f'  [pedido em texto] {n["text"]}')
+            elif n.get("kind") == "word":
+                print(f'  [palavra riscada] "{n.get("text")}" '
+                      f'({n.get("source")} {n.get("srcStart")}–{n.get("srcEnd")})')
+            elif n.get("kind") == "breath":
+                print(f'  [respiro] entre "{n.get("afterWord")}" e "{n.get("beforeWord")}" '
+                      f'{n.get("dur")}s → {n.get("keep")}s')
             else:
                 print(f'  [{n["renderedStart"]:.2f}–{n["renderedEnd"]:.2f}s] {n["text"]}')
         print("  guardadas em pending_notes.json")

@@ -78,6 +78,35 @@ def request_digest(p: Path) -> str:
     return "\n".join(linhas)
 
 
+def word_lines(palavras: list[dict]) -> list[str]:
+    """Formata palavras riscadas — usada no aviso ao vivo E nas pendências."""
+    if not palavras:
+        return []
+    out = [f"  palavras riscadas ({len(palavras)}) — corte na fonte, "
+           f"não nos tempos do Whisper:"]
+    for w in palavras:
+        folga = f"folga {w.get('gapBefore', 0):.2f}s/{w.get('gapAfter', 0):.2f}s"
+        apertado = "  ⚠ SEM FOLGA — a emenda cai dentro da fala" if (
+            not w.get("gapBefore") and not w.get("gapAfter")) else ""
+        out.append(f'    · "{w.get("text")}" [{w.get("source")} '
+                   f'{w.get("srcStart")}–{w.get("srcEnd")}] {folga}{apertado}')
+    return out
+
+
+def breath_lines(respiros: list[dict]) -> list[str]:
+    if not respiros:
+        return []
+    ganho = sum(float(b.get("trim") or 0) for b in respiros)
+    out = [f"  respiros a ENCURTAR ({len(respiros)}, −{ganho:.1f}s no total).",
+           "    Encurtar, NÃO remover: cada um mantém o piso `keep`. "
+           "Zerar o silêncio deixa a fala metralhada."]
+    for b in respiros:
+        out.append(f'    · entre "{b.get("afterWord")}" e "{b.get("beforeWord")}" '
+                   f'[{b.get("source")} {b.get("srcFrom")}–{b.get("srcTo")}] '
+                   f'{b.get("dur")}s → {b.get("keep")}s (−{b.get("trim")}s)')
+    return out
+
+
 def digest(p: Path) -> str:
     try:
         d = json.loads(p.read_text())
@@ -107,24 +136,8 @@ def digest(p: Path) -> str:
 
     # As palavras riscadas e os respiros são PEDIDOS, e chegam com a folga já
     # medida — listá-los é o que impede que virem "o usuário mexeu em algo".
-    if palavras:
-        parts.append(f"  palavras riscadas ({len(palavras)}) — corte na fonte, "
-                     f"não nos tempos do Whisper:")
-        for w in palavras:
-            folga = f"folga {w.get('gapBefore', 0):.2f}s/{w.get('gapAfter', 0):.2f}s"
-            apertado = "  ⚠ SEM FOLGA — a emenda cai dentro da fala" if (
-                not w.get("gapBefore") and not w.get("gapAfter")) else ""
-            parts.append(f'    · "{w.get("text")}" [{w.get("source")} '
-                         f'{w.get("srcStart")}–{w.get("srcEnd")}] {folga}{apertado}')
-    if respiros:
-        ganho = sum(float(b.get("trim") or 0) for b in respiros)
-        parts.append(f"  respiros a ENCURTAR ({len(respiros)}, −{ganho:.1f}s no total).")
-        parts.append("    Encurtar, NÃO remover: cada um mantém o piso `keep`. "
-                     "Zerar o silêncio deixa a fala metralhada.")
-        for b in respiros:
-            parts.append(f'    · entre "{b.get("afterWord")}" e "{b.get("beforeWord")}" '
-                         f'[{b.get("source")} {b.get("srcFrom")}–{b.get("srcTo")}] '
-                         f'{b.get("dur")}s → {b.get("keep")}s (−{b.get("trim")}s)')
+    parts += word_lines(palavras)
+    parts += breath_lines(respiros)
 
     head = []
     if req:
@@ -204,8 +217,15 @@ def notes_digest(p: Path) -> str:
         return f"pending_notes.json ilegível ({e.__class__.__name__})"
     if not notes:
         return ""
+    # O apply_edits também estaciona aqui as palavras riscadas e os respiros
+    # (`kind`), porque ele não os aplica — o corte é na fonte, com julgamento —
+    # e apagar o preview_edits.json antes da sonda de 2s os sumia em silêncio.
+    palavras = [n for n in notes if n.get("kind") == "word"]
+    respiros = [n for n in notes if n.get("kind") == "breath"]
     out = [f"MARCAÇÕES AGUARDANDO LEITURA ({len(notes)}) — o corte mecânico já foi aplicado:"]
     for n in notes:
+        if n.get("kind"):
+            continue
         if n.get("request"):
             # pedido do chat da aplicação ("Alterações extras") — sem timestamps
             out.append(f"· PEDIDO EM TEXTO: {(n.get('text') or '').strip()}")
@@ -213,6 +233,8 @@ def notes_digest(p: Path) -> str:
         a = fmt(n.get("renderedStart", n.get("start", 0)))
         b = fmt(n.get("renderedEnd", n.get("end", 0)))
         out.append(f"· [{a} → {b}] {(n.get('text') or '').strip()}")
+    out += word_lines(palavras)
+    out += breath_lines(respiros)
     return "\n".join(out)
 
 

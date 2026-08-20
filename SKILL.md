@@ -167,7 +167,7 @@ Phase 1:
 - **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is.
 - **`voice_levels.py <video> [--edit-dir <dir>] [--edl edl.json] [--drop-db 5]`** — the source of truth for speech LEVEL. Learns the noise floor (Ridler-Calvard intermeans, not a percentile) and the speaker's own median from the recording itself, then flags every phrase, sub-phrase run, and EDL range sitting ≥5 dB under that median and sizes a `gain_db` for each. Catches the failure nothing else sees: a whispered aside or a trailing-off sentence where every word is present, the transcript is perfect, `speech_regions` says "speech", `verify_cut` finds no pop and no dead air — and the viewer still hits a passage they cannot hear. **Run it in Phase 1 before writing the EDL.**
 - **`detect_color.py <video> [--json]`** — resolves NORMAL vs LOG from the file instead of asking. Tier 1 metadata (HLG/PQ declare themselves; Apple Log's signature is ProRes 10-bit 4:2:2 + BT.2020 primaries + EMPTY transfer; vendor tags when present), Tier 2 image statistics when the metadata is silent — which is common, since a Sony shooting S-Log3 to H.264 often declares plain bt709 and any transcode drops the tags. Returns the profile, a **confidence**, the evidence, and the `grade` to apply (measured from the footage for non-Apple LOG). Only `confidence: low` should send you back to the user.
-- **`render.py <edl.json> -o preview_proxy.mp4 --proxy --no-subtitles [--voice-master] [--keep-resolution] [--jobs N] [--no-jcut] [--jcut-lead N] [--jcut-tail-trim N]`** — per-segment extract (grade + fades, **parallel**) → **J-cut overlap assembly (default)** or lossless concat → optional voice master → loudnorm. Writes `jcut_timeline` into the EDL: the real output positions, which is what everything downstream must index off. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `preview.mp4`.
+- **`render.py <edl.json> -o preview_proxy.mp4 --proxy --no-subtitles [--voice-master] [--keep-resolution] [--jobs N] [--no-jcut] [--jcut-lead N] [--jcut-tail-trim N]`** — per-segment extract (grade + fades, **parallel**) → **J-cut overlap assembly (default)** or lossless concat → optional voice master → loudnorm. Writes `jcut_timeline` into the EDL: the real output positions, which is what everything downstream must index off. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `preview.mp4`. **Segmentos são cacheados por conteúdo** (`.segcache/`, chave fonte+range+grade+gain+tier): numa iteração que move UMA fronteira, só o trecho tocado re-encoda — os demais voltam por hardlink, marcados `(cache)` no log. O auto-grade por trecho também é cacheado (`.preview_cache/autograde.json`). Nada disso pede flag.
 - **`verify_cut.py <edl.json> <preview.mp4> [--min-silence 1.2]`** — numeric self-eval: duration, per-junction pop/clipped-word probes, dead air, black frames, clipping, **and range level balance** (each range's RMS vs the median range; `LOW-LEVEL` under −4 dB). ~350 tokens of text instead of N images. The range-balance line is the convergence test for a `gain_db` fix — unlike `voice_levels`' run detector it compares a range against its peers rather than against a threshold it was selected by, so a corrected take actually stops being flagged.
 - **`grade.py <in> -o <out>`** — grade presets/raw filters. **`--candidates "a=<filter>;b=<preset>;original=" --frame <t> -o cmp.png`** renders N looks on the SAME frame into one labeled montage.
 - **`timeline_view.py <video> <start> <end>`** — filmstrip+waveform PNG for ONE flagged spot, not a scan tool.
@@ -175,7 +175,7 @@ Phase 1:
 - **`watch_video.py <video> [--mode scene|keyframe|uniform] [--times t1 t2 …] [--start/--end] [--max-frames 24]`** — "what is IN this footage?" when you *don't* know where to look: scene-change detection (auto-fallback to uniform sampling on static/talking-head sources) + perceptual dedup (near-identical frames collapse — a held take becomes a handful of tiles) → labeled contact sheets in `edit/verify/watch_<stem>/`, one Read per sheet. Use for visual inventory of unknown material, eyeballing takes across sources, and surveying `preview.mp4` beyond verify_cut's numbers. `--times` pins transcript-cue frames: deictic moments from `takes_packed.md` ("olha isso", "como você pode ver") are LOW visual change and invisible to scene detection — pin them to decide B-roll/callout/zoom placement in Phase 2.
 
 Phase 2/3 (see the track references for usage):
-- **`phase2.py`** (Fase 2 inteira, um comando) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor)
+- **`phase2.py`** (Fase 2 inteira, um comando) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor; renderiza no tier do `state.video` — proxy na Fase 1, final pós-aprovação — e estaciona palavras riscadas/respiros em `pending_notes.json` para leitura)
 - **`captions_words.py`** (legendas palavra a palavra, a base de todos os estilos) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
 
 Interface:
@@ -487,6 +487,20 @@ entries exist here.
 - `editData` — insert/hook/behind timings → edit-data.json → re-render Phase 2.
 
 Then delete `preview_edits.json` and update `state.json`.
+
+**Uma rodada de feedback é INCREMENTAL — não reprocesse o que não mudou:**
+- **Não releia `takes_packed.md`.** Ele é leitura da Fase 1, uma vez; a rodada
+  de feedback trabalha sobre o digest do watcher + `verify_cut`, que já trazem
+  os números. Se precisar do texto de UM trecho, o digest já o cita.
+- **Não leia o log de render inteiro** (`.preview_cache/run-*.log` escala com o
+  número de trechos). O que importa é o fim: `tail -20`.
+- **Itere no tier da fase.** O `apply_edits.py` já renderiza no arquivo do
+  `state.video` (proxy na Fase 1); rodando `render.py` você mesmo, mantenha o
+  `--proxy` até a aprovação. O cache de segmentos faz o resto: só a fronteira
+  tocada re-encoda.
+- **Feedback pontual de Fase 2** ("a legenda nesse trecho…"): antes de refazer a
+  composição inteira, `phase2.py <edit> --end N` compõe só os N primeiros
+  segundos — confira o ajuste aí e rode o render completo uma vez, no fim.
 
 ---
 
@@ -1372,6 +1386,11 @@ On startup, read it if it exists and summarize the last session in one sentence 
   quebrado, não como "ainda não animou". O mesmo vale para o `opacity: 0` do
   empilhado e do disperso.
 - Reading `transcripts/*.json`, `captions.json`, `track.json`, `segments.json`, or template TSX into context — machine data; read `takes_packed.md`/helper output instead.
+- Reler `takes_packed.md` numa rodada de feedback, ou ler um `run-*.log` inteiro
+  — o digest do watcher e o `verify_cut` já carregam o que a rodada precisa; do
+  log, só o `tail` interessa.
+- Refazer a Fase 2 inteira para conferir um ajuste pontual. `phase2.py --end N`
+  compõe só o começo; o render completo roda uma vez, quando o ajuste fechar.
 - Editing `src/Main.tsx` — the template is data-driven; the JSON is the edit.
 - Hardcoding a bespoke graphic's timings inside `CustomGraphics.tsx`. Put the
   windows in an `edit-data.json` array (a key the template ignores, e.g.

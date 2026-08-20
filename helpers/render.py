@@ -26,12 +26,16 @@ que vai ser descartada é o que fazia a iteração doer.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -97,6 +101,128 @@ def resolve_path(maybe_path: str, base: Path) -> Path:
     if p.is_absolute():
         return p
     return (base / p).resolve()
+
+
+# -------- Segment cache -------------------------------------------------------
+#
+# A re-render still CLEARS every seg_* in the clips dir (stale orphans corrupt
+# segments.json — see the note at the unlink), but clearing no longer means
+# re-encoding: each extraction is also hardlinked into <edit>/.segcache/ under a
+# key of everything that shapes its bytes. Touch one boundary out of 40 takes
+# and 39 come back as hardlinks instead of encodes — encoding is 93% of render
+# time, so this is the difference between a save costing minutes and seconds.
+
+_SEGCACHE_VERSION = "1"
+_SEGCACHE_MAX_AGE_S = 14 * 24 * 3600
+
+
+def _source_sig(source: Path) -> str:
+    st = source.stat()
+    return f"{source.resolve()}|{st.st_mtime_ns}|{st.st_size}"
+
+
+def cached_extract_segment(
+    edit_dir: Path,
+    source: Path,
+    seg_start: float,
+    duration: float,
+    grade_filter: str,
+    out_path: Path,
+    preview: bool = False,
+    draft: bool = False,
+    proxy: bool = False,
+    keep_resolution: bool = False,
+    gain_db: float = 0.0,
+    streams: str = "av",
+    target_fps: str | None = None,
+) -> bool:
+    """extract_segment com cache por CONTEÚDO. Retorna True quando reaproveitou.
+
+    A chave inclui a identidade da fonte (caminho+mtime+tamanho), o range, o
+    grade resolvido, o ganho, o tier e o fps — tudo que muda os bytes da saída.
+    Qualquer coisa fora disso (nome seg_NN, ordem) fica fora de propósito: o
+    mesmo trecho reaproveita o mesmo encode em qualquer posição do corte.
+    """
+    cache_dir = edit_dir / ".segcache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    key = hashlib.sha1("|".join([
+        _SEGCACHE_VERSION,
+        _source_sig(source),
+        f"{seg_start:.6f}", f"{duration:.6f}",
+        grade_filter or "",
+        f"p{int(preview)}d{int(draft)}x{int(proxy)}k{int(keep_resolution)}",
+        f"{gain_db:+.2f}", streams, str(target_fps or ""),
+    ]).encode()).hexdigest()
+    cached = cache_dir / f"{key}{out_path.suffix}"
+    if cached.exists():
+        out_path.unlink(missing_ok=True)
+        try:
+            os.link(cached, out_path)
+        except OSError:
+            shutil.copy2(cached, out_path)
+        try:
+            os.utime(cached)  # uso recente conta para a poda por idade
+        except OSError:
+            pass
+        return True
+    extract_segment(source, seg_start, duration, grade_filter, out_path,
+                    preview=preview, draft=draft, proxy=proxy,
+                    keep_resolution=keep_resolution, gain_db=gain_db,
+                    streams=streams, target_fps=target_fps)
+    try:
+        os.link(out_path, cached)
+    except OSError:
+        try:
+            shutil.copy2(out_path, cached)
+        except OSError:
+            pass  # sem cache é só mais lento na próxima; nunca é erro
+    return False
+
+
+def prune_segcache(edit_dir: Path) -> None:
+    """Apaga entradas não usadas há 14 dias — o hit dá utime, então iterar
+    mantém vivo o que a iteração usa e só o corte abandonado expira."""
+    d = edit_dir / ".segcache"
+    if not d.exists():
+        return
+    cutoff = time.time() - _SEGCACHE_MAX_AGE_S
+    for f in d.iterdir():
+        try:
+            if f.stat().st_mtime < cutoff:
+                f.unlink()
+        except OSError:
+            pass
+
+
+# O auto-grade reanalisava a cor de CADA trecho a cada render — um ffmpeg de
+# análise por segmento por iteração, sobre trechos que não mudaram. O filtro
+# derivado só depende da fonte e do range, então ele é cacheado por essa chave.
+_autograde_lock = threading.Lock()
+
+
+def cached_auto_grade(edit_dir: Path, src: Path, start: float, duration: float) -> str:
+    db_path = edit_dir / ".preview_cache" / "autograde.json"
+    key = hashlib.sha1(f"{_source_sig(src)}|{start:.3f}|{duration:.3f}".encode()).hexdigest()
+
+    def _load() -> dict:
+        try:
+            return json.loads(db_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    with _autograde_lock:
+        db = _load()
+        if key in db:
+            return db[key]
+    flt, _stats = auto_grade_for_clip(src, start=start, duration=duration, verbose=False)
+    with _autograde_lock:
+        db = _load()  # recarrega: outra thread pode ter gravado enquanto analisávamos
+        db[key] = flt
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = db_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(db))
+        tmp.replace(db_path)
+    return flt
 
 
 # -------- HDR → SDR tone mapping (HLG / PQ sources) --------------------------
@@ -678,24 +804,25 @@ def extract_all_segments(
         if "grade" in r:
             seg_filter = resolve_grade_filter(r.get("grade"))
             if seg_filter == "__AUTO__":
-                seg_filter, _stats = auto_grade_for_clip(src_path, start=start, duration=duration, verbose=False)
+                seg_filter = cached_auto_grade(edit_dir, src_path, start, duration)
         elif is_auto:
-            seg_filter, _stats = auto_grade_for_clip(src_path, start=start, duration=duration, verbose=False)
+            seg_filter = cached_auto_grade(edit_dir, src_path, start, duration)
         else:
             seg_filter = resolved
 
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
 
-        note = r.get("beat") or r.get("note") or ""
-        grade_note = f"  grade: {seg_filter or '(none)'}" if (is_auto or "grade" in r) else ""
-        gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
-        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{grade_note}{gain_note}", flush=True)
-        extract_segment(
-            src_path, start, duration, seg_filter, out_path,
+        hit = cached_extract_segment(
+            edit_dir, src_path, start, duration, seg_filter, out_path,
             preview=preview, draft=draft, proxy=proxy,
             keep_resolution=keep_resolution,
             gain_db=gain_db, target_fps=fps_lock,
         )
+        note = r.get("beat") or r.get("note") or ""
+        grade_note = f"  grade: {seg_filter or '(none)'}" if (is_auto or "grade" in r) else ""
+        gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
+        cache_note = "  (cache)" if hit else ""
+        print(f"  [{i:02d}] {src_name}  {start:7.2f}-{end:7.2f}  ({duration:5.2f}s)  {note}{grade_note}{gain_note}{cache_note}", flush=True)
         return out_path
 
     if jobs == 1 or len(ranges) == 1:
@@ -977,6 +1104,8 @@ def extract_and_assemble_jcut(
     # leaves the higher-numbered segments of the previous cut behind. Measured: a
     # 3-range EDL over a stale 4th segment gave segments.json 9.23s for a 7.57s
     # video — it renders without error and every overlay lands wrong.
+    # Limpar continua correto E barato: o que não mudou volta do .segcache por
+    # hardlink em vez de re-encodar (ver cached_extract_segment).
     for stale in list(clips_dir.glob("seg_*.mp4")) + list(clips_dir.glob("seg_*.wav")):
         stale.unlink(missing_ok=True)
 
@@ -1016,27 +1145,28 @@ def extract_and_assemble_jcut(
         if "grade" in r:
             seg_filter = resolve_grade_filter(r.get("grade"))
             if seg_filter == "__AUTO__":
-                seg_filter = auto_grade_for_clip(p["src"], start=p["v_in"],
-                                                 duration=p["v_out"] - p["v_in"],
-                                                 verbose=False)[0]
+                seg_filter = cached_auto_grade(edit_dir, p["src"], p["v_in"],
+                                               p["v_out"] - p["v_in"])
         elif is_auto:
-            seg_filter = auto_grade_for_clip(p["src"], start=p["v_in"],
-                                             duration=p["v_out"] - p["v_in"],
-                                             verbose=False)[0]
+            seg_filter = cached_auto_grade(edit_dir, p["src"], p["v_in"],
+                                           p["v_out"] - p["v_in"])
         else:
             seg_filter = resolved
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
         vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
         apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
-        extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
-                        vpath, preview=preview, draft=draft, proxy=proxy,
-                        keep_resolution=keep_resolution, streams="v",
-                        target_fps=fps_lock)
-        extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
-                        apath, preview=preview, draft=draft, proxy=proxy,
-                        keep_resolution=keep_resolution, gain_db=gain_db,
-                        streams="a")
+        v_hit = cached_extract_segment(
+            edit_dir, p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
+            vpath, preview=preview, draft=draft, proxy=proxy,
+            keep_resolution=keep_resolution, streams="v",
+            target_fps=fps_lock)
+        a_hit = cached_extract_segment(
+            edit_dir, p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
+            apath, preview=preview, draft=draft, proxy=proxy,
+            keep_resolution=keep_resolution, gain_db=gain_db,
+            streams="a")
         p["video_path"], p["audio_path"] = vpath, apath
+        p["cache_hit"] = v_hit and a_hit
 
         tail_note = ""
         if p["tail_frames"]:
@@ -1051,9 +1181,10 @@ def extract_and_assemble_jcut(
             seam_note = (f"  ⤶{p['lead_frames']}f" if p["lead_frames"]
                          else "  ⤶encostada (sem respiro)")
         gain_note = f"  gain: {gain_db:+.1f}dB" if abs(gain_db) > 0.05 else ""
+        cache_note = "  (cache)" if p["cache_hit"] else ""
         print(f"  [{i:02d}] {r['source']}  v {p['v_in']:7.2f}-{p['v_out']:7.2f}"
               f"  a {p['a_in']:7.2f}-{p['a_out']:7.2f}"
-              f"  {r.get('beat') or ''}{seam_note}{tail_note}{gain_note}", flush=True)
+              f"  {r.get('beat') or ''}{seam_note}{tail_note}{gain_note}{cache_note}", flush=True)
         return p
 
     if jobs == 1 or len(plan) == 1:
@@ -1558,8 +1689,18 @@ def main() -> None:
         ]
         edl["total_duration_s"] = round(
             sum(p["v_out"] - p["v_in"] for p in plan), 3)
-        edl_path.write_text(json.dumps(edl, ensure_ascii=False, indent=2))
-        print(f"  timeline J-cut: {edl['total_duration_s']}s → edl.json atualizado")
+        # Só escreve se o CONTEÚDO mudou. O mtime do edl.json é a chave de
+        # invalidação da interface (words.json → detector acústico em cada
+        # fonte inteira): reescrever bytes idênticos a cada render pagava essa
+        # análise toda de novo, por iteração, sem nada ter mudado.
+        new_text = json.dumps(edl, ensure_ascii=False, indent=2)
+        try:
+            unchanged = edl_path.read_text() == new_text
+        except OSError:
+            unchanged = False
+        if not unchanged:
+            edl_path.write_text(new_text)
+            print(f"  timeline J-cut: {edl['total_duration_s']}s → edl.json atualizado")
     else:
         # 1. Extract per-segment (auto-grade per range if EDL grade is "auto")
         segment_paths = extract_all_segments(
@@ -1621,6 +1762,8 @@ def main() -> None:
 
         for t in temps:
             t.unlink(missing_ok=True)
+
+    prune_segcache(edit_dir)
 
     size_mb = out_path.stat().st_size / (1024 * 1024)
     print(f"\ndone: {out_path} ({size_mb:.1f} MB)")

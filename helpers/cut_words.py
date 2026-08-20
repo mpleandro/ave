@@ -22,12 +22,40 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 HELPERS = Path(__file__).resolve().parent
+
+
+def cached_regions(edit: Path, src: Path) -> list[tuple[float, float]]:
+    """Regiões de fala da FONTE, cacheadas pela identidade dela.
+
+    O detector acústico + a calibração de limiar varrem a fonte INTEIRA, e a
+    fonte não muda quando o corte muda — mas este helper roda a cada mudança do
+    edl.json (é a invalidação certa para as PALAVRAS, não para as regiões).
+    Sem o cache, cada iteração no editor pagava a varredura de todas as fontes
+    de novo, pelo mesmo resultado.
+    """
+    st = src.stat()
+    sig = f"{st.st_mtime_ns}|{st.st_size}"
+    cache = edit / ".preview_cache" / "speech_regions" / f"{src.stem}.json"
+    try:
+        d = json.loads(cache.read_text())
+        if d.get("sig") == sig:
+            return [tuple(r) for r in d["regions"]]
+    except (OSError, json.JSONDecodeError, KeyError):
+        pass
+    noise = noise_floor_for(src)
+    regions = speech_regions(src, noise)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    tmp = cache.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"sig": sig, "noise_db": noise, "regions": regions}))
+    tmp.replace(cache)
+    return regions
 
 
 def speech_regions(video: Path, noise_db: float) -> list[tuple[float, float]]:
@@ -155,7 +183,7 @@ def build(edit: Path) -> dict:
         data = json.loads(cache.read_text())
         words_by_src[key] = [w for w in (data.get("words") or []) if w.get("type") == "word"]
         if src.exists():
-            regions_by_src[key] = speech_regions(src, noise_floor_for(src))
+            regions_by_src[key] = cached_regions(edit, src)
 
     out: list[dict] = []
     t_out = 0.0
@@ -187,6 +215,10 @@ def build(edit: Path) -> dict:
         "words": out,
         "ranges": len(edl.get("ranges", [])),
         "edlMtime": (edit / "edl.json").stat().st_mtime,
+        # A chave de frescor que o servidor usa. O mtime não serve: o render
+        # regrava o edl.json com bytes idênticos e o mtime muda sem o corte
+        # mudar — o hash do conteúdo só muda quando o corte muda.
+        "edlHash": hashlib.sha1((edit / "edl.json").read_bytes()).hexdigest(),
         "_note": "gapBefore/gapAfter em segundos de silêncio MEDIDO; 0 = corte cairia dentro da fala",
     }
 
