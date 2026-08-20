@@ -338,6 +338,96 @@
 .ave-cartela.ct-ficha .ct-v { font-weight: 700; font-size: calc(52px * var(--hl-scale)); }
 
 
+/* 21 · NOTÍCIA — a captura de um app de notícia, colada sobre o vídeo.
+   Duas superfícies e nada mais: a BARRA na cor de destaque (é ela que o
+   usuário troca) e a FOLHA branca com a manchete em preto. O cartão inteiro é
+   `ct-peca`, então entra como um corpo só — um carimbo, que é o gesto de algo
+   colado na tela.
+
+   O branco da folha é literal e não `--hl-papel`: o off-white da paleta é
+   papel IMPRESSO, e a graça deste layout é parecer uma TELA. E o texto da
+   barra vem de `--hl-sobre-accent`, medido do destaque pelo compositor
+   (branco, a não ser que o destaque seja claro demais para segurá-lo) — os
+   layouts antigos que pintam sobre o accent seguem no `--hl-sobre` fixo de
+   propósito: medi-los agora trocaria o desenho de quem já entregou vídeo. */
+.ave-cartela.ct-noticia .ct-bloco { left: 0; right: 0; text-align: left; }
+/* DE BORDA A BORDA, e sem canto arredondado: é o que separa "captura de tela"
+   de "cartão bonito". Um cartão flutuante com margem lê como peça de design;
+   a captura que encosta nas duas bordas lê como algo que estava na tela de
+   alguém — e é essa segunda leitura que faz a manchete parecer notícia. Para
+   trazer o cartão de volta bastam dois números: `left/right` no bloco e o
+   `border-radius` aqui. */
+.ave-cartela.ct-noticia .ct-app {
+  border-radius: 0;
+  overflow: hidden;
+  box-shadow: 0 calc(22px * var(--hl-scale)) calc(58px * var(--hl-scale)) rgb(0 0 0 / 0.5);
+}
+.ave-cartela.ct-noticia .ct-barra {
+  background: var(--hl-accent);
+  display: flex;
+  align-items: center;
+  gap: calc(24px * var(--hl-scale));
+  padding: calc(30px * var(--hl-scale)) calc(46px * var(--hl-scale));
+}
+.ave-cartela.ct-noticia .ct-olho {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+  color: var(--hl-sobre-accent, #ffffff);
+  font-weight: 800;
+  font-size: calc(54px * var(--hl-scale));
+  letter-spacing: calc(0.02em);
+  text-shadow: 0 calc(3px * var(--hl-scale)) calc(7px * var(--hl-scale)) rgb(0 0 0 / 0.22);
+}
+/* O HAMBÚRGUER SAI DE UM ELEMENTO SÓ: as outras duas barras são sombras
+   deslocadas. Três `<i>` dariam o mesmo desenho e três nós a mais para o
+   compositor e a prévia manterem em sincronia. */
+.ave-cartela.ct-noticia .ct-menu {
+  flex: none;
+  display: block;
+  box-sizing: border-box;
+  width: calc(50px * var(--hl-scale));
+  height: calc(7px * var(--hl-scale));
+  border-radius: calc(4px * var(--hl-scale));
+  background: var(--hl-sobre-accent, #ffffff);
+  box-shadow: 0 calc(-16px * var(--hl-scale)) 0 var(--hl-sobre-accent, #ffffff),
+              0 calc(16px * var(--hl-scale)) 0 var(--hl-sobre-accent, #ffffff);
+}
+.ave-cartela.ct-noticia .ct-lupa {
+  position: relative;
+  flex: none;
+  display: block;
+  box-sizing: border-box;
+  width: calc(40px * var(--hl-scale));
+  height: calc(40px * var(--hl-scale));
+  border: calc(7px * var(--hl-scale)) solid var(--hl-sobre-accent, #ffffff);
+  border-radius: 50%;
+}
+.ave-cartela.ct-noticia .ct-lupa::after {
+  content: '';
+  position: absolute;
+  right: calc(-9px * var(--hl-scale));
+  bottom: calc(-11px * var(--hl-scale));
+  width: calc(7px * var(--hl-scale));
+  height: calc(22px * var(--hl-scale));
+  border-radius: calc(4px * var(--hl-scale));
+  background: var(--hl-sobre-accent, #ffffff);
+  transform: rotate(-45deg);
+}
+.ave-cartela.ct-noticia .ct-folha {
+  background: #ffffff;
+  padding: calc(54px * var(--hl-scale)) calc(52px * var(--hl-scale)) calc(62px * var(--hl-scale));
+}
+/* `.ct-folha` no seletor não é enfeite: os PAPÉIS DE COR (`.hl-line.ct-escuro`,
+   no fim desta folha) têm a mesma especificidade que `.ct-noticia .hl-line` e
+   vêm DEPOIS, então venceriam no empate e a manchete sairia no azul-escuro da
+   paleta. Uma classe a mais resolve, e o papel de cor continua declarado no
+   `paint` — que é o que documenta a intenção. */
+.ave-cartela.ct-noticia .ct-folha .hl-line {
+  color: #14181c;
+  letter-spacing: calc(-1.6px * var(--hl-scale));
+}
+
 /* ================================================================
    PAPÉIS DE COR E DE LETRA POR LINHA
    `paint.lines` pode ser uma lista — o pôster pinta a terceira linha no accent

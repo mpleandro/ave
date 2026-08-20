@@ -116,15 +116,15 @@ const PAL = [
 ];
 const PAL_IDS = new Set(PAL.map((p) => p[0]));
 
-/* As vinte headlines do motor `cartela` (assets/styles/cartela.*): um bloco de
-   slots com entrada e saída em tween. As dez primeiras entram SOBRE o vídeo;
+/* As headlines do motor `cartela` (assets/styles/cartela.*): um bloco de
+   slots com entrada e saída em tween. As onze primeiras entram SOBRE o vídeo;
    as dez últimas (`cheia`) tomam o quadro inteiro e o devolvem na saída — é o
    gancho que vira cold open. */
 const CARTELAS = [
   ['fita', 'Fita'], ['jornal', 'Recorte de jornal'], ['terminal', 'Terminal'],
   ['alerta', 'Alerta'], ['placar', 'Placar'], ['sombra_longa', 'Sombra longa'],
   ['neon', 'Neon tubo'], ['balao', 'Balão de fala'], ['filete', 'Filete duplo'],
-  ['adesivo', 'Adesivo'],
+  ['adesivo', 'Adesivo'], ['noticia', 'Notícia'],
   ['capa', 'Capa sólida'], ['capa_blur', 'Capa desfocada'], ['cortina', 'Cortina'],
   ['meia_tela', 'Meia-tela'], ['moldura', 'Moldura'], ['contagem', 'Contagem'],
   ['knockout', 'Knockout'], ['poster', 'Pôster tipográfico'], ['aspas', 'Aspas'],
@@ -744,6 +744,7 @@ function hlLines(text, S) {
     const parts = t.split('/').map((s) => s.trim()).filter(Boolean);
     if (parts.length) return parts;
   }
+  if (S.quebra === 'encher') return hlWrap(t, S);
   const words = t.split(/\s+/).filter(Boolean);
   if (words.length < 2) return [words[0] || ''];
   let best = [words[0], words.slice(1).join(' ')];
@@ -755,6 +756,24 @@ function hlLines(text, S) {
     if (d < bestDiff) { bestDiff = d; best = [a, b]; }
   }
   return best;
+}
+
+/* QUEBRA ENCHENDO A LARGURA — espelho de `hl_wrap` no compositor.
+ * O equilíbrio em duas linhas é o certo para uma frase de gancho e o errado
+ * para uma manchete: duas linhas longas fazem o ajuste encolher o corpo, e sai
+ * uma manchete pequena num cartão grande. A largura-alvo é medida em unidades
+ * de corpo 100 (`safeW * 100 / cap`), que é como o `hlWidth` mede. */
+function hlWrap(text, S) {
+  const alvo = (S.safeW * 100) / Math.max(1, S.cap || 100);
+  const linhas = [];
+  let atual = '';
+  text.split(/\s+/).filter(Boolean).forEach((w) => {
+    const tent = (atual ? atual + ' ' + w : w);
+    if (atual && hlWidth(tent, 100, S.weights[0]) > alvo) { linhas.push(atual); atual = w; }
+    else atual = tent;
+  });
+  if (atual) linhas.push(atual);
+  return linhas.length ? linhas : [''];
 }
 
 /* CAIXA ALTA É DO CÓDIGO, NUNCA DO CSS.
@@ -937,6 +956,7 @@ function buildCartelaDemo(host, styleId) {
   box.style.setProperty('--hl-main', main);
   box.style.setProperty('--hl-accent', acc);
   box.style.setProperty('--hl-accent-rgb', trioRGB(acc));
+  box.style.setProperty('--hl-sobre-accent', sobreAccent(acc));
   C.assentar(box);
   return () => {};
 }
@@ -1273,6 +1293,18 @@ function trioRGB(hex) {
   const n = parseInt(h, 16);
   if (!isFinite(n) || h.length !== 6) return '255 255 255';
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+}
+
+/* A cor legível SOBRE o destaque — espelho de `sobre_accent` no compositor.
+ * Branco é a convenção da manchete e é o que o usuário reconhece; a medição
+ * entra só para o caso em que o branco FALHA (destaque amarelo ou creme, com
+ * razão de contraste abaixo de 3:1), senão o vermelho receberia texto escuro —
+ * mais legível e não é uma manchete. */
+function sobreAccent(hex) {
+  const t = trioRGB(hex).split(' ').map(Number);
+  const lin = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = 0.2126 * lin(t[0]) + 0.7152 * lin(t[1]) + 0.0722 * lin(t[2]);
+  return 1.05 / (lum + 0.05) >= 3 ? '#ffffff' : '#10202e';
 }
 
 const CAP_BUILDERS = {

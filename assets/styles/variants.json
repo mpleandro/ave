@@ -1834,6 +1834,50 @@
       },
       "_note": "Adesivo — etiqueta torta com borda clara grossa e sombra dura, que QUICA ao colar (−16° → +2° → −3°). Lê como algo colado na tela por uma pessoa, não desenhado por um software — e é exatamente para isso que serve."
     },
+    "noticia": {
+      "motor": "cartela",
+      "cheia": false,
+      "weights": [
+        800,
+        800
+      ],
+      "cap": 78,
+      "safeW": 940,
+      "lh": 1.16,
+      "top": 300,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "gradient": null,
+      "sizes": null,
+      "fontRole": null,
+      "quebra": "encher",
+      "paint": {
+        "lines": "papelEscuro",
+        "barra": "accent",
+        "olho": "sobreAccent"
+      },
+      "pecas": [
+        "noticia"
+      ],
+      "slots": {
+        "olho": "primeira"
+      },
+      "motion": {
+        "entra": {
+          "tipo": "carimbo",
+          "dur": 0.32,
+          "de": 1.06,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        },
+        "sai": {
+          "tipo": "fade",
+          "dur": 0.26,
+          "ease": "cubic-bezier(.2,.8,.2,1)"
+        }
+      },
+      "_note": "Not\u00edcia — a captura de um app de not\u00edcia colada sobre o v\u00eddeo: barra do topo na cor de destaque com hamb\u00farguer, r\u00f3tulo em caixa alta e lupa, e a manchete em preto sobre folha branca. A PRIMEIRA linha do texto \u00e9 o r\u00f3tulo da barra (mesma conven\u00e7\u00e3o da etiqueta e do jornal) — sem ela a barra fica s\u00f3 com os \u00edcones. A cor de DESTAQUE \u00e9 a barra, e \u00e9 o que o usu\u00e1rio troca na aba Estilo. Quebra por `encher`: a manchete enche a largura da folha em N linhas, como manchete de verdade, em vez das duas equilibradas — a barra do autor continua vencendo."
+    },
     "capa": {
       "motor": "cartela",
       "cheia": true,

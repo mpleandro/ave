@@ -298,8 +298,23 @@
     else if (pecas.indexOf('balao') > -1) alvo = peca('ct-balao');
     else if (pecas.indexOf('adesivo') > -1) alvo = peca('ct-adesivo');
     else if (pecas.indexOf('listras') > -1) alvo = peca('');
+    else if (pecas.indexOf('noticia') > -1) {
+      /* A NOTÍCIA tem duas superfícies, e o texto se reparte entre elas: o
+         rótulo vai para a barra colorida e a manchete para a folha branca. O
+         rótulo entra aqui, e não no caminho comum logo abaixo, porque ali ele
+         cairia dentro da folha — junto da manchete, que é o oposto do layout. */
+      var app = peca('ct-app');
+      var barra = criar('div', 'ct-barra');
+      barra.appendChild(criar('i', 'ct-menu'));
+      barra.appendChild(slot('ct-olho', dados.olho || ''));
+      barra.appendChild(criar('i', 'ct-lupa'));
+      app.appendChild(barra);
+      alvo = criar('div', 'ct-folha');
+      app.appendChild(alvo);
+    }
 
-    if (dados.olho && pecas.indexOf('fita') < 0) alvo.appendChild(slot('ct-olho', dados.olho));
+    if (dados.olho && pecas.indexOf('fita') < 0 && pecas.indexOf('noticia') < 0)
+      alvo.appendChild(slot('ct-olho', dados.olho));
     if (dados.num) alvo.appendChild(slot('ct-num', dados.num));
 
     if (pecas.indexOf('painel') > -1 && pecas.indexOf('pontos') > -1) {

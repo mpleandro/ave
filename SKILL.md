@@ -407,13 +407,16 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   `stacked` caption paint an accent, so the save also carries **`accentUsed`**;
   when it is `false` the picked styles have none and the colour is not an
   instruction to invent a place for one.
-- **Estilo de headline** — onze layouts: `outline`, `card`, `realce`, `misto`,
-  `bloco`, `etiqueta`, `manuscrito`, `gigante`, `relevo`, `grifo`,
-  `contorno_duplo`. **N linhas**, corpo ajustado à largura segura (não mais
-  "sempre duas"). A quebra é do autor: **" / " no texto quebra a linha ali**;
-  sem barra, a divisão em duas é equilibrada pela largura MEDIDA. Layouts com
-  linha herói (`gigante`, `etiqueta`, `manuscrito`) têm corpo por linha, e o
-  herói é medido sozinho contra a largura inteira.
+- **Estilo de headline** — os onze clássicos (`outline`, `card`, `realce`,
+  `misto`, `bloco`, `etiqueta`, `manuscrito`, `gigante`, `relevo`, `grifo`,
+  `contorno_duplo`) mais os do motor `cartela`, banda e tela cheia (a tabela do
+  catálogo tem a lista inteira). **N linhas**, corpo ajustado à largura segura
+  (não mais "sempre duas"). A quebra é do autor: **" / " no texto quebra a
+  linha ali**; sem barra, a divisão em duas é equilibrada pela largura MEDIDA —
+  salvo nos layouts com `quebra: "encher"` (hoje o `noticia`), que enchem a
+  largura em N linhas como manchete de verdade. Layouts com linha herói
+  (`gigante`, `etiqueta`, `manuscrito`) têm corpo por linha, e o herói é medido
+  sozinho contra a largura inteira.
 - **As fontes do PRÓPRIO USUÁRIO entram no seletor** (`local_fonts.py` indexa
   as instaladas — 617 nesta máquina — e o servidor as publica em
   `/api/localfonts`). É o que permite usar a tipografia da MARCA, que o Google
@@ -763,7 +766,7 @@ not — verified in the render. Any other error still blocks.
 | Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` `pop` `popLinha` `popBloco` `revelar` `editorial` `dinamico` |
 | Legendas · motor `palavra` | `marcador` `marcadorDuplo` `marcaTexto` `sublinhado` `progressivo` · `foco` `focoBlur` `contorno` `neon` · `chapa` `chips` `vidro` · `onda` `rotativo` `maquina` `rolagem` · `cinema` `manchete` `barra` |
 | Headlines | `outline` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` |
-| Headlines · motor `cartela` (banda) | `fita` `jornal` `terminal` `alerta` `placar` `sombra_longa` `neon` `balao` `filete` `adesivo` |
+| Headlines · motor `cartela` (banda) | `fita` `jornal` `terminal` `alerta` `placar` `sombra_longa` `neon` `balao` `filete` `adesivo` `noticia` |
 | Headlines · motor `cartela` (TELA CHEIA) | `capa` `capa_blur` `cortina` `meia_tela` `moldura` `contagem` `knockout` `poster` `aspas` `ficha` |
 | Edição | `limpa` `split` `split2` |
 | Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash |

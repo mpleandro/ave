@@ -1141,6 +1141,8 @@ def hl_lines(text: str, h: dict) -> list[str]:
         parts = [x.strip() for x in t.split("/") if x.strip()]
         if parts:
             return parts
+    if h.get("quebra") == "encher":
+        return hl_wrap(t, h)
     words = t.split()
     if len(words) < 2:
         return [words[0] if words else ""]
@@ -1151,6 +1153,52 @@ def hl_lines(text: str, h: dict) -> list[str]:
         if d < best_diff:
             best, best_diff = [a, b], d
     return best
+
+
+def hl_wrap(text: str, h: dict) -> list[str]:
+    """Quebra ENCHENDO a largura — a quebra de uma manchete de verdade.
+
+    O equilíbrio em duas linhas é o certo para uma frase curta de gancho e o
+    errado para uma manchete: duas linhas longas fazem o `hl_fit` encolher o
+    corpo até caber, e o resultado é uma manchete pequena num cartão grande. A
+    manchete de jornal faz o contrário — mantém o corpo e usa quantas linhas
+    precisar.
+
+    A largura-alvo é medida em unidades de corpo 100, que é como o `hl_width`
+    mede: uma linha que a `cap` desenharia com `safeW` de largura tem, no corpo
+    100, `safeW * 100 / cap`. Enchendo até esse limite, o `hl_fit` depois
+    devolve um corpo colado no teto em vez de encolhido.
+    """
+    alvo = h["safeW"] * 100.0 / max(1.0, float(h.get("cap") or 100))
+    linhas: list[str] = []
+    atual = ""
+    for w in text.split():
+        tent = f"{atual} {w}".strip()
+        if atual and hl_width(tent, 100, h["weights"][0]) > alvo:
+            linhas.append(atual)
+            atual = w
+        else:
+            atual = tent
+    if atual:
+        linhas.append(atual)
+    return linhas or [""]
+
+
+def sobre_accent(accent: str) -> str:
+    """A cor legível SOBRE a cor de destaque — branco, até o destaque clarear.
+
+    A convenção da manchete é branco sobre a tarja colorida, e é o que o
+    usuário reconhece; medir o contraste e escolher sempre o maior devolveria
+    texto escuro sobre o vermelho, que é mais legível e não é uma manchete. A
+    medição entra só para o caso em que o branco FALHA — um destaque amarelo ou
+    creme, onde a razão de contraste cai abaixo de 3:1 e o rótulo some.
+    """
+    try:
+        from backdrop_luma import hex_to_rgb, relative_luminance
+        lum = relative_luminance(*hex_to_rgb(accent))
+    except Exception:
+        return "#ffffff"
+    return "#ffffff" if 1.05 / (lum + 0.05) >= 3.0 else "#10202e"
 
 
 def hl_is_upper(i: int, n: int, h: dict) -> bool:
@@ -1357,6 +1405,15 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
         dentro = f'<div class="ct-adesivo ct-peca">{corpo_linhas}</div>'
     elif "reguas" in pecas:
         dentro = ('<i class="ct-regua"></i>' + corpo_linhas + '<i class="ct-regua"></i>')
+    elif "noticia" in pecas:
+        # O rótulo da barra fica no lugar mesmo VAZIO: ele é o que centraliza
+        # entre o hambúrguer e a lupa, e sem o nó a barra fica torta quando o
+        # usuário escreve a headline sem a primeira linha.
+        rotulo = olho or '<div class="ct-olho"></div>'
+        dentro = (f'<div class="ct-app ct-peca">'
+                  f'<div class="ct-barra"><i class="ct-menu"></i>{rotulo}'
+                  f'<i class="ct-lupa"></i></div>'
+                  f'<div class="ct-folha">{corpo_linhas}</div></div>')
 
     fora = ""
     if h.get("cheia") and "svg" not in pecas and "blur" not in pecas:
@@ -1379,6 +1436,7 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
              f'style="--hl-scale:1; --hl-size:{size:.2f}; --hl-lh:{h["lh"]}; '
              f'--hl-top:{top}; --hl-main:{main_color}; --hl-accent:{accent}; '
              f'--hl-accent-rgb:{rgb_trio(accent)}; --hl-deep:{deep}; '
+             f'--hl-sobre-accent:{sobre_accent(accent)}; '
              f'--hl-stroke:{h.get("stroke", 0)}; '
              f'--hl-font:{hl_css_family(fonts["main"])}; '
              f'--hl-font-accent:{hl_css_family(fonts["accent"])}"'
