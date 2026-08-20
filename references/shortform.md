@@ -513,6 +513,12 @@ Protocolo (decidido pelo usuário em 2026-08-18):
    (`hook.endSec`) · primeiro acento pós-hook (flash/split/gráfico). Se houver
    mais de um candidato plausível, pergunte junto. (Este usuário escolheu o
    primeiro corte dentro do hook no Fome de Poder v2.)
+2b. **O riser é do usuário antes de ser do pacote.** Consulte
+   `biblioteca.py --resolver --tipo sfx --papel riser`: com 3+ usos, use o
+   arquivo dele (a deixa aceita `{"file": ..., "volume": ...}` no lugar do
+   `kind`) e meça o `lead` DAQUELE arquivo com o `probe()`. O `riser-short.mp3`
+   do repo é o padrão de quem ainda não tem acervo.
+
 3. **Como aplicar:** deixa manual em `edit-data.json` —
    `"sfxCues": [{"at": <t>, "kind": "intro"}]` (kind `intro` = `riser-short.mp3`,
    2,325s, vol 0,28, **pico no fim do arquivo**). O bloco final sai como
@@ -856,7 +862,16 @@ licensing to the user for logos/celebrities). Keep photographer credits.
 
 ## Phase 3 — soundtrack (short-form)
 
+**Antes de perguntar, olhe o acervo:**
+`uv run python helpers/biblioteca.py --resolver --tipo trilha [--json]`. Uma
+trilha que a pessoa já usou três vezes é o padrão da casa — entra calado, e
+gerar uma nova no lugar dela é pagar token por uma escolha que já foi feita.
+Sem nada no acervo (ou com 0–1 uso), a pergunta é a de sempre:
+
 Ask: **AI-generated** (Treblo) or **local file** (copy to `public/trilha.mp3`).
+Trilha que veio do usuário: ofereça guardá-la depois da entrega
+(`--registrar <arquivo> --tipo trilha --papel <série> --projeto <edit>`), e
+`--usar` quando a que entrou veio do acervo.
 
 **Writing the Treblo prompt — derive it from the video's context, and ask for
 MUSIC, not a texture.** Read the cut transcript: what's the topic, energy and

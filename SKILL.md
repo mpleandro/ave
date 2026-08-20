@@ -160,6 +160,7 @@ Phase 1:
 - **`perguntar.py <edit> [--contexto NOME] [--teto N]`** — o que perguntar ao usuário, e o que NÃO perguntar. **A pergunta nunca mostra um número** ("hesitação de 0,38s abaixo do limiar" descreve o instrumento, não a escolha): mostra o áudio, com timestamp para clicar no editor que já está no ar, e a consequência. **Uma pergunta por classe, não por ocorrência** — sete respiros viram uma pergunta com três exemplos. Consulta o `preferencias.py`: confiança alta aplica calado, média aplica e informa, baixa pergunta.
 - **`preferencias.py [--mostrar|--aprender <edit>|--consultar F C|--reset]`** — o que ESTE usuário costuma querer, aprendido das decisões dele. Mora em `~/.avelin/preferencias.json`, **fora do clone** (preferência de meses não pode morrer num `git clean`). O limiar é o ponto médio entre o maior vão que ele MANTEVE e o menor que ele REMOVEU; faixas que se cruzam derrubam a confiança em vez de inventar um número. `--aprender` lê o `preview_edits.json` — o que ele corrigiu à mão depois da entrega, que é o sinal mais forte que existe e estava sendo descartado. Confiança governa autonomia (<5 pergunta, 5–15 informa, >15 calado), e contradizer um limiar confiante derruba a confiança: discordar do usuário custa autonomia à ferramenta, nunca o contrário.
 - **A ABA ESTILO LEMBRA.** As escolhas do último envio (formato do corte, headline, estilo de legenda, elementos ligados, deslocamento da legenda) ficam em `~/.avelin/estilo.json`, escritas pelo servidor no mesmo ato do envio — fora do clone, como o `brand.json` e o `preferencias.json`. O editor empilha quatro camadas nesta ordem: padrão de fábrica → escolhas da última vez → marca (cor e letra) → **o que o projeto gravou, que vence sempre**. Reabrir um vídeo entregue tem de mostrar como ele foi entregue, não o gosto de hoje.
+- **`biblioteca.py [--registrar <arquivo> --tipo <t>] [--pasta <dir>] [--listar] [--resolver] [--candidatos <edit>] [--usar <id> --projeto <edit>] [--esquecer <id>] [--adotar-sfx]`** — **O ACERVO DE QUEM EDITA**: logo, trilha, efeito, LUT, vinheta, fonte. Mora em `~/.avelin/biblioteca.json` + `~/.avelin/biblioteca/<tipo>/`, fora do clone e fora do projeto, pela razão do `brand.json`: um asset que vive só dentro de `<edit>/` é um asset que o PRÓXIMO vídeo vai pedir de novo, na mão, a quem já o entregou uma vez. **O que ele guarda é MEDIDO** — alfa do PNG (sem canal alfa, o logo vira um retângulo branco sobre o vídeo), pico e ATAQUE do efeito (o `sfx.py` já sabe medir: o `riser-short` tem 864 ms de silêncio antes da batida), duração da trilha (mais curta que o corte = emenda audível). O alerta sai no registro, não no render. **`--candidatos <edit>` é a entrada da pergunta**: lista o que o usuário TROUXE e o acervo ainda não tem, ignorando o que o pipeline baixou (`pexels/`, `web/`) — isso se acha de novo buscando, e perguntar sobre isso gasta a paciência de que a pergunta seguinte vai precisar. `--usar` é o que faz a régua subir (veja a seção da biblioteca); `--pasta` registra um DIRETÓRIO com um papel, porque quem tem 300 risers não vai registrá-los um a um; `--adotar-sfx` migra o `~/.avelin/sfx.json` antigo.
 - **`verify_takes.py <edit> [--video preview_proxy.mp4]`** — **OUVE o corte pronto** e acusa frase repetida, sem confiar em transcrito nenhum. Existe porque o `detect_restarts.py` lê o TEXTO e o Whisper **engole a segunda passada**: quatro repetições chegaram ao usuário num corte cujo `takes_packed.md` mostrava duas frases emendando perfeitamente, enquanto o áudio dizia *"Isso explica muito, isso explica muito, porque você ganha"*. Re-transcrever o corte inteiro NÃO resolve — com contexto o modelo suaviza de novo (verificado: a passada completa sobre o render saiu limpa). O que funciona é **janela curta e ISOLADA**, em várias larguras (2,4/4,0/6,0s), ficando com a menor em que cada achado apareceu. Roda local com mlx-whisper — grátis, offline, ~1min num corte de 40s. Exit 1 se achar algo.
 
 - **`portao_fase1.py <edit> [--pular-render]`** — **O PORTÃO. Exit 1 = o corte não vai para aprovação.** Checa, nesta ordem: `spacing` medido (sem ele a seleção de tomada foi às cegas e o resto é teatro), reinício sobrevivente, `quote` × conteúdo real do range, e `verify_cut` sobre o render. Existe porque os auditores já existiam quando dez defeitos de fala chegaram ao usuário — não faltava ferramenta, faltava obrigação. A diferença entre recomendação e portão é o exit code.
@@ -895,6 +896,12 @@ composer warns by name.
 Loudness is re-measured on the OUTPUT (−14 LUFS), not inherited from `preview.mp4`:
 Phase 2 adds a soundtrack and effects, so the final mix is a different one.
 
+**Entregue o vídeo e depois pergunte pelo acervo.** Com o `final.mp4` na mão,
+rode `biblioteca.py --candidatos <edit>` e, se sobrar algo, faça UMA pergunta
+sobre guardar o que o usuário trouxe (logo, trilha, efeito, LUT) — e um `--usar`
+para cada item do acervo que entrou neste vídeo. Veja a seção da biblioteca de
+assets.
+
 
 ## Papel de cada fonte — e o tempo RESERVADO
 
@@ -1211,6 +1218,87 @@ The cut is approved and the user picked the style in the UI (`preview_style.json
 
 Both tracks: `helpers/phase2.py <edit>` faz tudo — aplica a escolha da aba Estilo, monta o projeto, compõe, roda o `check`, renderiza, normaliza a loudness e devolve os caminhos ao editor. A edição inteira é o `edit-data.json`; nada de código por sessão fora dos gráficos sob medida em `compositions/`. **Não carregue a skill `remotion-best-practices`.** Não é o motor desta skill.
 
+## A biblioteca de assets — o acervo é de QUEM EDITA, não do projeto
+
+O logo, a trilha, o riser, a LUT, a vinheta e a fonte da marca não pertencem ao
+vídeo: pertencem à pessoa. Quando eles ficam só dentro de `<edit>/`, o próximo
+projeto começa perguntando de novo o que já foi respondido — e a pergunta
+repetida é o jeito mais barato de uma ferramenta parecer que não presta atenção.
+Por isso o acervo mora ao lado do `brand.json` e do `preferencias.json`:
+
+    ~/.avelin/biblioteca.json       o índice (o que é, para que serve, quantas vezes entrou)
+    ~/.avelin/biblioteca/<tipo>/    os arquivos guardados por cópia
+
+`helpers/biblioteca.py` é o mecanismo. O que vem abaixo é **quando falar**.
+
+### Ofereça no momento em que o asset aparece — e uma vez só
+
+Toda vez que o usuário TROUXER um arquivo que não é a filmagem — arrasta um
+logo, aponta uma trilha, manda um pacote de efeitos, entrega um `.cube`, pede a
+fonte da marca — **use o arquivo primeiro e ofereça guardá-lo depois**, numa
+pergunta só, com `AskUserQuestion`. Nunca antes: quem acabou de mandar um logo
+quer ver o logo no vídeo, não responder um formulário de catalogação.
+
+E **ao entregar** (depois do `final.mp4`), rode
+`biblioteca.py --candidatos <edit>` e agrupe o que sobrou numa ÚNICA pergunta.
+O que veio de busca (`pexels/`, `web/`) o helper já descarta sozinho — guardar
+uma foto do Pexels no acervo pessoal é guardar um atalho para um catálogo que já
+é público.
+
+**Isto não contradiz a regra da aba Estilo.** Lá a pergunta é sobre um LOOK que
+o usuário precisa VER para escolher, e uma lista de nomes no chat o faz escolher
+às cegas. Aqui é um sim/não sobre um arquivo que ele acabou de entregar e já
+está vendo aplicado no vídeo.
+
+### Pergunte o que só ele sabe; meça o resto
+
+Duração, pico, ataque, dimensão, alfa, tamanho da LUT: tudo isso o
+`biblioteca.py` lê do arquivo no registro. **Não pergunte nada disso.** Restam
+duas coisas que nenhuma medição devolve, e são as únicas que valem uma pergunta:
+
+- **o papel** — para QUE serve (`riser`, `reveal`, `abertura`, `marca-dagua`,
+  `trilha-vlog`). É o que permite ao `--resolver` achá-lo por função, meses
+  depois, sem o usuário lembrar o nome do arquivo.
+- **a condição de uso** (`--nota`) — "só sobre fundo escuro", "a versão
+  horizontal é a do cliente", "esta trilha é só da série de vendas". É a
+  informação que se perde primeiro e custa mais caro.
+
+Como toda pergunta desta skill, ela mostra a CONSEQUÊNCIA, nunca o instrumento:
+*"guardo esse riser como o seu padrão de gancho? nos próximos vídeos ele entra
+sozinho na virada"* — não *"registrar asset tipo=sfx papel=riser?"*.
+
+### Acervo grande entra como PASTA, não como 300 perguntas
+
+Quem já tem biblioteca de efeitos tem PASTA de biblioteca. `--pasta <dir>
+--tipo sfx --papel riser` guarda o diretório inteiro com um papel, e o
+`--resolver` procura lá dentro quando nenhum item registrado serve. Use `--link`
+no lugar de cópia quando o acervo for grande ou vivo (uma pasta que o usuário
+alimenta por fora): o índice guarda o caminho e o arquivo fica onde está.
+
+### Uso é o que vira padrão — e o que faz a ferramenta calar
+
+`--usar <id> --projeto <edit>` **em toda entrega que usou um item do acervo**.
+Sem isso a régua nunca sobe e a skill fica perguntando para sempre o que já foi
+respondido três vezes. A régua é a do `preferencias.py`, pela mesma razão:
+
+    0–1 uso    PERGUNTA qual usar
+    2 usos     usa e INFORMA numa linha, desfazível
+    3+ usos    é o padrão daquele papel — entra calado, aparece só no resumo
+
+Antes de gerar trilha com IA, de buscar imagem de marca ou de escolher um efeito
+para uma deixa, **consulte o acervo primeiro**
+(`--resolver --tipo trilha`, `--resolver --tipo sfx --papel riser`): pagar um
+token por algo que já está no disco da pessoa, e que ela já escolheu duas vezes,
+é a definição de trabalho desperdiçado.
+
+### O que NÃO fazer com o acervo
+
+Guardar sem oferecer (o acervo é uma cópia no disco de alguém — `--esquecer`
+apaga), escrever qualquer coisa dele dentro de `<videos_dir>` ou do clone, e
+transformar um gosto pessoal em `kind` do repositório compartilhado: o catálogo
+de `assets/sfx/` é o vocabulário comum de todo mundo, o riser favorito de uma
+pessoa é dela — a deixa aceita o arquivo do usuário justamente para isso.
+
 ## Memory — `project.md`
 
 Append one section per session at `<edit>/project.md`:
@@ -1226,6 +1314,17 @@ On startup, read it if it exists and summarize the last session in one sentence 
 
 ## Anti-patterns
 
+- Pedir de novo um asset que a pessoa já entregou. Logo, trilha e efeito
+  favorito são da PESSOA, não do projeto: consulte `biblioteca.py --resolver`
+  antes de perguntar, gerar ou buscar.
+- Catalogar antes de aplicar. Quem acabou de mandar um logo quer VER o logo no
+  vídeo; a oferta de guardá-lo vem depois de ele estar aplicado, e numa pergunta
+  só.
+- Perguntar o que o arquivo responde. Duração, pico, ataque, dimensão e alfa são
+  medidos no registro — a pergunta é sobre o PAPEL e a CONDIÇÃO de uso.
+- Registrar o uso de um item do acervo e esquecer o `--usar`. A régua de
+  autonomia é contada em entregas; sem ela a skill continua perguntando o que já
+  foi respondido três vezes.
 - Starting Phase 2 before cut approval (the gate is a Hard Rule).
 - Asking the style questions in chat, or starting Phase 2 before the pick lands.
   The gate screen exists so the user SEES what each style does — a chat list of

@@ -359,6 +359,35 @@ Para inspecionar o kit ativo já resolvido:
 uv run python helpers/motion_kit.py --mostrar
 ```
 
+## A sua biblioteca de assets — perguntado uma vez, lembrado sempre
+
+Logo, trilha, efeito favorito, LUT, vinheta, fonte da marca: isso é **seu**, não
+do vídeo. Quando você entrega um desses ao Avelin, ele aplica primeiro e depois
+oferece guardar — e a partir daí o próximo projeto já nasce sabendo.
+
+- **Onde fica**: `~/.avelin/biblioteca.json` (o índice) e
+  `~/.avelin/biblioteca/<tipo>/` (os arquivos), fora do clone, como a marca e as
+  preferências. Não sobe em push, não morre num `git clean`.
+- **O que é medido no registro**, para o defeito não aparecer só no render: PNG
+  sem canal alfa (que viraria um retângulo branco sobre o vídeo), efeito com
+  pico baixo demais para ser ouvido sob a fala, efeito cujo ataque está
+  centenas de milissegundos DENTRO do arquivo, trilha mais curta que o corte.
+- **O que ele pergunta** é só o que nenhuma medição responde: para que aquilo
+  serve (*riser*, *reveal*, *abertura*, *marca d'água*) e a condição de uso
+  ("só sobre fundo escuro", "esta trilha é só da série de vendas").
+- **Acervo grande entra como pasta**, não como 300 perguntas — e pode ficar onde
+  está, sem cópia.
+- **Uso vira padrão**: o que entrou em 3 vídeos passa a entrar sozinho no papel
+  dele; com 2, o Avelin aplica e avisa numa linha; com 0 ou 1, ele pergunta.
+
+```bash
+uv run python helpers/biblioteca.py --listar
+uv run python helpers/biblioteca.py --registrar ~/Marca/logo.png --tipo logo \
+    --nome "Logo branco" --nota "só sobre fundo escuro"
+uv run python helpers/biblioteca.py --pasta ~/Music/"Own SFX"/riser --tipo sfx --papel riser
+uv run python helpers/biblioteca.py --esquecer <id>
+```
+
 ## Atualizar
 
 Para trazer a versão mais nova:
