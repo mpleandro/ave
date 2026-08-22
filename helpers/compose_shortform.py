@@ -824,7 +824,7 @@ def sfx_blocks(events: list[tuple[float, str]], proj: Path,
     obrigando a reconstruir ~20 deles à mão no ffmpeg. Com drift zero medido,
     eles simplesmente ficam.
     """
-    from sfx import probe
+    from sfx import QUIET_DB, normalize_gain, probe
 
     warns, seen, planned = [], set(), []
     for at, kind in events:
@@ -846,9 +846,17 @@ def sfx_blocks(events: list[tuple[float, str]], proj: Path,
                 seen.add(nome)
             continue
         info = probe(str(f))
-        if info["quiet"] and spec["file"] not in seen:
+        # Compensa o DEFEITO DO ARQUIVO (gravado/exportado baixo), não o volume
+        # artístico do estilo — os dois se multiplicam. Nunca muta `spec` no
+        # lugar: quando vem do catálogo (`VARIANTS["sfx"]`) é o MESMO dict
+        # reusado por todo evento desse efeito no vídeo inteiro, e mutar
+        # acumularia o reforço a cada ocorrência.
+        gain = normalize_gain(info["peak"])
+        if gain > 1.01:
+            spec = {**spec, "volume": round(spec["volume"] * gain, 4)}
+        if info["peak"] + 20 * math.log10(gain) < QUIET_DB and spec["file"] not in seen:
             warns.append(f"  aviso: {spec['file']} tem pico de {info['peak']:.1f} dB "
-                         f"— vai sumir sob a fala")
+                         f"— some sob a fala mesmo com o reforço automático")
             seen.add(spec["file"])
         # Arredondado AQUI, não na hora de imprimir: a decisão de camada abaixo
         # compara os mesmos números que vão para o atributo, senão um valor que

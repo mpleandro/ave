@@ -211,6 +211,53 @@ def scaffold(proj: Path, cut: Path) -> None:
     link.symlink_to(cut.resolve())
 
 
+def duck_soundtrack(proj: Path, data: dict) -> None:
+    """A trilha cede espaço à voz nos trechos falados — HyperFrames chama isto
+    de "voiceover carve".
+
+    Sem isto a trilha só tinha o volume fixo e baixo escrito por
+    `compose_shortform.py` ("ela sustenta, não disputa com a voz" — que é
+    admitir que ela nunca competia, porque nunca tocava alto o bastante para
+    isso). O painel Estilo já promete "ducking" no subtítulo da camada
+    Efeitos Sonoros (`assets/preview/app.js`, layer `trilha`) há mais tempo do
+    que este código existe — isto é o que cumpre a promessa: mede as bandas
+    que a voz ocupa e só abaixa ESSAS na trilha, só enquanto há fala, voltando
+    ao normal nos silêncios (ao contrário do volume fixo, que fica baixo o
+    tempo todo).
+
+    `helpers/carve.mjs` é uma cópia vendorizada do `carve.mjs` do skill
+    hyperframes-audio (ver o cabeçalho do arquivo sobre o porquê de ser cópia
+    e não referência viva a outra skill).
+
+    Sem trilha, sem `node`/`npm`, ou sem internet para buscar
+    `@hyperframes/core`: pulado silenciosamente, e a trilha some com o volume
+    fixo de antes — não é motivo para interromper a Fase 2 por um polimento.
+    """
+    snd = data.get("soundtrack") or {}
+    if not (snd.get("enabled") and snd.get("file")):
+        return
+    comp = proj / "index.html"
+    if not comp.exists():
+        return
+    core_dir = proj / "node_modules" / "@hyperframes" / "core"
+    if not core_dir.exists():
+        print("  instalando @hyperframes/core (uma vez por projeto)…")
+        r = run(["npm", "i", "-D", "@hyperframes/core", "--silent"],
+                cwd=proj, quiet=True, allow_fail=True)
+        if r.returncode != 0:
+            print("  @hyperframes/core não instalou — trilha sem ducking "
+                  "(volume fixo continua valendo)")
+            return
+    print("  trilha cede espaço à voz (voiceover carve)…")
+    r = run(["node", str(HELPERS / "carve.mjs"), "--comp", str(comp),
+             "--bed", "soundtrack", "--voice", "a-roll-audio"],
+            cwd=proj, quiet=True, allow_fail=True)
+    if r.returncode != 0:
+        print("  carve não rodou — trilha sem ducking (volume fixo continua valendo)")
+        if r.stderr:
+            print("  " + r.stderr.strip()[-500:])
+
+
 def deliver(rendered: Path, final: Path) -> None:
     """Normaliza a loudness da entrega (-14 LUFS / -1 dBTP / LRA 11).
 
@@ -414,6 +461,9 @@ def main() -> None:
     if args.end:
         compose += ["--end", str(args.end)]
     run(compose)
+
+    progress.step(edit, detail="ajustando a trilha sob a voz")
+    duck_soundtrack(proj, data)
 
     progress.step(edit, detail="conferindo a composição")
     print("  verificando…")

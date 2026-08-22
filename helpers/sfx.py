@@ -6,7 +6,9 @@ aparecem ouvindo — a mixagem parece certa e não se escuta nada:
 
 1. NÍVEL. O `click2.mp3` do pacote tem pico de −25 dB: inaudível sob fala em
    qualquer volume sensato. Medido aqui, confere. O `cut-click.mp3` (−2 dB) é o
-   que lê.
+   que lê. `compose_shortform.py` já aplica `normalize_gain()` sozinho na hora
+   de escrever `data-volume` — rodar este arquivo direto é para AUDITAR o
+   pacote antes de usar, não um passo manual do fluxo normal.
 
 2. ONDE está o ataque DENTRO do arquivo. Medido neste pacote: `caption-click`
    tem 158ms de silêncio antes da batida, `caption-scratch` 233ms, `pop` 140ms.
@@ -20,12 +22,40 @@ from __future__ import annotations
 
 import argparse
 import functools
+import math
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 QUIET_DB = -12.0  # abaixo disso, o efeito some sob a fala
+
+# Pico de referência: onde o `cut-click.mp3` do pacote já mede (−2 dB) e o que
+# soa presente sem estourar. Arquivos medidos abaixo disso ganham compensação
+# automática na hora de compor (ver `normalize_gain`); arquivos já no alvo ou
+# acima não são tocados.
+TARGET_PEAK_DB = -3.0
+
+# Teto do reforço: recuperar os 22dB do `click2.mp3` (−25dB) de uma vez traria
+# o chiado de fundo dele junto, mais alto que o efeito. 12dB já resolve o caso
+# comum (mic de câmera, gravação de tela) sem amplificar ruído de gravações
+# ruins a ponto de se ouvir.
+MAX_BOOST_DB = 12.0
+
+
+def normalize_gain(peak_db: float, target: float = TARGET_PEAK_DB,
+                    max_boost_db: float = MAX_BOOST_DB) -> float:
+    """Multiplicador linear que leva `peak_db` para perto de `target`.
+
+    Compensa o DEFEITO DO ARQUIVO (um efeito gravado/exportado baixo demais),
+    não o volume artístico por estilo em `variants.json` — os dois se
+    multiplicam: isto conserta "este .mp3 nasceu fraco", aquele decide "este
+    efeito entra suave neste estilo". Arquivos mais altos que o alvo também são
+    puxados para ele (levemente atenuados), para que `data-volume` signifique a
+    mesma coisa não importa qual arquivo o catálogo usa por trás.
+    """
+    boost_db = min(target - peak_db, max_boost_db)
+    return 10 ** (boost_db / 20)
 
 
 @functools.lru_cache(maxsize=64)
@@ -70,13 +100,18 @@ def main() -> None:
     bad = 0
     for f in args.files:
         d = probe(str(f))
-        flag = "  ← BAIXO DEMAIS, some sob a fala" if d["quiet"] else ""
+        gain_db = 20 * math.log10(normalize_gain(d["peak"]))
+        comp = f"  → compensado +{gain_db:.1f}dB na composição" if gain_db > 0.1 else ""
+        # ainda fraco mesmo depois do reforço máximo: o teto de +12dB não chega
+        # ao alvo de -3dB, e é isso — não o pico bruto — que decide se sobra som
+        still_quiet = d["peak"] + gain_db < QUIET_DB
+        flag = "  ← BAIXO DEMAIS, some sob a fala mesmo compensado" if still_quiet else ""
         lead = f"  ataque em {d['lead'] * 1000:.0f}ms" if d["lead"] > 0.005 else ""
-        print(f"{f.name:22} pico {d['peak']:6.1f} dB   {d['duration']:.2f}s{lead}{flag}")
-        bad += d["quiet"]
+        print(f"{f.name:22} pico {d['peak']:6.1f} dB   {d['duration']:.2f}s{lead}{flag}{comp}")
+        bad += still_quiet
     if bad:
-        print(f"\n{bad} arquivo(s) abaixo de {QUIET_DB:g} dB — trocar antes de usar",
-              file=sys.stderr)
+        print(f"\n{bad} arquivo(s) continuam abaixo de {QUIET_DB:g} dB mesmo com o "
+              f"reforço de {MAX_BOOST_DB:g}dB — trocar antes de usar", file=sys.stderr)
 
 
 if __name__ == "__main__":

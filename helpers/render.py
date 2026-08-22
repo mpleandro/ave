@@ -1347,15 +1347,23 @@ def measure_loudness(video_path: Path) -> dict[str, str] | None:
 # A conservative broadcast chain for a single spoken voice. Applied BEFORE
 # loudnorm so the normalizer measures the already-mastered signal.
 #   1. highpass 80 Hz .......... kill rumble / HVAC / handling / plosive thump
-#   2. -2.5 dB @ 200 Hz (Q1.1) .. reduce boxiness / mud
-#   3. acompressor ............. even out dynamics, bring the voice forward
-#   4. +2.5 dB @ 3.2 kHz (Q1.6) . presence / intelligibility
-#   5. high-shelf +3 dB @ 9 kHz . air / brightness
-#   6. deesser ................. tame sibilance the presence boost exaggerates
-#   7. alimiter ................ safety ceiling before loudnorm
+#   2. afftdn (nr=10, tn=1) .... broadband noise reduction — fan, hiss, room
+#                                 tone; tracks the noise print continuously
+#                                 instead of a fixed floor, so it adapts across
+#                                 a take instead of needing per-source tuning
+#   3. -2.5 dB @ 200 Hz (Q1.1) .. reduce boxiness / mud
+#   4. acompressor ............. even out dynamics, bring the voice forward
+#   5. +2.5 dB @ 3.2 kHz (Q1.6) . presence / intelligibility
+#   6. high-shelf +3 dB @ 9 kHz . air / brightness
+#   7. deesser ................. tame sibilance the presence boost exaggerates
+#   8. alimiter ................ safety ceiling before loudnorm
 # Every value is a starting point — tune per voice/room if the material asks.
+# afftdn runs BEFORE the compressor on purpose: denoising first keeps the
+# compressor from reading room tone as signal and pumping it up along with the
+# voice — run it after and the noise floor rises with every word.
 VOICE_MASTER_CHAIN = (
     "highpass=f=80,"
+    "afftdn=nr=10:tn=1,"
     "equalizer=f=200:t=q:w=1.1:g=-2.5,"
     "acompressor=threshold=-20dB:ratio=3:attack=12:release=200:makeup=3:knee=6,"
     "equalizer=f=3200:t=q:w=1.6:g=2.5,"
@@ -1380,7 +1388,7 @@ def apply_voice_master(input_path: Path, output_path: Path) -> None:
         "-movflags", "+faststart",
         str(output_path),
     ]
-    print(f"  voice master: EQ + compression + de-ess → {output_path.name}")
+    print(f"  voice master: denoise + EQ + compression + de-ess → {output_path.name}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
@@ -1583,9 +1591,9 @@ def main() -> None:
     ap.add_argument(
         "--voice-master",
         action="store_true",
-        help="Apply spoken-word EQ + mastering (highpass, mud cut, compression, "
-             "presence + air, de-ess, limiter) before loudnorm. Also enabled by "
-             'EDL field "voice_master": true.',
+        help="Apply spoken-word EQ + mastering (highpass, noise reduction, mud "
+             "cut, compression, presence + air, de-ess, limiter) before "
+             'loudnorm. Also enabled by EDL field "voice_master": true.',
     )
     ap.add_argument(
         "--keep-resolution",
@@ -1746,7 +1754,7 @@ def main() -> None:
 
         norm_input = tmp_composite
         if voice_master:
-            print("voice mastering → EQ + compression + de-ess (spoken word)")
+            print("voice mastering → denoise + EQ + compression + de-ess (spoken word)")
             voiced = out_path.with_suffix(".voiced.mp4")
             apply_voice_master(tmp_composite, voiced)
             norm_input = voiced
