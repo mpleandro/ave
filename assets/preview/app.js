@@ -143,6 +143,25 @@ const PORTED = {
   edits: new Set(['limpa', 'split', 'split2', 'brollOverlay', 'caixinha']),
 };
 
+/* QUADRO DE FOCO — substitui, nos mocks de Tipo de edição abaixo, a antiga
+ * silhueta genérica (círculo-cabeça + corpo-blob) herdada do edvid sem troca
+ * de desenho, só de cor. Vocabulário de editor em vez de wireframe de app:
+ * cantos em L de mira de câmera, ponto de gravação em --orange e uma leitura
+ * de timecode — o mesmo tipo de elemento que já aparece na régua da timeline.
+ * cx/cy/s em coordenadas do viewBox 66×118 de cada mock. */
+function quadroFoco(cx, cy, s) {
+  const h = s / 2, bx = cx - h, by = cy - h, L = 6;
+  return `<rect x="${bx}" y="${by}" width="${s}" height="${s}" rx="6" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.22)" stroke-width="1.1"/>
+    <path d="M${bx} ${by + L}v-${L - 2}a2 2 0 012-2h${L - 2}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M${bx + s - L} ${by}h${L - 2}a2 2 0 012 2v${L - 2}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M${bx + s} ${by + s - L}v${L - 2}a2 2 0 01-2 2h-${L - 2}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M${bx + L} ${by + s}h-${L - 2}a2 2 0 01-2-2v-${L - 2}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.4" stroke-linecap="round"/>
+    <circle cx="${bx + s - 6}" cy="${by + 6}" r="2.6" fill="rgb(var(--orange-rgb) / .85)"/>
+    <rect x="${cx - 9}" y="${by + s + 6}" width="6" height="3" rx="1" fill="rgba(255,255,255,.4)"/>
+    <rect x="${cx - 1}" y="${by + s + 6}" width="6" height="3" rx="1" fill="rgba(255,255,255,.4)"/>
+    <rect x="${cx + 7}" y="${by + s + 6}" width="6" height="3" rx="1" fill="rgb(var(--orange-rgb) / .7)"/>`;
+}
+
 const STYLE_CATALOG = {
   edits: [
     {
@@ -157,10 +176,9 @@ const STYLE_CATALOG = {
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="48" r="13" fill="rgba(255,255,255,.16)"/>
-        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
         <rect x="14" y="14" width="38" height="4.4" rx="2.2" fill="rgba(255,255,255,.5)"/>
         <rect x="20" y="21.5" width="26" height="4.4" rx="2.2" fill="rgba(255,255,255,.3)"/>
+        ${quadroFoco(33, 44, 24)}
         <rect x="12" y="74" width="42" height="11" rx="5.5" fill="var(--bg1)" stroke="rgb(var(--blue-rgb) / .65)"/>
         <rect x="16" y="78.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
         <rect x="30" y="78.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
@@ -177,8 +195,7 @@ const STYLE_CATALOG = {
         <path d="M6 36l11-11a2 2 0 013 0l7 7 5-4a2 2 0 013 0l11 8" fill="none" stroke="rgb(var(--orange-rgb) / .6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M3 40.5h60" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
         <rect x="3" y="42" width="60" height="73" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="70" r="12" fill="rgba(255,255,255,.16)"/>
-        <path d="M15 115a18 18 0 0136 0z" fill="rgba(255,255,255,.16)"/>
+        ${quadroFoco(33, 64, 20)}
         <rect x="12" y="35" width="42" height="11" rx="5.5" fill="var(--bg1)" stroke="rgb(var(--blue-rgb) / .65)"/>
         <rect x="16" y="39.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
         <rect x="30" y="39.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
@@ -191,8 +208,7 @@ const STYLE_CATALOG = {
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="65" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="24" r="11" fill="rgba(255,255,255,.16)"/>
-        <path d="M16 68a17 17 0 0134 0z" fill="rgba(255,255,255,.16)"/>
+        ${quadroFoco(33, 30, 18)}
         <path d="M3 69.5h60" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
         <rect x="3" y="71" width="60" height="44" rx="5" fill="rgb(var(--orange-rgb) / .16)"/>
         <circle cx="17" cy="83" r="3.6" fill="rgb(var(--orange-rgb) / .6)"/>
@@ -212,8 +228,7 @@ const STYLE_CATALOG = {
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="62" r="13" fill="rgba(255,255,255,.16)"/>
-        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
+        ${quadroFoco(33, 82, 22)}
         <rect x="9" y="17" width="48" height="30" rx="5" fill="#fff"/>
         <path d="M9 22a5 5 0 015-5h38a5 5 0 015 5v4H9z" fill="#26262b"/>
         <rect x="19" y="20" width="28" height="2.6" rx="1.3" fill="rgba(255,255,255,.75)"/>
@@ -233,8 +248,7 @@ const STYLE_CATALOG = {
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="48" r="13" fill="rgba(255,255,255,.10)"/>
-        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.10)"/>
+        <g opacity=".32">${quadroFoco(33, 44, 24)}</g>
         <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(0,0,0,.55)"/>
         <rect x="10" y="44" width="46" height="20" rx="4" fill="var(--bg1)" stroke="rgb(var(--orange-rgb) / .8)"/>
         <rect x="15" y="50" width="24" height="4" rx="2" fill="rgb(var(--orange-rgb) / .9)"/>
@@ -308,34 +322,87 @@ const STYLE_CATALOG = {
   elements: [
     {
       id: 'tracking',
-      name: 'Movimento de tracking',
+      name: 'Seguir rosto',
       def: false,
       icon: '<svg viewBox="0 0 16 16"><path d="M2 5.6V3.4A1.4 1.4 0 013.4 2h2.2M10.4 2h2.2A1.4 1.4 0 0114 3.4v2.2M14 10.4v2.2a1.4 1.4 0 01-1.4 1.4h-2.2M5.6 14H3.4A1.4 1.4 0 012 12.6v-2.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="8" r="2.1"/></svg>',
     },
     {
       id: 'zoomAuto',
-      name: 'Automação de zoom in',
+      name: 'Auto Zoom',
       def: true,
       icon: '<svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.6 10.6L14 14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none"/><path d="M7 5.1v3.8M5.1 7h3.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>',
     },
     {
       id: 'zoomCuts',
-      name: 'Zoom in e out nos cortes',
+      name: 'Zoom In/Out',
       def: true,
       icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="3.4" width="6" height="9.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9.6" y="1.9" width="5.2" height="12.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8.4 8h.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
     },
     {
       id: 'flashCut',
-      name: 'Flash na transição',
+      name: 'Flash',
       def: false,
       icon: '<svg viewBox="0 0 16 16"><path d="M3 13.2L13 3.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/><path d="M6.6 14L9.4 11.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/><path d="M6.6 4.8L3.8 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/></svg>',
+    },
+    /* Os oito estilos do motor `transicao` (assets/styles/transicao.js) —
+     * mesmo checklist do flashCut acima, um por `estilo`. O id aqui é
+     * camelCase (convenção desta lista); quem grava `transitions[].estilo`
+     * no edit-data.json traduz para o snake_case do catálogo Python
+     * (zoomBlur → "zoom_blur"), documentado em references/shortform.md. */
+    {
+      id: 'chama',
+      name: 'Chama',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><path d="M8 14c-2.6 0-4.4-1.6-4.4-3.9 0-1.5.9-2.3.9-3.6 0-1 .4-1.7.9-2.3-.1.9.3 1.5.9 1.5.6 0 .5-1 .5-1.7 0-1.3.8-2.5 1.8-3-.3 1.3.2 2.3 1 3.1.9 1.1 2 2.3 2 4 0 2.2-1.7 3.9-3.6 3.9z" fill="currentColor" opacity=".85"/></svg>',
+    },
+    {
+      id: 'tranco',
+      name: 'Tranco',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 8h2.2M11.8 8H14M8 2v2.2M8 11.8V14M4.3 4.3l1.5 1.5M10.2 10.2l1.5 1.5M11.7 4.3l-1.5 1.5M5.8 10.2l-1.5 1.5"/><circle cx="8" cy="8" r="1.7" fill="currentColor" stroke="none"/></svg>',
+    },
+    {
+      id: 'estouro',
+      name: 'Estouro',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 8L3.4 3.4M8 8l4.6-4.6M8 8l-4.6 4.6M8 8l4.6 4.6"/><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none"/></svg>',
+    },
+    {
+      id: 'zoomBlur',
+      name: 'Zoom blur',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="6.2" cy="8" r="3.6"/><path d="M10.4 8h4M11.2 5.8h3.2M11.2 10.2h3.2" opacity=".65"/></svg>',
+    },
+    {
+      id: 'deslize',
+      name: 'Deslize',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.6 8h8.6M7 4.5L10.6 8 7 11.5"/><path d="M13.2 3v10" opacity=".5"/></svg>',
+    },
+    {
+      id: 'cortina',
+      name: 'Cortina',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 2v12M14 2v12"/><path d="M2 2c2.2 3 2.2 7 0 12M14 2c-2.2 3-2.2 7 0 12" opacity=".6"/></svg>',
+    },
+    {
+      id: 'iris',
+      name: 'Íris',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="8" cy="8" r="5.6"/><path d="M8 2.4v3M13.1 5.6l-2.7 1.6M13.1 10.4l-2.7-1.6M8 13.6v-3M2.9 10.4l2.7-1.6M2.9 5.6l2.7 1.6"/></svg>',
+    },
+    {
+      id: 'falha',
+      name: 'Falha',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 5h6.5M2 8h9.4M2 11h4.8"/><path d="M9.3 5h4.7" opacity=".4"/><path d="M6.2 11h7.8" opacity=".4"/></svg>',
     },
     {
       id: 'sfx',
       /* Efeitos LOCAIS, da biblioteca em assets/sfx/. Vem antes da geração por
        * IA de propósito: é o caminho que não custa token nem espera, e a
        * ordem da lista é a ordem em que se pensa nas opções. */
-      name: 'Aplicar efeitos sonoros',
+      name: 'Meus Efeitos',
       def: true,
       icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 2.2 4.6 5H2.2v6h2.4L8 13.8z" fill="currentColor" stroke-linejoin="round"/><path d="M11.2 5.6a3.4 3.4 0 0 1 0 4.8" opacity=".75"/><path d="M13.4 3.4a6.4 6.4 0 0 1 0 9.2" opacity=".45"/></svg>',
     },
@@ -2591,8 +2658,9 @@ const LAYERS = [
   { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
     ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
   { id: 'transicoes', name: 'Transições', sub: 'Cortes, fades e transições entre clipes',
-    ico: 'notes', elements: ['flashCut'] },
-  { id: 'trilha', name: 'Trilha & mixagem', sub: 'Áudio, níveis, ducking e mixagem final',
+    ico: 'notes',
+    elements: ['flashCut', 'chama', 'tranco', 'estouro', 'zoomBlur', 'deslize', 'cortina', 'iris', 'falha'] },
+  { id: 'trilha', name: 'Efeitos Sonoros', sub: 'Áudio, níveis, ducking e mixagem final',
     ico: 'music', elements: ['sfx', 'musicAI'] },
 ];
 

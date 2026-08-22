@@ -54,7 +54,8 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
-| `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" |
+| `elements.flashCut` | `transitions[]` in edit-data.json, `estilo: "flash"` (ou ausente) — see "Flash na transição" |
+| `elements.chama` \| `tranco` \| `estouro` \| `zoomBlur` \| `deslize` \| `cortina` \| `iris` \| `falha` | idem, `transitions[].estilo` no `snake_case` do catálogo Python (`zoomBlur` → `"zoom_blur"`, os demais iguais) — see "Motor de transições" |
 | `elements.sfx` | **"Aplicar efeitos sonoros"** — os efeitos LOCAIS de `assets/sfx/`, disparados pelos eventos da composição (entrada de cartão, flash, deixa em destaque). Ligado por padrão. OFF → nenhum efeito entra, mesmo havendo evento. Não custa token nem espera: é o caminho barato, e vem antes da geração por IA na lista por isso |
 | `elements.musicAI` | **"Gerar com IA"** — Phase 3 via `treblo_music.py`; OFF → deliver with voice only. Custa token e minutos |
 | `note` | free text — read it, it overrides the defaults above |
@@ -567,6 +568,83 @@ transition means something. Optional per entry: `intensity` (default 1), `sfx`,
   tinha de ser remixado no ffmpeg, porque a cura do drift jogava fora o áudio do
   render. Sem drift, o efeito fica onde foi autorado e chega inteiro na entrega —
   `sfx_blocks()` já compensa o silêncio inicial MEDIDO de cada arquivo.
+
+## Motor de transições (`transicao`) — os estilos ALÉM do flash
+
+Oito estilos novos, um motor (`assets/styles/transicao.css` + `transicao.js`),
+mesmo molde do `cartela`/`palavra`: o Python (`transicao_parts` em
+`compose_shortform.py`) só resolve a entrada de `variants.json.transicoes.<estilo>`
+e escreve a MESMA casca sempre — quem decide o que se move é `transicao.js`,
+pelo `tipo` da entrada, sem branch nenhum no compositor por estilo.
+
+```json
+"transitions": [{"at": 11.7, "estilo": "zoom_blur"}]
+```
+
+`at` é o instante do corte, exatamente como no `flash` — `VIDEO_LAG`/`segments.json`
+o alinham com o quadro em que a imagem troca. `estilo` decide o catálogo; ausente,
+continua sendo `flash` (caminho antigo, intocado). Cada entrada aceita ainda
+`dur`, `sfx` (`false` cala só esta instância), `volume`, e os números do próprio
+tipo (`px`, `escala`, `blur`, `direcao`, `cor`, `cx`/`cy`) — o que vier na
+instância PISA o catálogo, a mesma regra do `intensity` do flash.
+
+| `estilo` | `tipo` | o que é | quando usar |
+|---|---|---|---|
+| `chama` | cor | flash de cor sólida no accent, 1–2 quadros | pontuar um corte comum, mais barato que o flash |
+| `tranco` | shake | tranco de câmera de ~150ms no corte | leitura de impacto, ritmo acelerado |
+| `estouro` | zoom | zoom-punch seco (1,08×), sem borrão | o mesmo mecanismo do zoomCuts, como evento no corte |
+| `zoom_blur` | zoom | zoom-punch (1,14×) + borrão radial crescendo | o "zoom rápido" comum em edição de Reels/CapCut |
+| `deslize` | swipe | um painel atravessa o quadro de um lado a outro | fronteira de cena/insert; `direcao`: `esquerda`\|`direita`\|`cima`\|`baixo` |
+| `cortina` | cobre | chapa retangular cobre e revela | fronteira de cena/insert, mais raro |
+| `iris` | cobre | mesma mecânica, recorte circular | idem, vocabulário de cinema |
+| `falha` | glitch | três tiras coloridas saltam no corte (RGB split) | virada grande — capítulo, insert |
+
+**Dois caminhos, pelo `tipo` — e por quê importa:**
+
+- `shake`/`zoom` animam o **próprio `#a-roll`** (é câmera, não precisa de camada
+  por cima).
+- `cor`/`cobre`/`swipe`/`glitch` desenham numa camada da PRÓPRIA instância
+  (`.tz-panel`/`.tz-slice`, sempre emitidos, mesmo pelos tipos que não os usam —
+  é o que mantém o Python sem um branch de markup por estilo) que ESCONDE a
+  emenda por baixo. **Nenhum destes é um crossfade real entre duas tomadas** — o
+  `preview.mp4` é um vídeo só, já cortado na Fase 1 (Regra 2); um "swipe" aqui é
+  um painel atravessando por cima do corte, não duas tomadas literalmente
+  deslizando uma sobre a outra. Um swipe de verdade (as duas imagens visíveis ao
+  mesmo tempo) exigiria dois elementos de vídeo apontando pro MESMO arquivo — um
+  congelado antes do corte, outro a partir dele — e não está portado.
+
+**`shake`/`zoom` COMPÕEM com a câmera, não substituem.** `zoomCuts`/`zoomAuto`
+(camera.js) já animam `scale` do mesmo `#a-roll`, e os dois tweens vivem no
+MESMO `tl` — `camera_parts` sempre entra na timeline antes deste motor. Por
+isso `transicao.js` nunca assume `scale:1`/`x:0`/`y:0` como base: ele AMOSTRA
+(`tl.seek` + `gsap.getProperty`) o valor que a câmera já deixaria ali, tanto
+ANTES quanto DEPOIS do corte, e o "estouro"/"zoom_blur" pulam a partir do
+primeiro e assentam no segundo. Sem essa amostra, ligar `zoomCuts` (que é o
+padrão) com um `estouro` no mesmo corte prendia o vídeo no zoom do segmento
+ANTIGO pelo resto do segmento novo — nada reafirmava a câmera depois, porque
+ela só seta de novo no PRÓXIMO corte.
+
+A janela em volta do corte é sempre CENTRADA: `transicao_parts` escreve
+`data-start = at − dur/2`, então o corte cai no MEIO de qualquer instância,
+nunca na ponta. É por isso que `cobre` (cortina/íris) tem um platô no meio —
+o vídeo troca por baixo enquanto a chapa está no auge, nunca durante o
+movimento de abrir/fechar, senão a emenda apareceria a meio caminho do recorte.
+
+**Track própria** (`TRACK['transicao']`, separada de `TRACK['flash']`): os dois
+motores podem coexistir no mesmo vídeo (cortes diferentes, estilos diferentes)
+sem o `check` acusar duas coisas na mesma track no mesmo instante.
+
+**SFX por estilo, com o mesmo interruptor do resto** (`elements.sfx`):
+`chama`→`tick`, `tranco`→`impact`, `estouro`/`zoom_blur`→`camera`,
+`deslize`→`elementOut`, `cortina`/`iris`→`transitionSoft`, `falha`→`transitionCut`.
+Todos medidos com `sfx.py` antes de entrar no catálogo (nenhum abaixo de −12dB).
+`{"sfx": false}` na instância cala só ela; o padrão do estilo troca com
+`{"sfx": "<outro kind>"}` ou `{"sfx": {"file": ..., "volume": ...}}`.
+
+**Um estilo novo é só uma entrada em `variants.json.transicoes`, SE o `tipo`
+já existir.** Um `tipo` novo (nem cor/shake/zoom/swipe/cobre/glitch) pede uma
+função em `transicao.js` — mas nunca um branch em `compose_shortform.py`: o
+Python não sabe nem precisa saber o que cada `tipo` faz.
 
 ## Style: "Nenhum" (`edit: "limpa"`) — no split inserts
 

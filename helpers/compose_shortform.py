@@ -62,12 +62,16 @@ TRACK = {
     "wordaccent": 7,
     "hook": 8,       # acima da legenda: os dois disputam a costura
     "flash": 9,      # por cima de tudo que é imagem
-    "soundtrack": 10,
-    "sfx": 11,
-    # FORA da faixa do SFX. `SFX_LAYERS` numera 12–14 à mão logo abaixo, e o
+    "transicao": 10, # os estilos novos do motor `transicao` — track própria,
+                     # nunca a do flash: as duas podem coexistir no mesmo
+                     # projeto (cortes diferentes, estilos diferentes) e o
+                     # check bane duas coisas na mesma track no mesmo instante.
+    "soundtrack": 11,
+    "sfx": 12,
+    # FORA da faixa do SFX. `SFX_LAYERS` numera 13–15 à mão logo abaixo, e o
     # áudio do a-roll ocupa a duração inteira: dividir track com um efeito curto
     # daria "overlapping_clips_same_track" em todo projeto com som.
-    "audio": 16,
+    "audio": 17,
 }
 
 # Camadas de efeito. Com um índice só os efeitos eram obrigados a NUNCA se
@@ -75,7 +79,7 @@ TRACK = {
 # derrubando o render por desenho de som legítimo (o riser do gancho correndo
 # por baixo do whoosh de entrada). A voz mora na 11, então as camadas extras
 # pulam para 12+.
-SFX_LAYERS = [TRACK["sfx"], 12, 13, 14]
+SFX_LAYERS = [TRACK["sfx"], 13, 14, 15]
 
 # O RISCO do empilhado — a volta a lápis que envolve a palavra, portada do
 # edvid (`assets/shortform/src/PencilOutline.tsx`). Laço frouxo e ondulado com
@@ -1797,6 +1801,70 @@ def camera_parts(data, duration):
     return js, style, blocks
 
 
+# Uma deixa de som por estilo, tocada quando `elements.sfx` está ligado e o
+# evento não trouxe a sua própria (`tr["sfx"]`). `False` explícito no evento
+# cala SÓ aquela instância, sem desligar o resto. Os arquivos foram medidos
+# com `sfx.py` antes de entrar aqui (nenhum abaixo de -12dB, nenhum com lead
+# maior que a própria duração do efeito) — trocar um só vale com a mesma
+# checagem.
+TRANSICAO_SFX = {
+    "flash": "flash",
+    "chama": "tick",
+    "tranco": "impact",
+    "estouro": "camera",
+    "zoom_blur": "camera",
+    "deslize": "elementOut",
+    "cortina": "transitionSoft",
+    "iris": "transitionSoft",
+    "falha": "transitionCut",
+}
+
+
+def transicao_parts(data, duration):
+    """Blocos <div class="ave-transicao"> para os `transitions[]` cujo
+    `estilo` está no motor NOVO (transicao.css/js) — tudo que não é `flash`,
+    que continua no caminho de sempre em `camera_parts`.
+
+    Regra 11: nenhum branch por estilo aqui. Python só resolve a entrada do
+    catálogo (`variants.json.transicoes.<estilo>`), funde o que o evento
+    sobrescreveu (mesma regra do `intensity` do flash — dado na instância
+    vence o padrão) e escreve a MESMA casca para qualquer tipo; quem decide o
+    que se move dentro dela é `transicao.js`, pelo `tipo`.
+    """
+    cat = VARIANTS.get("transicoes", {})
+    blocks = []
+    for k, tr in enumerate(data.get("transitions") or []):
+        estilo = tr.get("estilo", "flash")
+        if estilo == "flash" or estilo not in cat:
+            continue
+        at = float(tr.get("at", 0))
+        if at >= duration:
+            continue
+        base = cat[estilo]
+        dur = float(tr.get("dur", base.get("dur", 0.2)))
+        # Centrado no corte — nunca só liderando: os tipos que cobrem
+        # (cortina/íris) precisam de platô ANTES e DEPOIS do instante em que
+        # o vídeo troca, senão a emenda aparece a meio caminho do recorte.
+        start = max(0.0, at - dur / 2)
+        dur = min(dur, duration - start)
+        if dur <= 0:
+            continue
+        defobj = {**base, **{kk: vv for kk, vv in tr.items()
+                              if kk not in ("at", "estilo", "dur", "sfx", "volume")}}
+        blocks.append(
+            f'  <div id="tz{k}" class="ave-transicao tz-{estilo} clip" '
+            f'data-start="{start:.3f}" data-duration="{dur:.3f}" '
+            f'data-track-index="{TRACK["transicao"]}" '
+            f"data-def='{json.dumps(defobj, separators=(',', ':'), ensure_ascii=False)}'>"
+            '<div class="tz-panel"></div>'
+            '<div class="tz-slice tz-slice-1"></div>'
+            '<div class="tz-slice tz-slice-2"></div>'
+            '<div class="tz-slice tz-slice-3"></div>'
+            "</div>"
+        )
+    return blocks
+
+
 def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vdur=None) -> str:
     vdur = duration if vdur is None else vdur
     accent = data.get("accent") or "#FF6B1A"
@@ -1814,8 +1882,17 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         events.append((0.0, "hook"))
     for tr in (data.get("transitions") or []):
         at = float(tr.get("at", 0))
-        if at < duration:
-            events.append((at, "flash"))
+        if at >= duration:
+            continue
+        # `sfx` na instância vence o padrão do estilo; `False` explícito cala
+        # SÓ esta transição, sem desligar `elements.sfx` para o resto.
+        if "sfx" in tr:
+            if tr["sfx"]:
+                events.append((at, tr["sfx"]))
+            continue
+        default = TRANSICAO_SFX.get(tr.get("estilo", "flash"))
+        if default:
+            events.append((at, default))
     for c in (data.get("_soloCues") or []):
         events.append(c)
     # Deixas escritas à mão — o único canal para um som que NÃO nasce de um
@@ -1872,6 +1949,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     if splits:
         data = {**data, "_camOff": True}
     cam_js, cam_style, flash_blocks = camera_parts(data, duration)
+    tz_blocks = transicao_parts(data, duration)
 
     # A FAMÍLIA ESCOLHIDA NA ABA ESTILO, com o padrão sendo a do próprio
     # estilo. Vazio aqui não é "sem fonte": é "a de fábrica", e por isso a
@@ -2053,6 +2131,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         parts.append(track_js)
     if cam_js:
         parts.append(cam_js)
+    if tz_blocks:
+        parts.append("  AVE_TRANSICAO.buildTimeline(document.getElementById('root'), gsap, tl);")
     needs_tl = bool(parts)
     track_tag = '<script src="styles/tracking.js"></script>' if track_js else ""
 
@@ -2273,6 +2353,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     elif flash_blocks:
         extra_css = '<link rel="stylesheet" href="styles/camera.css">'
     cam_tag = '<script src="styles/camera.js"></script>' if cam_js else ""
+    tz_css = '<link rel="stylesheet" href="styles/transicao.css">' if tz_blocks else ""
+    tz_tag = '<script src="styles/transicao.js"></script>' if tz_blocks else ""
     gsap_tag = ('<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>'
                 if needs_tl else "")
     no_tl = "" if needs_tl else " data-no-timeline"
@@ -2288,6 +2370,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 <link href="https://fonts.googleapis.com/css2?{gfont}&display=swap" rel="stylesheet">
 {gsap_tag}
 {cam_tag}
+{tz_tag}
 {track_tag}
 {split_tag}
 {bo_tag}
@@ -2297,6 +2380,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 {cap_css}
 {hook_css}
 {extra_css}
+{tz_css}
 {split_css}
 {bo_css}
 {cx_css}
@@ -2312,7 +2396,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 </head>
 <body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="{duration:.3f}"
-     data-width="{W}" data-height="{H}"{no_tl}>
+     data-width="{W}" data-height="{H}" data-accent="{accent}"{no_tl}>
 
   <div id="vidwin">
     <video id="a-roll" class="clip" src="{video}" muted playsinline
@@ -2329,6 +2413,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 {split_block}
 {bo_html}
 {chr(10).join(flash_blocks)}
+{chr(10).join(tz_blocks)}
 {insert_html}
 {wa_html}
 {bg_html}
@@ -2418,6 +2503,11 @@ def main() -> None:
             and any((data.get("elements") or {}).get(k, True) for k in ("zoomCuts", "zoomAuto"))) \
             or data.get("transitions"):
         files += ["camera.js", "camera.css"]
+    # motor `transicao`: só entra quando algum `transitions[]` pede um estilo
+    # ALÉM do flash (que continua servido por camera.js/css acima).
+    if any(tr.get("estilo", "flash") in VARIANTS.get("transicoes", {})
+           for tr in (data.get("transitions") or [])):
+        files += ["transicao.css", "transicao.js"]
     for f in files:
         shutil.copy2(STYLES_DIR / f, proj / "styles" / f)
 

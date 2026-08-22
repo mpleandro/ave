@@ -1387,6 +1387,20 @@ kbd {
 .chk.on .chk-ico { color: var(--blue); }
 .chk-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; }
 
+/* Movimento & tracking fica no --blue (frio, câmera) — é a referência que as
+   duas linhas abaixo deixam de repetir. Antes as três camadas marcavam
+   exatamente com a mesma cor, então nenhuma delas soava como sua; um corte
+   com flash é uma decisão de AÇÃO (o mesmo --orange do botão e dos cartões
+   de estilo), e áudio ganha --orange-soft porque é a cor que a própria
+   waveform já pinta em drawWave() — o controle passa a "rimar" com a trilha
+   que ele afeta, em vez de contradizê-la em azul. */
+#optEl-transicoes .chk.on { border-color: rgb(var(--orange-rgb) / 0.5); background: rgb(var(--orange-rgb) / 0.08); }
+#optEl-transicoes .chk.on .chk-box { border-color: var(--orange); background: var(--orange); }
+#optEl-transicoes .chk.on .chk-ico { color: var(--orange); }
+#optEl-trilha .chk.on { border-color: rgb(var(--orange-soft-rgb) / 0.5); background: rgb(var(--orange-soft-rgb) / 0.08); }
+#optEl-trilha .chk.on .chk-box { border-color: var(--orange-soft); background: var(--orange-soft); }
+#optEl-trilha .chk.on .chk-ico { color: var(--orange-soft); }
+
 #setupNote {
   flex: 1 1 auto;
   min-width: 0;

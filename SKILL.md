@@ -442,8 +442,10 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   centre-anchored cousin).
 - **Elementos da edição** — checkboxes: `tracking` (movimento de tracking),
   `zoomAuto` (automação de zoom in), `zoomCuts` (zoom in/out nos cortes),
-  `flashCut` (flash na transição), `musicAI` (trilha sonora com IA), plus a
-  free-text observation field.
+  `flashCut` (flash na transição) e os sete siblings dele na camada
+  "Transições" — `chama` `tranco` `estouro` `zoomBlur` `deslize` `cortina`
+  `iris` `falha`, um por `estilo` do motor `transicao` — `musicAI` (trilha
+  sonora com IA), plus a free-text observation field.
 
 **O servidor DISPARA a Fase 2 sozinho no salvar** (`--auto` é o padrão do
 `preview_server.py`) — então quando o `watch_edits.py` te avisar de um estilo
@@ -784,6 +786,7 @@ not — verified in the render. Any other error still blocks.
 | Headlines · motor `cartela` (TELA CHEIA) | `capa` `capa_blur` `cortina` `meia_tela` `moldura` `contagem` `knockout` `poster` `aspas` `ficha` |
 | Edição | `limpa` `split` `split2` |
 | Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash |
+| Transições · motor `transicao` | `chama` `tranco` `estouro` `zoom_blur` `deslize` `cortina` `iris` `falha` (além do `flash` acima, que continua em `camera.js`) |
 | Curta | inserts, palavras em destaque, gráficos sob medida |
 | Longform | B-roll, lower-thirds, cards de capítulo, callouts |
 | Som | efeitos por evento + trilha |

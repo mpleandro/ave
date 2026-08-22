@@ -1,0 +1,44 @@
+/* TRANSIÇÃO — folha do motor `transicao`. Par de `transicao.js`.
+ *
+ * Estrutura ÚNICA para os quatro tipos que desenham por cima (cor, cobre,
+ * swipe, glitch): cada instância já nasce com um `.tz-panel` e três
+ * `.tz-slice` — os que o tipo não usa simplesmente ficam invisíveis (opacity
+ * 0 aqui). Isso mantém compose_shortform.py sem um branch de markup por
+ * estilo: o Python emite a MESMA casca sempre, e quem decide o que se move
+ * é transicao.js lendo `data-def` (a entrada de variants.json.transicoes).
+ *
+ * Os tipos 'shake'/'zoom' não usam nada desta folha — animam o próprio
+ * #a-roll, então uma instância deles fica com o painel e as fatias parados,
+ * invisíveis, sem custo.
+ */
+.ave-transicao {
+  position: absolute;
+  inset: 0;
+  z-index: 5; /* por cima da imagem (vídeo, split, inserts), abaixo da legenda */
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ave-transicao .tz-panel {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  clip-path: inset(0 0 100% 0); /* escondido por padrão até o JS assumir */
+  will-change: opacity, clip-path, transform;
+}
+
+.ave-transicao .tz-slice {
+  position: absolute;
+  left: -4%;
+  right: -4%;
+  opacity: 0;
+  mix-blend-mode: screen;
+  will-change: opacity, transform;
+}
+
+/* Falha (glitch) — três tiras coloridas, sempre nas mesmas bandas. O
+   deslocamento e o instante de cada uma são de transicao.js; a cor e a
+   faixa (onde na tela) são só desenho e vivem aqui. */
+.ave-transicao .tz-slice-1 { top: 18%; height: 11%; background: rgba(255, 0, 80, 0.55); }
+.ave-transicao .tz-slice-2 { top: 44%; height: 9%; background: rgba(0, 220, 255, 0.5); }
+.ave-transicao .tz-slice-3 { top: 66%; height: 13%; background: rgba(255, 214, 0, 0.4); }

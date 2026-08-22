@@ -2329,6 +2329,17 @@
     "blur": 16,
     "intensity": 1.0
   },
+  "_transicoes_readme": "Motor `transicao` (transicao.css/js) — efeitos no CORTE entre duas tomadas, além do `flash` acima (que continua no caminho antigo em camera.js, intocado). `tipo` decide a mecânica em transicao.js, sem branch por `estilo`: 'shake'/'zoom' animam o #a-roll direto (é câmera, não precisa de camada); 'cor'/'cobre'/'swipe'/'glitch' desenham uma camada por cima que ESCONDE a emenda. Isso importa porque o preview.mp4 já é um vídeo só, cortado na Fase 1 (Regra 2) — nenhum destes é um crossfade real entre duas tomadas, é uma camada cobrindo o instante do corte. Um estilo novo é uma entrada aqui; a janela ao redor do corte (`start = at − dur/2`) e a proporção interna de cada tipo (zoom assimétrico, cobre com hold no meio) são constantes em transicao.js, como o FLASH_LEAD_FRAMES do flash.",
+  "transicoes": {
+    "chama": {"tipo": "cor", "dur": 0.15, "cor": "accent", "pico": 0.85},
+    "tranco": {"tipo": "shake", "dur": 0.15, "px": 9},
+    "estouro": {"tipo": "zoom", "dur": 0.20, "escala": 1.08, "blur": 0},
+    "zoom_blur": {"tipo": "zoom", "dur": 0.30, "escala": 1.14, "blur": 18},
+    "deslize": {"tipo": "swipe", "dur": 0.18, "direcao": "esquerda", "cor": "accent"},
+    "cortina": {"tipo": "cobre", "dur": 0.30, "forma": "retangulo", "cor": "accent"},
+    "iris": {"tipo": "cobre", "dur": 0.30, "forma": "circulo", "cor": "accent", "cx": 0.5, "cy": 0.42},
+    "falha": {"tipo": "glitch", "dur": 0.22}
+  },
   "_split_readme": "Layouts da tela dividida. `focusY` é um y DA FONTE que vai parar no topo da janela de vídeo (y_src desenha em (y_src-focusY)*zoom). Os defaults servem uma cabeça de ~660px começando em y 455 — MEÇA antes de confiar: tire um quadro do corte, leia o topo do cabelo e o queixo, e ajuste. Cada janela pode sobrepor focusY/zoom, porque num corte multi-take a cabeça se move (medido: ~170px entre tomadas).",
   "split": {
     "top": {
