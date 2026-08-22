@@ -105,6 +105,7 @@ def build(edit: Path) -> dict:
             if not (a <= s < b):
                 continue
             text = w["text"]
+            pieces = None
             for f in fixes:
                 # o TEMPO sozinho não identifica uma palavra: com fala corrida
                 # cabem três dentro de 0,15s, e a primeira versão disto pintou
@@ -113,18 +114,28 @@ def build(edit: Path) -> dict:
                 if (f.get("source") == r["source"]
                         and abs(float(f["srcStart"]) - s) <= 0.15
                         and f["from"].lower().strip(" .,;:!?") == w["text"].lower().strip(" .,;:!?")):
-                    text = f["text"]
+                    # uma correção pode PARTIR a palavra em várias: quando o
+                    # Whisper engole uma retomada inteira, o erro não é de texto,
+                    # é de contagem — "quanto" carimbado 89.42–90.78 esconde
+                    # "o posicionamento firme sobre o quanto". `words` (tempos da
+                    # FONTE) substitui a palavra pelas medidas na passada isolada.
+                    if f.get("words"):
+                        pieces = [(x["text"], float(x["start"]), float(x["end"]))
+                                  for x in f["words"]]
+                    else:
+                        text = f["text"]
                     break
-            out.append({
-                "type": "word",
-                "text": text,
-                # grampeado no trecho: o Whisper adianta o início e estica o
-                # fim, e sem o grampo a última palavra de um take vaza para
-                # depois do corte
-                "start": round(off + max(0.0, s - a), 3),
-                "end": round(off + min(e, b) - a, 3),
-                "speaker_id": w.get("speaker_id", "speaker_0"),
-            })
+            for ptext, ps, pe in (pieces or [(text, s, e)]):
+                out.append({
+                    "type": "word",
+                    "text": ptext,
+                    # grampeado no trecho: o Whisper adianta o início e estica o
+                    # fim, e sem o grampo a última palavra de um take vaza para
+                    # depois do corte
+                    "start": round(off + max(0.0, ps - a), 3),
+                    "end": round(off + min(pe, b) - a, 3),
+                    "speaker_id": w.get("speaker_id", "speaker_0"),
+                })
         cursor += b - a
 
     out.sort(key=lambda w: w["start"])
