@@ -50,13 +50,11 @@ vez que o recurso for usado**, e você decide na hora. O editor também mostra
 essa mesma checklist na tela inicial, com ✓ e ✗ do que esta máquina tem.
 
 ---
-
-## Instalação
-
-> **A instalação é feita por você, no seu terminal.** Não peça para o agente
-> instalar a partir do link do GitHub — ele vai recusar, e com razão: nenhum
-> agente deve baixar e executar código de um repositório desconhecido por conta
-> própria. Cole os comandos abaixo você mesmo. Leva uns 5 minutos.
+> **Do jeito mais simples: peça para o agente instalar.** Abra o Claude Code (ou
+> Codex) numa pasta qualquer e diga *"instale https://github.com/mpleandro/ave"*
+> — ele clona o repo, instala as dependências (Python, ffmpeg, confere o Node) e
+> pergunta a chave do Groq quando chegar a hora. Leva uns 5 minutos, sem você
+> copiar nada.
 
 Depois de instalada, o agente ajuda com o resto (chave de API, verificação,
 problemas de PATH) — aí é tudo local e não tem recusa nenhuma.
