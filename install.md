@@ -58,6 +58,12 @@ curl -s localhost:4820/api/state | python3 -m json.tool | sed -n '/deps/,/}/p'
 ## Install prompt contract
 
 - Only ask the user for things you cannot generate — the Groq API key, and confirmation before any package-manager install that needs sudo/admin.
+- Never tell the user to open a separate terminal for a setup step (`uv sync`,
+  `brew install`, `winget install`, `apt-get install`, …). Claude Code's normal
+  interactive mode shows an inline approval prompt for these commands — the
+  user accepts it without leaving the chat. Explain what the command does and
+  wait for that in-chat approval; a "run this yourself in a terminal" message
+  is a worse experience than the prompt itself, not a safer one.
 - Two supported layouts. **User layout** (the README default, and what you should assume): the repo *is* the skill directory — `~/.claude/skills/ave` on macOS/Linux, `%USERPROFILE%\.claude\skills\ave` on Windows. Nothing to register, no symlink, identical on every OS. **Contributor layout**: repo at `~/Developer/ave` plus a symlink into the skills dir (step 4) — use it only when the user develops the skill and wants the repo among their projects.
 - The skill references helpers by bare name (`transcribe.py`, `render.py`). That works because SKILL.md and `helpers/` ship together — keep them as siblings whichever layout you use.
 - Detect the platform before emitting commands. This file's blocks are POSIX shell unless marked; every step has a PowerShell variant for Windows. Do not hand a Windows user `ln`, `brew`, `chmod`, `grep`, `sed`, or `curl -s -w` — `curl` in PowerShell is an alias for `Invoke-WebRequest` and takes different flags.
