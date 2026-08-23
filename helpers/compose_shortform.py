@@ -469,17 +469,16 @@ def caixinha_markup(data: dict, duration: float, events: list, accent: str) -> t
 
     Dado em `edit-data.json`:
         "questionBox": {"chamada": "mande sua dúvida 🤎",
-                        "pergunta": "…", "resposta": "…" (opcional),
+                        "pergunta": "…",
                         "start": 0.0, "end": 8.4 | null (fica até o fim),
-                        "top": 300, "respostaAt": 4.2}
+                        "top": 300}
 
     Duas decisões de construção que o formato exige:
 
     · a caixa NÃO veste o Motion Kit — a fidelidade é com a interface do app,
       e um adesivo com a cara da marca de quem edita deixa de ser o adesivo;
-    · `end` ausente (ou ≥ duração) significa FICAR ATÉ O FIM, e nesse caso não
-      há animação de saída: despedir-se de algo que acaba junto com o vídeo lê
-      como falha de render, não como escolha.
+    · SEM ANIMAÇÃO: a caixa fica fixa na tela do início ao fim da sua janela
+      e some no corte — sem tween de entrada nem de saída.
     """
     q = data.get("questionBox") or {}
     pergunta = (q.get("pergunta") or "").strip()
@@ -517,20 +516,11 @@ def caixinha_markup(data: dict, duration: float, events: list, accent: str) -> t
     palavras = " ".join(f'<span class="cx-w">{esc(w)}</span>' for w in pergunta.split())
     chamada = esc(_cabe((q.get("chamada") or "mande sua dúvida").strip(),
                         int(cx0.get("limiteChamada", 60)), "a chamada da caixinha"))
-    resposta = (q.get("resposta") or "").strip()
-    resp_html, resp_attr = "", ""
-    if resposta:
-        # a resposta entra DEPOIS da pergunta ser lida; sem instrução, um respiro
-        # proporcional ao tamanho dela (≈45ms por palavra, piso de 1,2s)
-        resp_at = float(q.get("respostaAt", s + max(1.2, 0.34 + 0.045 * len(pergunta.split()) + 0.6)))
-        resp_html = f'\n    <div class="cx-resposta">{esc(resposta)}</div>'
-        resp_attr = f' data-reply-at="{resp_at:.3f}"'
-        events.append((resp_at, "callout"))
 
-    events.append((s, "element"))   # o adesivo colando
-    r = cx.get("resposta", {})
+    events.append((s, "element"))   # som de entrada, mesmo sem tween visual
     estilo = (f'--cx-top:{q.get("top", cx.get("topoPadrao", 300))}px;'
               f' --cx-w:{cx.get("largura", 820)}px; --cx-radius:{cx.get("raio", 30)}px;'
+              f' --cx-tilt:{cx.get("inclinacao", -1.6)}deg;'
               f' --cx-bar-h:{cx.get("faixaAltura", 96)}px;'
               f' --cx-bar-bg:{cx.get("faixaFundo", "#26262b")};'
               f' --cx-bar-fg:{cx.get("faixaCor", "#e9e9ea")};'
@@ -542,19 +532,14 @@ def caixinha_markup(data: dict, duration: float, events: list, accent: str) -> t
               f' --cx-body-pad:{cx.get("corpoPadding", 44)}px;'
               f' --cx-shadow:{cx.get("sombra", "0 26px 60px -18px rgba(0,0,0,.55)")};'
               f' --cx-accent:{accent};'
-              f' --cx-reply-size:{r.get("tamanho", 42)}px;'
-              f' --cx-reply-radius:{r.get("raio", 26)}px;'
-              f' --cx-reply-pad:{r.get("padding", "26px 34px")};'
-              f' --cx-reply-inset:{r.get("recuo", 90)}px;'
               f' --cx-font:{VARIANTS["styles"]["karaoke"]["cssFamily"]}')
     html = (f'  <div class="ave-caixa clip" data-start="{s:.3f}" data-duration="{d:.3f}"'
-            f' data-track-index="{TRACK["overlay"]}" data-tilt="{cx.get("inclinacao", -1.6)}"'
-            f' data-exit="{"0" if fica_ate_o_fim else "1"}"{resp_attr}'
+            f' data-track-index="{TRACK["overlay"]}"'
             f' style="{estilo}">\n'
             f'    <div class="cx-card">\n'
             f'      <div class="cx-faixa">{chamada}</div>\n'
             f'      <div class="cx-corpo">{palavras}</div>\n'
-            f'    </div>{resp_html}\n  </div>')
+            f'    </div>\n  </div>')
     janela = f"{s:.3f}-{e:.3f}"
     return html, janela
 

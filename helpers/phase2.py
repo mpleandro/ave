@@ -168,8 +168,6 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         cx["pergunta"] = pick["caixaPergunta"].strip()
         if (pick.get("caixaChamada") or "").strip():
             cx["chamada"] = pick["caixaChamada"].strip()
-        if (pick.get("caixaResposta") or "").strip():
-            cx["resposta"] = pick["caixaResposta"].strip()
         cx.setdefault("start", 0.0)
     for k, v in (pick.get("elements") or {}).items():
         data.setdefault("elements", {})[k] = v

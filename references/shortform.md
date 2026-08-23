@@ -632,26 +632,27 @@ não precisa gastar.
 **A fidelidade aqui é com o APP, não com a marca.** Os outros elementos vestem o
 Motion Kit de quem edita; este não pode — uma caixinha com a cara da marca deixa
 de ser a caixinha e vira cartão genérico. Faixa escura com a chamada, corpo
-branco com a pergunta, cantos muito arredondados, inclinação de ~1,6° e entrada
-com sobra de escala: o gesto é **adesivo sendo colado**. Só a RESPOSTA usa o
-accent do projeto — ela é a voz de quem edita, não do app.
+branco com a pergunta, cantos muito arredondados, inclinação fixa de ~1,6°.
+
+**Sem animação** (decisão do usuário, 2026-08-23): a caixa entra já fixa no
+lugar e sai no corte quando a janela do clip termina — sem tween de entrada
+nem de saída. Também não tem mais campo de resposta: a caixinha mostra só a
+pergunta, e a resposta fica por conta da narração.
 
 Dado em `edit-data.json` (o texto vem dos campos da aba Estilo):
 
 ```json
 "questionBox": {"chamada": "mande sua dúvida 🤎",
                 "pergunta": "como posso melhorar o engajamento…",
-                "resposta": "consistência > frequência",
                 "start": 0.0, "end": 8.4, "top": 300}
 ```
 
-Três regras de operação, todas decididas pelo usuário (2026-08-19):
+Regras de operação, todas decididas pelo usuário (2026-08-19):
 
 1. **Quanto tempo ela fica é PERGUNTA POR VÍDEO**, não padrão. `end` ausente
-   significa ficar até o fim (e então NÃO há animação de saída: despedir-se de
-   algo que acaba junto com o vídeo lê como falha de render). Para sair depois
-   de lida, meça no transcrito do corte onde a pergunta termina de ser
-   respondida e leve as duas opções ao `AskUserQuestion` com os tempos.
+   significa ficar até o fim. Para sair depois de lida, meça no transcrito do
+   corte onde a pergunta termina de ser respondida e leve as duas opções ao
+   `AskUserQuestion` com os tempos.
 2. **Tetos de caractere: 60 na faixa escura, 72 no corpo branco** (do usuário,
    2026-08-19; em `variants.json → caixinha.limiteChamada/limitePergunta`). É o
    que cabe legível a 1080 de largura — passar disso encolhe a fonte ou estoura
@@ -659,8 +660,8 @@ Três regras de operação, todas decididas pelo usuário (2026-08-19):
    aplica a mesma régua ao dado escrito à mão, cortando na última palavra
    inteira e avisando. Régua num lugar só: a interface lê o mesmo
    `variants.json` que o render.
-3. **A pergunta e a resposta são digitadas na aba Estilo** — é o único dado do
-   formato que não se mede. A resposta é opcional: muitos vídeos só a falam.
+3. **A pergunta é digitada na aba Estilo** — é o único dado do formato que não
+   se mede.
 4. **Zona alta por padrão, e PERGUNTE se cobrir o rosto.**
    `caption_safe.caixa_bate_no_rosto()` mede o topo da cabeça (p10 — a cabeça
    mais alta do corte, não a média) e devolve `bate` + `sugestaoTopPx`. Se

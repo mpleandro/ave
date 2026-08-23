@@ -143,6 +143,25 @@ const PORTED = {
   edits: new Set(['limpa', 'split', 'split2', 'brollOverlay', 'caixinha']),
 };
 
+// Quadro de foco de câmera — substitui o "boneco" genérico (círculo+blob) nos
+// mocks de tipo de edição por um vocabulário de editor: cantos em L, ponto de
+// gravação, três traços de timecode. Proposta em ~/.avelin/propostas/camadas-render-4areas.html.
+function viewfinder(cx, cy, s) {
+  const h = s / 2;
+  const bx = cx - h, by = cy - h;
+  const L = 6;
+  return `
+    <rect x="${bx}" y="${by}" width="${s}" height="${s}" rx="6" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.22)" stroke-width="1.1"/>
+    <path d="M${bx} ${by + L}v-${L - 2}a2 2 0 012-2h${L - 2}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M${bx + s - L} ${by}h${L - 2}a2 2 0 012 2v${L - 2}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M${bx + s} ${by + s - L}v${L - 2}a2 2 0 01-2 2h-${L - 2}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M${bx + L} ${by + s}h-${L - 2}a2 2 0 01-2-2v-${L - 2}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.4" stroke-linecap="round"/>
+    <circle cx="${bx + s - 6}" cy="${by + 6}" r="2.6" fill="rgb(var(--orange-rgb) / .85)"/>
+    <rect x="${cx - 9}" y="${by + s + 6}" width="6" height="3" rx="1" fill="rgba(255,255,255,.4)"/>
+    <rect x="${cx - 1}" y="${by + s + 6}" width="6" height="3" rx="1" fill="rgba(255,255,255,.4)"/>
+    <rect x="${cx + 7}" y="${by + s + 6}" width="6" height="3" rx="1" fill="rgb(var(--orange-rgb) / .7)"/>`;
+}
+
 const STYLE_CATALOG = {
   edits: [
     {
@@ -157,10 +176,9 @@ const STYLE_CATALOG = {
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="48" r="13" fill="rgba(255,255,255,.16)"/>
-        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
         <rect x="14" y="14" width="38" height="4.4" rx="2.2" fill="rgba(255,255,255,.5)"/>
         <rect x="20" y="21.5" width="26" height="4.4" rx="2.2" fill="rgba(255,255,255,.3)"/>
+        ${viewfinder(33, 44, 24)}
         <rect x="12" y="74" width="42" height="11" rx="5.5" fill="var(--bg1)" stroke="rgb(var(--blue-rgb) / .65)"/>
         <rect x="16" y="78.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
         <rect x="30" y="78.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
@@ -177,8 +195,7 @@ const STYLE_CATALOG = {
         <path d="M6 36l11-11a2 2 0 013 0l7 7 5-4a2 2 0 013 0l11 8" fill="none" stroke="rgb(var(--orange-rgb) / .6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M3 40.5h60" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
         <rect x="3" y="42" width="60" height="73" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="70" r="12" fill="rgba(255,255,255,.16)"/>
-        <path d="M15 115a18 18 0 0136 0z" fill="rgba(255,255,255,.16)"/>
+        ${viewfinder(33, 64, 20)}
         <rect x="12" y="35" width="42" height="11" rx="5.5" fill="var(--bg1)" stroke="rgb(var(--blue-rgb) / .65)"/>
         <rect x="16" y="39.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
         <rect x="30" y="39.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
@@ -191,8 +208,7 @@ const STYLE_CATALOG = {
       mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
         <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
         <rect x="3" y="3" width="60" height="65" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="24" r="11" fill="rgba(255,255,255,.16)"/>
-        <path d="M16 68a17 17 0 0134 0z" fill="rgba(255,255,255,.16)"/>
+        ${viewfinder(33, 30, 18)}
         <path d="M3 69.5h60" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>
         <rect x="3" y="71" width="60" height="44" rx="5" fill="rgb(var(--orange-rgb) / .16)"/>
         <circle cx="17" cy="83" r="3.6" fill="rgb(var(--orange-rgb) / .6)"/>
@@ -2827,8 +2843,7 @@ function buildLayerRows() {
   /* A CAIXINHA DE PERGUNTAS pede o único dado do formato que não se mede: o
      texto. Aparece DEPOIS da grade de tipos de edição e só quando ela está
      escolhida — campos de um formato que não foi escolhido são ruído em toda
-     abertura da aba. A resposta é opcional: nem todo vídeo mostra a resposta
-     escrita; muitos só a falam. */
+     abertura da aba. */
   if (L.caixaText && S.style.edit === 'caixinha') {
     const g = el('div', 'dep-group', body);
     el('span', 'group-title', el('div', 'group-head', g)).textContent = 'Caixinha de perguntas';
@@ -2864,14 +2879,9 @@ function buildLayerRows() {
     perg.placeholder = 'a pergunta que veio da caixinha';
     perg.value = (S.style.caixaPergunta || '').slice(0, LIM_PG);
     contador(perg, LIM_PG);
-    const resp = el('textarea', 'hl-text', g);
-    resp.id = 'caixaResposta';
-    resp.rows = 2;
-    resp.placeholder = 'resposta curta que aparece escrita (opcional — deixe vazio se só falar)';
-    resp.value = S.style.caixaResposta || '';
     el('span', 'group-note', g).textContent =
-      'a caixinha entra no gancho, junto com você falando; se ela sai depois de '
-      + 'lida ou fica até o fim é decidido no chat, com os tempos medidos do corte';
+      'a caixinha entra no gancho, fixa, junto com você falando; se ela sai depois '
+      + 'de lida ou fica até o fim é decidido no chat, com os tempos medidos do corte';
   }
 
 
@@ -3106,7 +3116,6 @@ document.addEventListener('input', (e) => {
 async function sendStyle() {
   S.style.note = $('setupNote').value.trim();
   for (const [id, chave] of [['caixaPergunta', 'caixaPergunta'],
-                             ['caixaResposta', 'caixaResposta'],
                              ['caixaChamada', 'caixaChamada']]) {
     if ($(id)) S.style[chave] = $(id).value;
   }
@@ -3136,7 +3145,6 @@ async function sendStyle() {
     headlineText: (S.style.headlineText || '').trim(),
     // a caixinha de perguntas: o único dado do formato que não se mede
     caixaPergunta: (S.style.caixaPergunta || '').trim(),
-    caixaResposta: (S.style.caixaResposta || '').trim(),
     caixaChamada: (S.style.caixaChamada || '').trim(),
     // whether the picked styles actually paint it — so the skill does not go
     // hunting for an accent in a look that has none
