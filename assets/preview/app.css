@@ -1000,20 +1000,6 @@ kbd {
   white-space: nowrap; min-width: 84px;
 }
 
-/* a headline é conteúdo, então ganha uma caixa de texto de verdade */
-.hl-text {
-  width: 100%;
-  min-height: 54px;
-  resize: vertical;
-  font: inherit;
-  font-size: 13px;
-  color: var(--text);
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid var(--stroke);
-  border-radius: 10px;
-  padding: 8px 10px;
-}
-.hl-text:focus { outline: none; border-color: rgb(var(--orange-rgb) / 0.5); }
 .layer-soon { font-size: 11.5px; color: var(--dim); font-style: italic; }
 
 .layers-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
@@ -2080,10 +2066,6 @@ button.tl-chip:disabled { cursor: default; }
 
 .start-note { margin-top: 20px; font-size: 11.5px; line-height: 1.6; color: var(--dim); }
 .start-elapsed { color: var(--orange-soft); }
-
-/* Aviso inline da barra de ação. Nasceu quando o alerta da headline deixou de
-   ser um confirm() pós-clique e passou a viver na tela, ao lado do botão. */
-.warn-inline { color: #ffb454; font-size: 12px; white-space: nowrap; }
 
 /* O botão de envio no MODO APROVAR (Fase 1, nada alterado). Verde e sem o
    ícone de IA: aprovar não gasta token nem renderiza — é a assinatura do

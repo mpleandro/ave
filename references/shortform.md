@@ -54,7 +54,7 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
-| `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" |
+| `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" and "Motor de transições" for the other 8 `tipo`s |
 | `elements.sfx` | **"Aplicar efeitos sonoros"** — os efeitos LOCAIS de `assets/sfx/`, disparados pelos eventos da composição (entrada de cartão, flash, deixa em destaque). Ligado por padrão. OFF → nenhum efeito entra, mesmo havendo evento. Não custa token nem espera: é o caminho barato, e vem antes da geração por IA na lista por isso |
 | `elements.musicAI` | **"Gerar com IA"** — Phase 3 via `treblo_music.py`; OFF → deliver with voice only. Custa token e minutos |
 | `note` | free text — read it, it overrides the defaults above |
@@ -461,13 +461,19 @@ sozinho quando o arquivo não existe. Números em `variants.json`
 (`styles.dinamico`): corpo 76, `figShrink`, `figEmShort`/`figEmLong` e o bloco
 `motion` (sansIn/lit/cascade/fig) que desce serializado em `data-motion`.
 
-## Visual hook — static headline, first ~4s (always on)
+## Visual hook — static headline, first ~4s (always on unless Caixinha/Notícia)
 
-The first 1–2 seconds decide the swipe. Write `hook.lines` like a
-social-media/copywriting/virality specialist, not a summarizer: read the cut
-transcript, find the core promise/tension, and craft a scroll-stopper. Levers:
-**curiosity gap · high stakes/bold claim · specificity/number · urgency ·
-pattern interrupt**. Match the video's language; never clickbait it can't pay off.
+**Caixinha and Notícia have no headline** — same upper zone, locked against
+each other in `elLocked()` (app.js). If either is on, skip this whole section;
+don't ask for headline text that will never render.
+
+**There is no text field on the Estilo screen for this** — the tab only picks
+`hook.style` (the layout). The first 1–2 seconds decide the swipe. Write
+`hook.lines` like a social-media/copywriting/virality specialist, not a
+summarizer: read the cut transcript, find the core promise/tension, and craft
+a scroll-stopper. Levers: **curiosity gap · high stakes/bold claim ·
+specificity/number · urgency · pattern interrupt**. Match the video's
+language; never clickbait it can't pay off.
 
 **Two locked styles via `hook.style`** (both user-approved, encoded in the
 template):
@@ -486,8 +492,9 @@ template):
 Both are static hold, fade+rise at the edges, soft whoosh.
 
 Example (Claude Fable video): "A IA MAIS / PERIGOSA DO MUNDO / ACABOU DE SER
-LIBERADA". Draft 2–3 copy candidates in chat (text — no renders), let the user
-pick, then render ONE still for design approval before the full render.
+LIBERADA". Draft 2–3 copy candidates and ask with `AskUserQuestion` (options =
+the candidates, text — no renders; Other lets the user dictate their own),
+then render ONE still for design approval before the full render.
 
 **De-conflict:** the hook owns the upper zone for its window — push any insert
 that wants the same zone to after `hook.endSec` (e.g. move a 2.5s cutaway to
@@ -568,6 +575,58 @@ transition means something. Optional per entry: `intensity` (default 1), `sfx`,
   render. Sem drift, o efeito fica onde foi autorado e chega inteiro na entrega —
   `sfx_blocks()` já compensa o silêncio inicial MEDIDO de cada arquivo.
 
+## Motor de transições (`transitions[].tipo`)
+
+`flash` deixou de ser a única opção. Cada entrada de `transitions[]` aceita um
+`tipo` — ausente continua valendo `"flash"`, então todo edit-data já salvo
+renderiza igual. As 9 candidatas vieram de
+`~/.avelin/propostas/transicoes-10.html` (aplicadas em 2026-08-23) e se
+dividem em duas famílias, exatamente como na proposta:
+
+```json
+"transitions": [
+  {"at": 11.7, "tipo": "chama"},
+  {"at": 24.3, "tipo": "deslize", "direcao": "esquerda"}
+]
+```
+
+**Leves — cabem várias por vídeo, uma por corte comum é aceitável:**
+`flash` (o feixe de hoje), `chama` (flash de cor sólida no accent, mais barato
+que o flash), `tranco` (shake de câmera, ~150ms), `estouro` (zoom-punch seco).
+
+**Médias/pesadas — fronteira de cena, insert ou capítulo, raras:** `zoomBlur`
+(estouro + borrão radial, o zoom de CapCut/Reels), `deslize` (painel deslizando
+na direção de `direcao`: `cima|baixo|esquerda|direita`), `cortina` (chapa no
+accent sobe cobrindo e some, um sentido só), `iris` (mesma mecânica, recorte
+circular, fecha e abre no MESMO ponto), `falha` (RGB split, três tiras).
+
+Regra do lote: **use `flash`/`chama`/`tranco`/`estouro` livremente onde a
+`flashCut` já mandava** (uma por troca de layout); as médias/pesadas são para
+o que raramente acontece no vídeo — mudar de capítulo, entrar um insert grande
+— nunca uma por corte, ou viram estroboscópio como o próprio flash já avisa.
+
+**Duas famílias de implementação, e isso importa para calibrar expectativa:**
+
+- `chama`, `tranco`, `estouro`, `zoomBlur` (e o `flash` de sempre) rodam DIRETO
+  sobre o vídeo já cortado — `tranco` anima `x`/`y` do `#a-roll`; `estouro` e
+  `zoomBlur` escalam `#vidwin` (não `#a-roll` — a câmera já escala esse, e duas
+  animações de `scale` no mesmo elemento brigam pelo valor final).
+- `deslize`, `cortina`, `iris`, `falha` são um PAINEL por cima escondendo o
+  instante do corte — o `preview.mp4` é UM arquivo já cortado (Regra 2), não
+  duas tomadas, então não existe crossfade real entre "antes" e "depois" aqui.
+  **`deslize` em particular NÃO mostra as duas imagens deslizando** — isso
+  exigiria dois elementos de vídeo apontando pro MESMO arquivo (um congelado
+  antes do corte, outro tocando a partir dele), custa mais que o painel e só
+  vale a pena se o efeito precisar mostrar as duas de verdade.
+
+Cada tipo tem sua config (durações em frames, cor, raio do íris etc.) em
+`variants.json → transicoes`, no mesmo espírito do `flash` — números de
+partida, ajustáveis como qualquer outro. Som por tipo já vem mapeado
+(`chama`→`cut-click.mp3`, `tranco`/`estouro`/`zoomBlur`→`impact.mp3`,
+`deslize`→`whoosh-soft.mp3`, `cortina`→`film-burn.mp3`, `iris`→`camera.mp3`,
+`falha`→`glitch.mp3`); `sfx`/`volume` por entrada continuam sobrepondo, como
+no flash.
+
 ## Style: "Nenhum" (`edit: "limpa"`) — no split inserts
 
 The whole frame stays on the speaker. **Leave `splitInserts` out of
@@ -623,11 +682,24 @@ whichever layout is up: 738 for `top` (text on the seam under the art), ~920 for
 `bottom` (text in the gap between chin and seam). Left at the `top` value, the
 headline lands across the speaker's mouth. Render one hook still after switching.
 
-## Style: "Caixinha" (`edit: "caixinha"`) — a caixinha de perguntas como gancho
+## Elemento: "Caixinha de perguntas" (`elements.caixinha`) — adesivo como gancho
 
 O adesivo do Instagram entrando no começo do vídeo, junto com a pessoa falando.
 Formato de resposta a seguidor: a pergunta na tela dá o contexto que a narração
 não precisa gastar.
+
+**Não é mais um "tipo de edição" (radio) — é um elemento independente**
+(reestruturação de 2026-08-23): liga/desliga em "Elementos visuais", ao lado do
+Broll Overlay e da Notícia, sem excluir a escolha de layout (Nenhum/Dividida).
+Internamente ainda escreve em `data.questionBox`, só que a partir de
+`pick.elements.caixinha`, não de `pick.edit`.
+
+**A caixinha perdeu a caixa de texto da interface.** Pergunta e chamada não têm
+mais campo na aba — ligar o elemento sem texto é o sinal para o agente
+perguntar via `AskUserQuestion` na conversa (mesmo protocolo do Broll Overlay,
+abaixo) e escrever a resposta direto em `edit-data.json`. `helpers/phase2.py`
+para com uma mensagem clara (`check_elements_filled()`) se o elemento estiver
+ligado sem `questionBox.pergunta` — é essa mensagem que dispara a pergunta.
 
 **A fidelidade aqui é com o APP, não com a marca.** Os outros elementos vestem o
 Motion Kit de quem edita; este não pode — uma caixinha com a cara da marca deixa
@@ -639,7 +711,7 @@ lugar e sai no corte quando a janela do clip termina — sem tween de entrada
 nem de saída. Também não tem mais campo de resposta: a caixinha mostra só a
 pergunta, e a resposta fica por conta da narração.
 
-Dado em `edit-data.json` (o texto vem dos campos da aba Estilo):
+Dado em `edit-data.json` (o texto vem de uma conversa, não da aba Estilo):
 
 ```json
 "questionBox": {"chamada": "mande sua dúvida 🤎",
@@ -656,24 +728,66 @@ Regras de operação, todas decididas pelo usuário (2026-08-19):
 2. **Tetos de caractere: 60 na faixa escura, 72 no corpo branco** (do usuário,
    2026-08-19; em `variants.json → caixinha.limiteChamada/limitePergunta`). É o
    que cabe legível a 1080 de largura — passar disso encolhe a fonte ou estoura
-   a caixa. O campo da aba TRAVA na digitação e mostra `n/teto`; o compositor
-   aplica a mesma régua ao dado escrito à mão, cortando na última palavra
-   inteira e avisando. Régua num lugar só: a interface lê o mesmo
-   `variants.json` que o render.
-3. **A pergunta é digitada na aba Estilo** — é o único dado do formato que não
-   se mede.
+   a caixa. Sem campo na interface para travar a digitação, quem escreve
+   (usuário no chat, ou o agente que escreve `edit-data.json`) tem de respeitar
+   a régua na mão; o compositor ainda corta na última palavra inteira e avisa
+   se vier maior. Régua num lugar só: `variants.json` continua sendo a fonte,
+   mesmo sem a interface lendo dele em tempo real.
+3. **A pergunta nasce de uma conversa** — é o único dado do formato que não se
+   mede, e agora também o único que não tem campo na tela.
 4. **Zona alta por padrão, e PERGUNTE se cobrir o rosto.**
    `caption_safe.caixa_bate_no_rosto()` mede o topo da cabeça (p10 — a cabeça
    mais alta do corte, não a média) e devolve `bate` + `sugestaoTopPx`. Se
    bater, a pergunta ao usuário já vai com a alternativa: pergunta sem saída é
    aviso disfarçado.
 
-**De-conflito:** a caixinha e a headline disputam a zona alta — com ela ligada, o
-hook de texto sai ou desce. E a legenda não pode nascer atrás dela: a mesma
-medição da faixa segura resolve, tomando o rodapé da caixinha como limite de
-cima em vez do queixo.
+**De-conflito com Headline: TRAVA, não reposicionamento** (decisão do usuário,
+2026-08-23). A caixinha e QUALQUER cartela "banda" (`cheia: false` —
+`fita`/`jornal`/`terminal`/`alerta`/`placar`/`sombra_longa`/`neon`/`balao`/
+`filete`/`adesivo`, e a Notícia, que é uma delas) usam por padrão o mesmo
+`top:300` e a mesma janela do gancho — não é um caso especial da Notícia, é
+geral. Em vez de reposicionar automaticamente (o que a doc antiga prometia e
+nunca chegou a implementar), a interface TRAVA a combinação: ligar a caixinha
+desabilita as cartelas banda em Headline (e a Notícia em Elementos); ligar
+qualquer uma delas desabilita a caixinha — `elLocked()`/`CARTELA_BANDA_IDS` em
+`assets/preview/app.js`. Headlines de tela cheia (`cheia: true`) e os 11
+estilos não-cartela não entram nessa trava. A legenda continua se resolvendo
+por medição, não por trava: não pode nascer atrás da caixinha, e a mesma
+medição da faixa segura toma o rodapé da caixinha como limite de cima em vez
+do queixo.
 
-## Style: "Broll Overlay" (`edit: "brollOverlay"`) — ênfase POR CIMA do vídeo
+## Elemento: "Notícia" (`elements.noticia`) — cartela banda que virou elemento
+
+**Não é mais uma opção de Headline — é um elemento em "Elementos visuais"**
+(reestruturação de 2026-08-23), pelo mesmo motivo da Caixinha: uma cartela
+"olho de app de notícia" (barra de busca, lupa, menu) disputa a mesma zona alta
+que a caixinha, e as duas viviam em catálogos diferentes sem nenhuma
+arbitragem entre elas.
+
+**O motor de render NÃO mudou** — Notícia continua sendo `motor: "cartela"` em
+`variants.json`, com o mesmo `cartela_markup()`/`cartela.css`/`cartela.js` de
+qualquer uma das outras 20 cartelas, e o mesmo `hook.style`/`hook.lines` que
+todo headline usa. O que mudou foi só o CAMPO que alimenta `hook.style`:
+`helpers/phase2.py → apply_style_pick()` lê `pick.elements.noticia` em vez de
+`pick.headline == "noticia"`. Por isso Notícia e um headline do radio nunca
+coexistem tecnicamente (mesmo hook, mesma trilha) — a interface trava as duas
+escolhas como mutuamente exclusivas, igual à trava com a Caixinha acima.
+
+**O texto também não tem mais campo na interface** — junto com Caixinha e
+Notícia, a headline "normal" perdeu a caixa de texto da aba Estilo na mesma
+reestruturação: qualquer estilo de headline (Notícia incluída) escolhido sem
+texto é o sinal para o agente perguntar via `AskUserQuestion`, lendo o
+transcrito do corte aprovado para sugerir 2–3 candidatas (curiosity gap / claim
+forte / número / urgência — ver "Visual hook" acima). `check_elements_filled()`
+em `phase2.py` para com a mensagem certa para os três casos (Caixinha, Notícia,
+headline normal).
+
+## Style: "Broll Overlay" (`elements.brollOverlay`) — ênfase POR CIMA do vídeo
+
+**Não é mais um "tipo de edição" (radio)** — desde a reestruturação de
+2026-08-23, liga/desliga em "Elementos visuais" como um toggle independente
+(`pick.elements.brollOverlay`), sem excluir Caixinha, Notícia ou o layout
+escolhido. A trilha (`TRACK["overlay"]`) e o protocolo abaixo não mudaram.
 
 Animações HyperFrames que cavalgam o a-roll para dar ênfase — com ou sem
 escurecer a tela. O conteúdo NÃO vem de catálogo: nasce de uma conversa sobre o
