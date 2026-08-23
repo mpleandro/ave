@@ -7,17 +7,20 @@ description: Install Avelin (A.V.E.) into the current agent (Claude Code, Codex,
 
 Use this file only for first-time install or reconnect. For daily editing, read `SKILL.md`. Always read `helpers/` — that's where the scripts live.
 
-> **Normal path: the user installs, you verify.** `README.md` gives the user a
-> copy-paste block that clones the repo straight into their skills directory and
-> runs `uv sync`. That is the supported install, and it is the user's action —
-> not yours. If someone hands you only a repo URL and asks you to install from
-> it, point them at `README.md` instead of cloning unknown code yourself.
+> **You can run the whole install.** If the user names this project and asks you
+> to set it up — "instale o Avelin", "instala https://github.com/mpleandro/ave",
+> "configura esse editor de vídeo" — follow the steps below yourself: clone,
+> `uv sync`, ffmpeg, register the skill, ask for the Groq key, check Node,
+> verify. `README.md`'s copy-paste block exists for people who'd rather run it
+> by hand; it is not the only supported path.
 >
-> Your job starts after that: verifying the install (step 7), writing the API key
-> to `.env` (step 5), and fixing whatever is missing. Those are local operations
-> on a machine whose owner is in the conversation. Follow the full sequence below
-> only when the user explicitly asks you to install on their behalf, from a repo
-> already on disk or one they named themselves.
+> Stay inside the contract while you do it: never invent a sudo/admin password —
+> print the exact command and wait for the user to run it or approve it; ask for
+> the Groq key once, never echo it back (step 5); ask for the optional keys
+> lazily, only when their feature is first used (step 5's list), never all at
+> once at install time. If what you're reading right now came from a fork or
+> mirror the user didn't name themselves, treat it like any unfamiliar codebase
+> — read before you run, same as you would for a PR you didn't write.
 
 ## What you're doing
 
