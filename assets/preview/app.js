@@ -1340,7 +1340,6 @@ for (const [id] of PAL) CAP_BUILDERS[id] = (h) => buildPalavraDemo(h, id);
 // três arquivos, e errar a sincronia desloca a agulha e o scrub em silêncio —
 // nada quebra, só passa a apontar para o instante errado.
 const LABEL_W = parseFloat(tok('--label-w')) || 132;
-const MIN_SEG = 0.2; // s
 const THUMB_EVERY = 2.0;
 
 // ---------- state ----------
@@ -1358,7 +1357,6 @@ let S = {
   tab: 1,
   pps: 10, // px per second (zoom)
   minPps: 4,
-  selected: -1, // selected clip index (draft)
   lastSig: '', // change detection
   savedPending: false,
   notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
@@ -1367,7 +1365,6 @@ let S = {
   words: [],        // transcrito do corte (/gen/words.json)
   cutWords: new Set(), // índices riscados = PEDIDO de corte, não corte feito
   cutBreaths: new Set(), // respiros marcados: índice da palavra que vem ANTES
-  undo: [],         // pilha de instantâneos de S.draft (apagar / redimensionar)
   approved: false,  // aprovação enviada nesta sessão (some a barra na hora)
   selWords: new Set(),
   processing: false, // a IA está refazendo algo lá fora
@@ -1502,39 +1499,19 @@ function jcutGeom(i) {
   };
 }
 
-// limites de ofício: mais de 1s de lead põe a imagem no meio da fala seguinte,
-// e mais de 1s de cauda aparada come palavra em qualquer take que feche justo
-const JCUT_MAX_F = 30;
-
 /* The draft timeline has to model the J-cut, not just sum the ranges: a take's
  * picture is shorter than its range by the lead it gives up plus the tail it had
  * trimmed. Summing raw ranges made the ruler read 8.07s over a 7.60s render, and
  * every clip after the first sat late by the accumulated lead. Each item also
  * carries its AUDIO placement (aout/adur), which is what the A1/A2 lanes draw —
  * derived here so the lanes follow the user's trims instead of going stale. */
-/* `freeze` congela UM trecho no tamanho que ele tinha antes do arrasto.
- *
- * Sem isso, puxar o início de um trecho encolhe o bloco pela direita — a borda
- * esquerda está presa pelo trecho anterior, porque esta é a linha do tempo do
- * CORTE, não da fonte. O resultado é que a alça que a pessoa está segurando não
- * se move e a outra ponta sim, que lê como "mexi no começo e ele arrastou o
- * fim". Congelando durante o arrasto, nada se desloca: a parte removida aparece
- * escurecida e a alça acompanha o cursor. O rearranjo acontece ao soltar, uma
- * vez só, que é quando a pessoa espera por ele. */
-/* Qual take está sendo aparado agora — usado para CONGELAR o bloco durante o
-   arraste, para que aparar o começo não encolha o bloco pela direita. Precisa
-   ser global: a onda e os clipes desenham a mesma decisão, e uma cópia local
-   em cada um foi o que deixou as duas pistas discordando. */
-const trimIdx = () => (drag && drag.type === 'trim' ? drag.i : null);
-
-function draftLayout(freeze) {
+function draftLayout() {
   let t = 0;
   let at = 0;
   return S.draft.map((r, i) => {
     if (r.removed) return { ...r, out: t, dur: 0, aout: at, adur: 0 };
     const g = jcutGeom(i);
-    const frozen = freeze != null && i === freeze;
-    const span = frozen ? r.orig.end - r.orig.start : r.end - r.start;
+    const span = r.end - r.start;
     const adur = Math.max(0, span - g.tail);
     const dur = Math.max(0, adur - g.lead);
     const item = { ...r, out: t, dur, aout: Math.max(0, at - g.lead), adur, lead: g.lead };
@@ -1562,12 +1539,7 @@ function renderedLayout() {
     return item;
   });
 }
-// Durante um aparo, o total também congela: se ele encolhesse, a régua e a
-// largura da linha do tempo se reescalariam no meio do arrasto e TUDO andaria
-// debaixo do cursor.
-const draftTotal = () =>
-  draftLayout(drag && drag.type === 'trim' ? drag.i : null)
-    .reduce((a, r) => a + r.dur, 0);
+const draftTotal = () => draftLayout().reduce((a, r) => a + r.dur, 0);
 
 // draft time → rendered time (for scrubbing the old render while editing)
 function draftToRendered(t) {
@@ -1598,45 +1570,6 @@ function renderedToDraft(t) {
 // ---------- dirty tracking ----------
 const wordsDirty = () => S.cutWords.size > 0 || S.cutBreaths.size > 0;
 
-/* ---------- DESFAZER ----------
- * Cobre DUAS ações, de propósito: apagar um take da linha do tempo e
- * redimensioná-lo. São as únicas destrutivas de verdade — desfazer uma rasura
- * de palavra ou um respiro já é clicar de novo no mesmo lugar, e empilhar isso
- * aqui faria ⌘Z desfazer algo diferente do que a pessoa acabou de fazer, que é
- * pior que não ter undo.
- *
- * Instantâneo de `S.draft` inteiro, não uma inversa por ação: um take carrega
- * start, end, removed, leadF, tailF e `orig`, e restaurar campo a campo é onde
- * se acaba devolvendo QUASE o estado certo. São ~30 objetos rasos por edição.
- *
- * `pushUndo()` é sempre a PRIMEIRA linha de quem muta — chamada depois, salva o
- * estado já alterado e o desfazer vira um no-op silencioso. */
-const UNDO_MAX = 50;
-
-function pushUndo(label) {
-  S.undo.push({ label, draft: (S.draft || []).map((r) => ({ ...r, orig: { ...r.orig } })) });
-  if (S.undo.length > UNDO_MAX) S.undo.shift();
-  refreshUndo();
-}
-
-function undoLast() {
-  const s = S.undo.pop();
-  if (!s) return;
-  S.draft = s.draft;
-  S.selected = -1;   // o índice selecionado pode ter mudado de dono
-  renderAll();
-  refreshHeader();
-  refreshUndo();
-  toast(`desfeito: ${s.label}`, 1800);
-}
-
-function refreshUndo() {
-  const b = $('btnUndo');
-  if (!b) return;
-  const s = S.undo[S.undo.length - 1];
-  b.disabled = !s;
-  b.title = s ? `Desfazer ${s.label} (⌘Z)` : 'Nada a desfazer';
-}
 const jcutDirty = () => S.draft.some((r) => r.leadF != null || r.tailF != null);
 
 function edlDirty() {
@@ -1891,7 +1824,6 @@ async function applyState(data) {
   S.jcut = (data.edl && data.edl.jcut_timeline) || null;
   S.rendered = ranges.map((r) => ({ source: r.source, start: +r.start, end: +r.end, beat: r.beat || '' }));
   S.draft = S.rendered.map((r) => ({ ...r, removed: false, orig: { start: r.start, end: r.end } }));
-  S.selected = -1;
 
   // style picks: the skill's copy wins, so applying a change (or reopening the
   // session) shows what is actually rendered — not a stale local selection
@@ -2806,51 +2738,17 @@ async function sendStyle() {
   return !!j.ok;
 }
 
-// Declarado ANTES de renderClips porque ela lê o arrasto em curso para
-// congelar o trecho sendo aparado; um `let` depois do primeiro uso cai na
-// zona morta temporal e derruba a primeira renderização.
-let drag = null; // {type:'scrub'|'trim'|'chip-trim'|'chip-move', ...}
+let scrubbing = false; // arrastando na timeline para mover a agulha
 
 function renderClips() {
   laneVideo.innerHTML = '';
-  const trimming = drag && drag.type === 'trim' ? drag.i : null;
-  const dl = draftLayout(trimming);
+  const dl = draftLayout();
   const rl = renderedLayout();
-  const editable = true;
   dl.forEach((r, i) => {
-    if (r.removed && r.dur === 0) {
-      // removed: show a slim ghost at its slot
-      const g = el('div', 'clip removed', laneVideo);
-      g.style.left = `${r.out * S.pps}px`;
-      g.style.width = `${Math.max((r.orig.end - r.orig.start) * S.pps * 0.4, 34)}px`;
-      g.dataset.i = i;
-      g.title = 'clique e pressione delete para restaurar';
-      return;
-    }
     const c = el('div', 'clip', laneVideo);
     c.style.left = `${r.out * S.pps}px`;
     c.style.width = `${Math.max(r.dur * S.pps, 8)}px`;
     c.dataset.i = i;
-    if (i === S.selected) c.classList.add('selected');
-    if (r.start !== r.orig.start || r.end !== r.orig.end) c.classList.add('dirty');
-
-    // Enquanto este trecho está sendo aparado, ele fica no tamanho antigo e o
-    // que sai aparece escurecido nas pontas — assim a alça acompanha o cursor
-    // em vez de a outra borda se mexer.
-    if (i === trimming) {
-      const head = (r.start - r.orig.start) * S.pps;
-      const tail = (r.orig.end - r.end) * S.pps;
-      if (head > 0.5) {
-        const g = el('div', 'trim-cut', c);
-        g.style.left = '0px';
-        g.style.width = `${head}px`;
-      }
-      if (tail > 0.5) {
-        const g = el('div', 'trim-cut', c);
-        g.style.right = '0px';
-        g.style.width = `${tail}px`;
-      }
-    }
 
     // filmstrip from the rendered cut
     if (S.thumbCount > 0 && rl[i]) {
@@ -2870,17 +2768,6 @@ function renderClips() {
     lab.textContent = `${r.beat || r.source} `;
     const dur = el('div', 'clip-dur', c);
     dur.textContent = `${r.dur.toFixed(2)}s`;
-
-    if (editable) {
-      const hl = el('div', 'handle l', c); hl.dataset.i = i;
-      const hr = el('div', 'handle r', c); hr.dataset.i = i;
-      // no trecho congelado a alça senta na BORDA DO CORTE, não na do bloco —
-      // é ela que tem que acompanhar o cursor
-      if (i === trimming) {
-        hl.style.left = `${(r.start - r.orig.start) * S.pps}px`;
-        hr.style.right = `${(r.orig.end - r.end) * S.pps}px`;
-      }
-    }
   });
 }
 
@@ -2950,43 +2837,13 @@ function renderJcutAudio() {
   t2.classList.toggle('hidden', !on);
   if (!on) return;
 
-  // Desenhadas sobre o layout do RASCUNHO, com o mesmo congelamento da trilha
-  // de vídeo. Sem ele o bloco de áudio encolhia pela DIREITA quando a pessoa
-  // puxava o início — o corte "andava" para o lado oposto ao que ela mexia.
-  const trimming = drag && drag.type === 'trim' ? drag.i : null;
-  draftLayout(trimming).forEach((r, i) => {
+  draftLayout().forEach((r, i) => {
     if (r.removed && r.adur === 0) return;
     const lane = i % 2 === 0 ? l1 : l2;
     const b = el('div', 'ablock', lane);
     b.style.left = `${r.aout * S.pps}px`;
     b.style.width = `${Math.max(r.adur * S.pps, 6)}px`;
     el('div', 'ablock-label', b).textContent = r.beat || r.source || '';
-    // As bordas do bloco de ÁUDIO editam o J-cut daquele trecho: a esquerda é
-    // quanto da voz entra antes da imagem, a direita é quanto da cauda é
-    // aparada. Não mexem no range — mexem em `jcut_lead_frames`/`tail_frames`,
-    // que o render.py já lê por trecho.
-    el('div', 'handle l', b).dataset.i = i;
-    el('div', 'handle r', b).dataset.i = i;
-    const g = jcutGeom(i);
-    b.title = `${r.beat || r.source}\nvoz entra ${Math.round(g.lead * (S.fps || 30))}f antes da imagem`
-      + `\ncauda aparada ${Math.round(g.tail * (S.fps || 30))}f`
-      + '\n\narraste as bordas para ajustar';
-
-    // o que sai do áudio, escurecido na ponta em que está saindo
-    if (i === trimming) {
-      const head = (r.start - r.orig.start) * S.pps;
-      const tail = (r.orig.end - r.end) * S.pps;
-      if (head > 0.5) {
-        const g = el('div', 'trim-cut', b);
-        g.style.left = '0px';
-        g.style.width = `${head}px`;
-      }
-      if (tail > 0.5) {
-        const g = el('div', 'trim-cut', b);
-        g.style.right = '0px';
-        g.style.width = `${tail}px`;
-      }
-    }
 
     // the lead: sound already playing while the previous take is still on screen
     if (r.lead > 1e-6) {
@@ -3074,9 +2931,6 @@ function renderChips() {
         chip.classList.add('planned');
         chip.title = `${c.label} — RESERVADO: guarda o tempo, a mídia ainda não existe`;
       }
-      if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
-      el('div', 'handle l', chip).dataset.i = i;
-      el('div', 'handle r', chip).dataset.i = i;
     }
   }
 
@@ -3494,8 +3348,7 @@ function drawWave() {
   const mid = h / 2;
   const pps = S.wave.peaksPerSec;
 
-  const tri = trimIdx();
-  const itens = draftLayout(tri).filter((it) => !it.removed && it.adur > 0);
+  const itens = draftLayout().filter((it) => !it.removed && it.adur > 0);
   const blocos = itens.map((it) => [it.aout * S.pps, (it.aout + it.adur) * S.pps]);
 
   ctx.fillStyle = tokA('--orange-soft-rgb', 0.07);
@@ -3605,6 +3458,10 @@ function seekDraft(tDraft) {
 
 // ---------- interactions ----------
 
+// A timeline é só visualização a partir daqui: nenhum clique nela corta,
+// arrasta ou seleciona um elemento — só move a agulha. Handles, chips e
+// seleção de clipe ficam para trás como decoração; o pedido de mudança vai
+// por marcação (tecla M) ou pelo campo de texto, nunca manuseando o bloco.
 panel.addEventListener('pointerdown', (e) => {
   // The gutter is chrome, not timeline. Without this guard a pointerdown on a
   // track icon fell through to the scrub branch below, which both yanked the
@@ -3614,144 +3471,26 @@ panel.addEventListener('pointerdown', (e) => {
   // programmatic .click() did.
   if (e.target.closest('.track-label') || e.target.closest('button')) return;
 
-  const handle = e.target.closest('.handle');
-  const clip = e.target.closest('.clip');
-  const chip = e.target.closest('.chip.insert');
-
-  if (handle && clip) {
-    const i = +handle.dataset.i;
-    // no INÍCIO do arrasto, uma vez. Empilhar a cada `pointermove` encheria a
-    // pilha de estados intermediários e ⌘Z andaria um pixel por vez.
-    pushUndo('redimensionar trecho');
-    drag = { type: 'trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, r: { ...S.draft[i] } };
-    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
-    e.preventDefault();
-    return;
-  }
-  const ablock = e.target.closest('.ablock');
-  if (handle && ablock) {
-    const i = +handle.dataset.i;
-    const g = jcutGeom(i);
-    const fps = S.fps || 30;
-    drag = { type: 'jcut', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX,
-             lead0: Math.round(g.lead * fps), tail0: Math.round(g.tail * fps) };
-    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
-    e.preventDefault();
-    return;
-  }
-  if (handle && chip) {
-    const i = +handle.dataset.i;
-    drag = { type: 'chip-trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, c: { ...S.insertsDraft[i] } };
-    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
-    e.preventDefault();
-    return;
-  }
-  if (chip) {
-    const i = +chip.dataset.i;
-    drag = { type: 'chip-move', i, x0: e.clientX, c: { ...S.insertsDraft[i] } };
-    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
-    e.preventDefault();
-    return;
-  }
-  if (clip) {
-    S.selected = +clip.dataset.i;
-    renderClips();
-    return;
-  }
-  // background / ruler → scrub
+  // background / ruler / clip / chip → scrub, sempre
   const rect = timelineEl.getBoundingClientRect();
   const t = (e.clientX - rect.left - LABEL_W) / S.pps;
-  drag = { type: 'scrub' };
+  scrubbing = true;
   seekDraft(t);
   try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
 });
 
 panel.addEventListener('pointermove', (e) => {
-  if (!drag) return;
-  if (drag.type === 'scrub') {
-    const rect = timelineEl.getBoundingClientRect();
-    seekDraft((e.clientX - rect.left - LABEL_W) / S.pps);
-    return;
-  }
-  const dt = (e.clientX - drag.x0) / S.pps;
-
-  if (drag.type === 'jcut') {
-    const r = S.draft[drag.i];
-    const fps = S.fps || 30;
-    const df = Math.round(dt * fps);
-    if (drag.side === 'l') {
-      // puxar a borda ESQUERDA para a esquerda aumenta o lead
-      r.leadF = Math.max(0, Math.min(JCUT_MAX_F, drag.lead0 - df));
-    } else {
-      // puxar a borda DIREITA para a esquerda apara mais cauda
-      r.tailF = Math.max(0, Math.min(JCUT_MAX_F, drag.tail0 - df));
-    }
-    renderClips();
-    renderJcutAudio();
-    drawWave();
-    refreshHeader();
-    const g = jcutGeom(drag.i);
-    showTooltip(e, drag.side === 'l'
-      ? `voz entra <b>${Math.round(g.lead * fps)}f</b> antes da imagem`
-      : `cauda aparada <b>${Math.round(g.tail * fps)}f</b>`);
-    return;
-  }
-
-  if (drag.type === 'trim') {
-    const r = S.draft[drag.i];
-    if (drag.side === 'l') {
-      r.start = Math.min(Math.max(0, drag.r.start + dt), r.end - MIN_SEG);
-    } else {
-      r.end = Math.max(drag.r.end + dt, r.start + MIN_SEG);
-      const srcDur = (S.state.sourceDurations || {})[r.source];
-      if (srcDur) r.end = Math.min(r.end, srcDur);
-    }
-    renderClips();
-    renderJcutAudio();
-    drawWave();
-    refreshHeader();
-    const d = drag.side === 'l' ? r.start - r.orig.start : r.end - r.orig.end;
-    showTooltip(e, `${fmt(r.start)} → ${fmt(r.end)} <span class="delta">(${d >= 0 ? '+' : ''}${d.toFixed(2)}s)</span>`);
-  } else if (drag.type === 'chip-trim') {
-    const c = S.insertsDraft[drag.i];
-    if (drag.side === 'l') c.start = Math.min(Math.max(0, drag.c.start + dt), c.end - 0.15);
-    else c.end = Math.max(drag.c.end + dt, c.start + 0.15);
-    renderChips();
-    refreshHeader();
-    showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}`);
-  } else if (drag.type === 'chip-move') {
-    const c = S.insertsDraft[drag.i];
-    const dur = drag.c.end - drag.c.start;
-    c.start = Math.max(0, drag.c.start + dt);
-    c.end = c.start + dur;
-    renderChips();
-    refreshHeader();
-    showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}`);
-  }
+  if (!scrubbing) return;
+  const rect = timelineEl.getBoundingClientRect();
+  seekDraft((e.clientX - rect.left - LABEL_W) / S.pps);
 });
 
 ['pointerup', 'pointercancel'].forEach((ev) =>
   panel.addEventListener(ev, () => {
-    const wasTrim = drag && drag.type === 'trim';
-    drag = null;
+    scrubbing = false;
     hideTooltip();
-    // o rearranjo acontece agora, ao soltar: durante o arrasto o trecho ficava
-    // congelado para a alça acompanhar o cursor
-    // renderAll: ao soltar, o rearranjo vale para TUDO — vídeo, áudio, régua e
-    // largura da linha do tempo, que ficaram congelados durante o arrasto
-    if (wasTrim) { renderAll(); refreshHeader(); }
   })
 );
-
-// double-click a clip = reset it
-laneVideo.addEventListener('dblclick', (e) => {
-  const clip = e.target.closest('.clip');
-  if (!clip) return;
-  const r = S.draft[+clip.dataset.i];
-  pushUndo('restaurar bordas');
-  r.start = r.orig.start; r.end = r.orig.end; r.removed = false;
-  renderAll(); refreshHeader();
-});
 
 // keyboard
 document.addEventListener('keydown', (e) => {
@@ -3790,14 +3529,6 @@ document.addEventListener('keydown', (e) => {
     renderTx();
     refreshHeader();
     e.preventDefault();
-  } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0) {
-    const r = S.draft[S.selected];
-    pushUndo(r.removed ? 'restaurar trecho' : 'apagar trecho');
-    r.removed = !r.removed;
-    renderAll(); refreshHeader();
-  } else if ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
-    e.preventDefault();
-    undoLast();
   }
 });
 
@@ -3825,9 +3556,6 @@ $('btnApprove').addEventListener('click', async () => {
     toast('não consegui salvar a aprovação — tente de novo', 3000);
   }
 });
-
-$('btnUndo').innerHTML = ICON.undo;
-$('btnUndo').addEventListener('click', undoLast);
 
 /* MODO da linha do tempo: compacta (vídeo + waveform geral) ⇄ expandida (com
    marcações, legendas, J-cut, efeitos). Compacta é o PADRÃO — a leitura de
@@ -4024,12 +3752,6 @@ async function sendTimeline() {
   S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
   S.cutWords.clear();
   S.cutBreaths.clear();
-  // A pilha morre no salvamento, e tem de morrer: o pedido já saiu daqui, e os
-  // takes marcados como removidos acabaram de ser FILTRADOS de S.draft. Um
-  // instantâneo anterior traria de volta trechos que já foram enviados como
-  // apagados — a tela passaria a discordar do que o outro lado recebeu.
-  S.undo.length = 0;
-  refreshUndo();
   renderTx();
   return true;
 }
@@ -4137,7 +3859,6 @@ $('btnDiscard').addEventListener('click', () => {
   S.pendingIn = null;
   S.editingNote = null;
   $('noteEditor').classList.add('hidden');
-  S.selected = -1;
   renderAll(); refreshHeader();
   toast('Ajustes descartados', 2000);
 });

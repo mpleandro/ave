@@ -592,20 +592,8 @@ canvas { display: block; }
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04));
-  cursor: grab;
-  transition: box-shadow 0.12s;
+  pointer-events: none;
 }
-.clip:hover { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3); z-index: 3; }
-.clip.selected { box-shadow: 0 0 0 2px var(--orange); z-index: 4; }
-.clip.dirty { border: 1.5px dashed var(--orange); }
-.clip.removed { opacity: 0.28; filter: grayscale(1); }
-.clip.removed::after {
-  content: 'REMOVIDO';
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 900; letter-spacing: 1px; color: var(--mark);
-}
-
 .clip .thumbs { position: absolute; inset: 0; display: flex; overflow: hidden; }
 .clip .thumbs img { height: 100%; flex: 0 0 auto; pointer-events: none; opacity: 0.85; }
 
@@ -632,18 +620,6 @@ canvas { display: block; }
   pointer-events: none;
 }
 
-.clip .handle {
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 9px;
-  cursor: ew-resize;
-  z-index: 3;
-}
-.clip .handle.l { left: 0; border-left: 3px solid transparent; }
-.clip .handle.r { right: 0; border-right: 3px solid transparent; }
-.clip:hover .handle.l { border-left-color: var(--orange); }
-.clip:hover .handle.r { border-right-color: var(--orange); }
-
 /* caption + insert chips */
 .chip {
   position: absolute;
@@ -668,10 +644,9 @@ canvas { display: block; }
   background: rgb(var(--orange-rgb) / 0.16);
   border: 1px solid rgb(var(--orange-rgb) / 0.55);
   color: var(--orange-soft);
-  cursor: grab;
+  pointer-events: none;
 }
 .chip.insert.hook { background: rgb(var(--orange-soft-rgb) / 0.2); border-color: rgb(var(--orange-soft-rgb) / 0.6); color: var(--orange-soft); }
-.chip.insert.dirty { border-style: dashed; }
 .chip.music {
   background: repeating-linear-gradient(-45deg, rgb(var(--orange-soft-rgb) / 0.14) 0 10px, rgb(var(--orange-soft-rgb) / 0.22) 10px 20px);
   border: 1px solid rgb(var(--orange-soft-rgb) / 0.5);
@@ -694,10 +669,6 @@ canvas { display: block; }
   font-size: 10px;
   letter-spacing: 0.2px;
 }
-.chip .handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
-.chip .handle.l { left: 0; }
-.chip .handle.r { right: 0; }
-
 /* needle */
 .needle {
   position: absolute;
@@ -1539,6 +1510,7 @@ button.tl-chip:disabled { cursor: default; }
   overflow: hidden;
   border: 1px solid rgb(var(--orange-soft-rgb) / 0.34);
   background: linear-gradient(180deg, rgb(var(--orange-soft-rgb) / 0.20), rgb(var(--orange-soft-rgb) / 0.08));
+  pointer-events: none;
 }
 .ablock-label {
   position: absolute;
@@ -1586,18 +1558,6 @@ button.tl-chip:disabled { cursor: default; }
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
   color: rgba(255, 255, 255, 0.75);
-}
-
-/* Parte do trecho que sai no aparo — escurecida no lugar, enquanto o bloco
-   segue congelado no tamanho antigo. Mostra o que se perde antes de perder. */
-.clip .trim-cut {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: rgba(8, 11, 16, 0.72);
-  backdrop-filter: saturate(0.2);
-  pointer-events: none;
-  z-index: 3;
 }
 
 
@@ -1740,13 +1700,7 @@ button.tl-chip:disabled { cursor: default; }
   .actionbar #btnDiscard { padding: 8px 11px; }
 }
 
-/* As bordas dos blocos de A1/A2 são arrastáveis: editam o J-cut daquele trecho.
-   Herdam o desenho das alças dos clipes de vídeo, porque é o mesmo gesto. */
 .ablock { position: relative; }
-.ablock .handle { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 4; }
-.ablock .handle.l { left: -3px; }
-.ablock .handle.r { right: -3px; }
-.ablock .handle:hover { background: rgb(var(--orange-rgb) / 0.45); border-radius: 3px; }
 
 /* ---------- switch de modo ---------- */
 .viewseg { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--stroke); }
