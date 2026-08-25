@@ -210,38 +210,15 @@
   </section>
 
   <div id="editorCol" class="editor-col">
-    <!-- CAMADAS DO RENDER — o antigo portão de Estilo, que era uma TELA INTEIRA
-         entre as fases e escondia o vídeo enquanto você escolhia como ele ia
-         ficar. Agora mora ao lado da imagem, dentro da Finalização: escolher um
-         estilo é uma coisa que se faz OLHANDO o material, não de memória.
-         As linhas são montadas por JS a partir de LAYERS — o HTML só reserva a
-         casca, como todo o resto desta interface. -->
-    <!-- O PORTÃO, dito em voz alta. Enquanto o vídeo em tela é o proxy, as
-         camadas do render não existem — e um painel que simplesmente some lê
-         como interface quebrada, não como etapa a cumprir. -->
-    <div id="gateNote" class="gate-note hidden">
-      <strong>Fase 1 em revisão.</strong> Este é o corte de trabalho
-      (<code>preview_proxy.mp4</code>, 720p) — julgue as tomadas e o ritmo, não a
-      compressão. <em>Aprove a Fase 1</em> para renderizar o corte final e liberar
-      as camadas do render, as legendas e a trilha.
-    </div>
-
-    <section id="layersPanel" class="layers glass hidden">
-      <!-- A tira é o acordeão MESTRE. Recolhido, o painel some inteiro e devolve
-           a altura para a linha do tempo — que é o que falta em tela baixa. O
-           resumo mora aqui, e não no rodapé, exatamente para continuar visível
-           quando tudo o mais estiver fechado: recolher não pode significar
-           esquecer o que está escolhido. -->
-      <button id="layersToggle" class="layers-bar" type="button">
-        <span class="layers-caret">⌄</span>
-        <span class="layers-eyebrow">Camadas do render</span>
-      </button>
-      <div class="layers-body-wrap">
-        <div id="layerTabs" class="layer-tabs"></div>
-        <div id="layerBody" class="layer-body"></div>
-      </div>
-    </section>
-
+    <!-- COLUNA DE TRABALHO: transporte + timeline, empilhados. É o que fica à
+         ESQUERDA das camadas do render agora — antes ficava tudo numa coluna
+         só, com as camadas por último e por baixo, e um vídeo alto o bastante
+         empurrava o painel inteiro para fora da tela (relatado com vídeo
+         horizontal em janela estreita). Painel lateral em vez de rodapé:
+         `#layersPanel`/`#gateNote` não competem mais por ALTURA com o vídeo,
+         só por LARGURA com esta coluna — e largura sobra ou colapsa
+         graciosamente (ver `.work-col`/`.layers` em app.css). -->
+    <div id="workCol" class="work-col">
     <!-- Só o que pertence à LINHA DO TEMPO: marcar e escala. A reprodução
          subiu para cima da imagem, e esta barra ficou rasa o bastante para
          viver colada nas trilhas, em vez de tomar uma faixa da coluna. -->
@@ -349,6 +326,44 @@
       <div id="insertTracks" class="hidden"></div>
       <div id="gutterLine" class="gutter-line"></div>
       <div id="needle" class="needle"><div class="needle-head"></div></div>
+      </div>
+    </section>
+    </div>
+
+    <!-- CAMADAS DO RENDER — o antigo portão de Estilo, que era uma TELA INTEIRA
+         entre as fases e escondia o vídeo enquanto você escolhia como ele ia
+         ficar. Agora mora ao LADO da coluna de trabalho, dentro da
+         Finalização: escolher um estilo é uma coisa que se faz OLHANDO o
+         material, não de memória.
+         As linhas são montadas por JS a partir de LAYERS — o HTML só reserva a
+         casca, como todo o resto desta interface. -->
+    <!-- O PORTÃO, dito em voz alta. Enquanto o vídeo em tela é o proxy, as
+         camadas do render não existem — e um painel que simplesmente some lê
+         como interface quebrada, não como etapa a cumprir. -->
+    <div id="gateNote" class="gate-note hidden">
+      <strong>Fase 1 em revisão.</strong> Este é o corte de trabalho
+      (<code>preview_proxy.mp4</code>, 720p) — julgue as tomadas e o ritmo, não a
+      compressão. <em>Aprove a Fase 1</em> para renderizar o corte final e liberar
+      as camadas do render, as legendas e a trilha.
+    </div>
+
+    <!-- EM TELA ESTREITA (`.layers` espremida pelo `@container`), a faixa vira
+         um TRILHO só de ícones e o corpo (`.layer-body`) some do fluxo — ele só
+         volta como um flyover ancorado à esquerda do trilho, quando o usuário
+         clica numa camada (classe `.open`, ligada em app.js). Larga, é o
+         mesmo painel de sempre, encaixado ao lado em vez de embaixo. -->
+    <section id="layersPanel" class="layers glass hidden">
+      <!-- A tira é o acordeão MESTRE. Recolhido, o painel some inteiro e devolve
+           a largura para a coluna de trabalho — só existe em tela larga; em
+           tela estreita o trilho de ícones já é o colapso, e este cabeçalho
+           some (ver app.css). -->
+      <button id="layersToggle" class="layers-bar" type="button">
+        <span class="layers-caret">⌄</span>
+        <span class="layers-eyebrow">Camadas do render</span>
+      </button>
+      <div class="layers-body-wrap">
+        <div id="layerTabs" class="layer-tabs"></div>
+        <div id="layerBody" class="layer-body"></div>
       </div>
     </section>
 

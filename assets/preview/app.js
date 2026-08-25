@@ -2623,13 +2623,14 @@ function refreshLayerSummaries() {
 }
 
 $('layersPanel').addEventListener('click', (e) => {
-  // acordeão mestre: recolhe o painel inteiro e devolve a altura para a timeline
+  // acordeão mestre: recolhe o painel inteiro e devolve a largura para a
+  // coluna de trabalho (era altura, na timeline; virou largura, na linha)
   if (e.target.closest('#layersToggle')) {
     const wrap = $('layersPanel');
     wrap.classList.toggle('collapsed');
     // abrir as camadas devolve a linha do tempo: é ela que convive com o painel
     if (!wrap.classList.contains('collapsed') && S.view !== 'tl') setView('tl');
-    // a timeline acabou de ganhar (ou perder) altura — reajusta a escala nela
+    // a timeline acabou de ganhar (ou perder) largura ao lado — reajusta a escala
     requestAnimationFrame(() => { fitZoom(); renderAll(); });
     return;
   }
@@ -2639,7 +2640,14 @@ $('layersPanel').addEventListener('click', (e) => {
   // controle futuro colocado no cabeçalho passe a alternar a linha sem querer.
   const chip = e.target.closest('.layer-chip');
   if (chip) {
+    const wrap = $('layersPanel');
+    /* Em tela larga `.open` não muda nada visível — o corpo já mora no fluxo
+       normal. Em tela estreita (`.layers` espremida pelo `@container`) ele
+       vira o flyover: clicar na mesma aba que já está aberta fecha; clicar em
+       outra troca de camada e mantém aberto. */
+    const jaAberta = chip.dataset.layer === activeLayer && wrap.classList.contains('open');
     activeLayer = chip.dataset.layer;
+    wrap.classList.toggle('open', !jaAberta);
     // trocar de CAMADA começa do topo: é conteúdo novo, e manter a rolagem
     // anterior abriria a camada nova no meio dela, sem contexto
     $('layerBody').scrollTop = 0;
@@ -2682,6 +2690,23 @@ $('layersPanel').addEventListener('click', (e) => {
     renderSetup();
   }
 });
+
+// EM TELA ESTREITA o corpo da camada aberta é um flyover (ver app.css); clicar
+// fora dele fecha, como qualquer popover. Em tela larga `.open` não muda nada
+// visível, então este listener não tem efeito lá — não precisa checar largura.
+// CAPTURA, não borbulhamento: o clique numa aba chama `renderSetup()` na hora
+// (mesmo handler, fase de borbulhamento), que refaz `#layerTabs` do zero — o
+// BOTÃO clicado sai da árvore antes do clique terminar de subir. Na fase de
+// bolha, `e.target.closest('#layersPanel')` desse botão já desligado da
+// árvore dá `null`, e este listener lia isso como "clique fora" e fechava o
+// flyover no mesmo gesto que acabou de abri-lo. Na captura, que roda ANTES do
+// handler do próprio painel, o alvo ainda está no lugar.
+document.addEventListener('click', (e) => {
+  const wrap = $('layersPanel');
+  if (wrap.classList.contains('open') && !e.target.closest('#layersPanel')) {
+    wrap.classList.remove('open');
+  }
+}, true);
 
 async function sendStyle() {
   S.style.note = $('setupNote').value.trim();
@@ -3515,6 +3540,10 @@ document.addEventListener('keydown', (e) => {
     toast('IN cancelado', 1600);
     return;
   }
+  if (e.key === 'Escape' && $('layersPanel').classList.contains('open')) {
+    $('layersPanel').classList.remove('open');
+    return;
+  }
   if (e.code === 'Space') {
     e.preventDefault();
     video.paused ? video.play() : video.pause();
@@ -3565,10 +3594,9 @@ $('btnApprove').addEventListener('click', async () => {
 $('tlMode').innerHTML = '<span class="caret">⌄</span><span>Camadas</span>';
 function setTlMode(compact) {
   $('timeline').classList.toggle('compact', compact);
-  // compacta, a timeline devolve a altura que não usa: o painel encolhe ao
-  // conteúdo e o de camadas do render pode crescer além do teto usual
+  // compacta, a timeline devolve a altura que não usa dentro da coluna de
+  // trabalho — as camadas do render, ao lado, não são afetadas
   $('timelinePanel').classList.toggle('compacta', compact);
-  $('layersPanel').classList.toggle('tl-compacta', compact);
   const b = $('tlMode');
   b.setAttribute('aria-expanded', String(!compact));
   b.title = compact ? 'Expandir as camadas (marcações, legendas, J-cut, efeitos)'
