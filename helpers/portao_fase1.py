@@ -140,13 +140,19 @@ def checar_quotes(edit: Path) -> list[dict]:
     if not edl_p.exists():
         return []
     edl = json.loads(edl_p.read_text())
+    sources = edl.get("sources", {})
 
     palavras = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
                     if not q.name.startswith(".")):
         for w in json.loads(p.read_text()).get("words", []):
             if w.get("type") == "word" and (w.get("text") or "").strip():
-                palavras.append(w)
+                # `arquivo` é o stem do transcrito de origem — um EDL com mais
+                # de uma fonte tem relógios independentes que se sobrepõem (o
+                # gancho e o vídeo final começam os dois perto de 0s), e sem
+                # esta marca uma palavra do arquivo errado casa por pura
+                # coincidência de tempo com o range de outra fonte.
+                palavras.append({**w, "arquivo": p.stem})
     if not palavras:
         return []
 
@@ -160,8 +166,11 @@ def checar_quotes(edit: Path) -> list[dict]:
         if len(alvo) < 3:
             continue
         cauda = " ".join(alvo[-3:])
+        src_path = sources.get(r.get("source"))
+        src_stem = Path(src_path).stem if src_path else None
         no_trecho = [w for w in palavras
-                     if w["start"] >= ini - 1e-6 and w["end"] <= fim + 1e-6]
+                     if (src_stem is None or w["arquivo"] == src_stem)
+                     and w["start"] >= ini - 1e-6 and w["end"] <= fim + 1e-6]
         dentro = " ".join(" ".join(_norm(w["text"]) for w in no_trecho).split())
 
         if cauda in dentro:
@@ -243,8 +252,22 @@ def checar_quotes(edit: Path) -> list[dict]:
     return faltas
 
 
+_DEADAIR_RE = re.compile(r"(\d+\.\d+)[-–](\d+\.\d+)s.*CHECK-DEADAIR")
+
+
 def checar_render(edit: Path, render: str | None) -> list[dict]:
-    """verify_cut: a única checagem que olha o vídeo, não o plano."""
+    """verify_cut: a única checagem que olha o vídeo, não o plano.
+
+    CHECK-DEADAIR não distingue ar morto de verdade de uma pausa retórica que
+    o usuário já ouviu e decidiu manter (`propose_breaths.py` já faz essa
+    classificação; o humano pode discordar dela nos dois sentidos). Sem uma
+    forma de registrar "já revisei, é assim mesmo", o portão volta a bloquear
+    a cada render por um silêncio que ninguém considera defeito — mesma razão
+    do `aceito` em `checar_mapa_de_defeitos`. `ar_morto_aceito` no EDL é essa
+    marca: pares [ini, fim] em tempo de OUTPUT (o que `verify_cut` imprime),
+    casados por sobreposição — não por igualdade exata, porque o silêncio
+    medido varia meio quadro entre renders do mesmo corte.
+    """
     edl_p = edit / "edl.json"
     alvos = [render] if render else ["preview_proxy.mp4", "preview.mp4"]
     video = next((edit / a for a in alvos if (edit / a).exists()), None)
@@ -254,11 +277,23 @@ def checar_render(edit: Path, render: str | None) -> list[dict]:
     cod, out = _rodar([str(HELPERS / "verify_cut.py"), str(edl_p), str(video)])
     if cod == 0:
         return []
-    linhas = [l.strip() for l in out.splitlines() if "CHECK" in l or "clip" in l.lower()]
+    aceitos = []
+    try:
+        aceitos = json.loads(edl_p.read_text()).get("ar_morto_aceito") or []
+    except json.JSONDecodeError:
+        pass
+    def aceito(linha: str) -> bool:
+        m = _DEADAIR_RE.search(linha)
+        if not m:
+            return False
+        a, b = float(m.group(1)), float(m.group(2))
+        return any(min(b, float(hi)) - max(a, float(lo)) > 0 for lo, hi in aceitos)
+    linhas = [l.strip() for l in out.splitlines()
+              if ("CHECK" in l or "clip" in l.lower()) and not aceito(l)]
     return [{"check": "verify_cut", "problema": l,
              "conserto": "ver a junção apontada com timeline_view"} for l in linhas[:12]] or \
-           [{"check": "verify_cut", "problema": f"verify_cut reprovou (exit {cod})",
-             "conserto": out.strip()[-400:]}]
+           ([{"check": "verify_cut", "problema": f"verify_cut reprovou (exit {cod})",
+             "conserto": out.strip()[-400:]}] if not aceitos else [])
 
 
 # --------------------------------------------------------------------------- #
@@ -297,10 +332,22 @@ def checar_mapa_de_defeitos(edit: Path) -> list[dict]:
     for r in edl.get("ranges", []):
         por_fonte.setdefault(fontes.get(r.get("source", ""), ""), []).append(r)
 
-    for stem, defeitos in mapa.items():
+    for stem, entry in mapa.items():
+        # `entry` é o achado direto (mapa antigo) ou {"fp":.., "achados":[..]}
+        # (formato com cache por fonte, ver `impressao_digital` em
+        # verify_takes.py) — os dois convivem porque um mapa gravado antes
+        # desta mudança continua legível.
+        defeitos = entry.get("achados", []) if isinstance(entry, dict) else entry
         ranges_f = por_fonte.get(stem, [])
         for d in defeitos:
             if not d.get("confirmado"):
+                continue
+            if d.get("aceito"):
+                # Repetição CONFIRMADA no áudio, mas um humano já ouviu e decidiu
+                # que é intencional (anáfora/definição, não retomada) — a Hard
+                # Rule que criou este checador também diz que o modelo nunca
+                # resolve isso sozinho, só recomenda; uma vez que o usuário
+                # decidiu, o portão não pode voltar a bloquear a cada render.
                 continue
             # REPETIÇÃO SÓ É DEFEITO COM AS DUAS PASSADAS NO CORTE. Manter uma
             # é o conserto — a primeira versão desta checagem reprovava o range
@@ -329,6 +376,29 @@ def checar_mapa_de_defeitos(edit: Path) -> list[dict]:
                     })
                     break
     return faltas
+
+
+def mapa_cobre_fontes(edit: Path) -> bool:
+    """`defeitos_audio.json` tem uma entrada para TODA fonte que o EDL usa?
+
+    Não confunda com `checar_mapa_de_defeitos` estar limpo: um EDL cuja fonte
+    NUNCA foi varrida também não acusa nada ali, porque não há mapa para
+    consultar — silêncio por falta de dado, não por dado limpo. Esta função
+    é o que diferencia os dois casos, e é o que autoriza pular a varredura
+    cara do render (ver `main`): só quando toda fonte usada já foi ouvida
+    E o cruzamento contra o EDL não achou nada.
+    """
+    mapa_p = edit / "defeitos_audio.json"
+    edl_p = edit / "edl.json"
+    if not mapa_p.exists() or not edl_p.exists():
+        return False
+    try:
+        mapa = json.loads(mapa_p.read_text())
+        edl = json.loads(edl_p.read_text())
+    except json.JSONDecodeError:
+        return False
+    fontes_no_edl = {Path(v).stem for v in (edl.get("sources") or {}).values()}
+    return fontes_no_edl.issubset(mapa.keys())
 
 
 def checar_audio_do_corte(edit: Path, render: str | None) -> list[dict]:
@@ -368,6 +438,10 @@ def main() -> None:
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--pular-render", action="store_true",
                     help="só as checagens de plano (útil antes de renderizar)")
+    ap.add_argument("--sempre-ouvir", action="store_true",
+                    help="roda `checar_audio_do_corte` mesmo quando o mapa da "
+                         "fonte já prova o EDL limpo (rede de segurança extra, "
+                         "ao custo de repetir uma varredura cara — ver abaixo)")
     args = ap.parse_args()
 
     edit = args.edit.resolve()
@@ -381,10 +455,20 @@ def main() -> None:
     if not faltas:
         faltas += checar_reinicios(edit)
         faltas += checar_quotes(edit)
-        faltas += checar_mapa_de_defeitos(edit)
+        faltas_mapa = checar_mapa_de_defeitos(edit)
+        faltas += faltas_mapa
         if not args.pular_render:
             faltas += checar_render(edit, args.render)
-            faltas += checar_audio_do_corte(edit, args.render)
+            # A VARREDURA DO RENDER (`checar_audio_do_corte`) OUVE o corte com
+            # o mesmo motor caro de `verify_takes --fonte` — só que de novo,
+            # em cima de um áudio que já passou pela varredura da FONTE. Ela é
+            # a ÚNICA rede de segurança contra o que o mapa não podia saber
+            # (repetição introduzida pela própria montagem/J-cut), então só
+            # pula quando o mapa PROVOU o EDL limpo — não quando ele está
+            # simplesmente vazio (fonte nunca varrida): `mapa_cobre_fontes`
+            # é o que distingue as duas coisas (ver o docstring dela).
+            if args.sempre_ouvir or faltas_mapa or not mapa_cobre_fontes(edit):
+                faltas += checar_audio_do_corte(edit, args.render)
 
     bloqueiam = [f for f in faltas if not f.get("aviso")]
 

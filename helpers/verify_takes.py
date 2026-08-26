@@ -44,7 +44,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import subprocess
 import sys
 import unicodedata
 from pathlib import Path
@@ -54,6 +53,7 @@ MODELO = "mlx-community/whisper-large-v3-turbo"
 # só cabe na janela pequena, a longa só cabe na grande.
 LARGURAS = ((2.4, 1.2), (4.0, 2.0), (6.0, 3.0))
 NGRAMAS = (4, 3, 2)
+SR = 16000  # mlx_whisper.audio.load_audio já entrega mono 16kHz — é o que o modelo espera
 
 
 def norm(t: str) -> list[str]:
@@ -77,37 +77,46 @@ def repeticao(ws: list[str]) -> tuple[str, int] | None:
     return None
 
 
-def _dur(p: Path) -> float:
-    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                        "-of", "default=nw=1:nk=1", str(p)], capture_output=True, text=True)
-    try:
-        return float(r.stdout.strip())
-    except ValueError:
-        return 0.0
+def impressao_digital(p: Path) -> dict:
+    """Tamanho + mtime — não o conteúdo. Existe só pra responder "esta fonte é
+    a mesma que eu varri da última vez?" sem reabrir e reler o arquivo inteiro
+    (que, sendo vídeo, custaria quase tanto quanto a própria varredura)."""
+    st = p.stat()
+    return {"size": st.st_size, "mtime": st.st_mtime}
 
 
-def varrer(video: Path, tmp: Path, modelo: str = MODELO) -> list[dict]:
+def varrer(video: Path, modelo: str = MODELO) -> list[dict]:
     try:
         import mlx_whisper
+        from mlx_whisper.audio import load_audio
     except ImportError:
         raise SystemExit(
             "mlx-whisper não está instalado — é ele que ouve o corte.\n"
             "  uv pip install mlx-whisper   (Apple Silicon; local, grátis, offline)")
 
-    wav = tmp / "corte.wav"
-    subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                    "-i", str(video), "-ac", "1", "-ar", "16000", str(wav)], check=True)
-    dur = _dur(wav)
-    janela = tmp / "_j.wav"
+    # UMA decodificação só, do arquivo inteiro (`load_audio` já roda o ffmpeg
+    # dela, mono 16kHz) — cada janela abaixo é uma FATIA EM MEMÓRIA desse
+    # array, não um `corte.wav` + um processo de ffmpeg novo por janela. Num
+    # corte de 2min isso eram ~150-200 subprocessos só para RECORTAR, antes de
+    # qualquer transcrição rodar — a transcrição continua sendo o custo real
+    # (é ela quem ouve), mas pagar spawn de processo em cima disso era peso de
+    # graça.
+    audio = load_audio(str(video))
+    dur = audio.shape[0] / SR
+
+    def fatia(t: float, largura: float):
+        i0 = max(0, round(t * SR))
+        i1 = min(audio.shape[0], round((t + largura) * SR))
+        return audio[i0:i1]
 
     achados: dict[str, dict] = {}
     for larg, passo in LARGURAS:
         t = 0.0
         while t < dur:
-            subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                            "-ss", f"{t:.2f}", "-t", f"{larg:.2f}", "-i", str(wav),
-                            str(janela)], check=True)
-            r = mlx_whisper.transcribe(str(janela), path_or_hf_repo=modelo,
+            seg = fatia(t, larg)
+            if seg.shape[0] == 0:  # cauda: passo flutuante pode encostar exatamente em `dur`
+                break
+            r = mlx_whisper.transcribe(seg, path_or_hf_repo=modelo,
                                        language="pt", verbose=False)
             txt = " ".join(s["text"].strip() for s in r["segments"])
             achado = repeticao(norm(txt))
@@ -132,10 +141,7 @@ def varrer(video: Path, tmp: Path, modelo: str = MODELO) -> list[dict]:
             a["confirmado"] = True
             continue
         ini = max(0.0, a["t"] - 0.8)
-        subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                        "-ss", f"{ini:.2f}", "-t", f"{a['janela'] + 1.6:.2f}",
-                        "-i", str(wav), str(janela)], check=True)
-        r = mlx_whisper.transcribe(str(janela), path_or_hf_repo=modelo,
+        r = mlx_whisper.transcribe(fatia(ini, a["janela"] + 1.6), path_or_hf_repo=modelo,
                                    language="pt", verbose=False)
         ws = norm(" ".join(s["text"].strip() for s in r["segments"]))
         rep2 = repeticao(ws)
@@ -150,10 +156,7 @@ def varrer(video: Path, tmp: Path, modelo: str = MODELO) -> list[dict]:
     for a in achados.values():
         if not a.get("confirmado"):
             continue
-        subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-                        "-ss", f"{a['t']:.2f}", "-t", f"{a['janela']:.2f}",
-                        "-i", str(wav), str(janela)], check=True)
-        r = mlx_whisper.transcribe(str(janela), path_or_hf_repo=modelo,
+        r = mlx_whisper.transcribe(fatia(a["t"], a["janela"]), path_or_hf_repo=modelo,
                                    language="pt", word_timestamps=True, verbose=False)
         palavras = [(w["word"], w["start"], w["end"])
                     for seg in r["segments"] for w in seg.get("words", [])]
@@ -188,6 +191,9 @@ def main() -> None:
                          "detector de portão em insumo da seleção de tomadas")
     ap.add_argument("--modelo", default=MODELO)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--forcar", action="store_true",
+                     help="revarre mesmo se o cache do mapa já cobre esta fonte "
+                          "sem mudança (ver `impressao_digital`)")
     args = ap.parse_args()
 
     edit = args.edit.resolve()
@@ -200,10 +206,6 @@ def main() -> None:
         fonte = args.fonte.resolve()
         if not fonte.exists():
             sys.exit(f"fonte não encontrada: {fonte}")
-        tmp = edit / ".preview_cache" / "ouvir"
-        tmp.mkdir(parents=True, exist_ok=True)
-        achados = varrer(fonte, tmp, args.modelo)
-        conf = [a for a in achados if a.get("confirmado")]
         mapa_p = edit / "defeitos_audio.json"
         mapa = {}
         if mapa_p.exists():
@@ -211,11 +213,35 @@ def main() -> None:
                 mapa = json.loads(mapa_p.read_text())
             except json.JSONDecodeError:
                 mapa = {}
-        mapa[fonte.stem] = [{"t": a.get("t_fino", a["t"]),
-                             "fim": a.get("fim_fino", round(a["t"] + a["janela"], 2)),
-                             "occ1": a.get("occ1"), "occ2": a.get("occ2"),
-                             "ngrama": a["ngrama"], "vezes": a["vezes"],
-                             "confirmado": a["confirmado"]} for a in achados]
+
+        fp = impressao_digital(fonte)
+        entry = mapa.get(fonte.stem)
+        # CACHE POR FONTE. A varredura de ~2min de áudio já mediu ~15min de
+        # parede (ver o docstring do módulo) — revarrer a MESMA fonte a cada
+        # chamada, sem ela ter mudado um byte, é pagar de novo por uma resposta
+        # que já está no disco. `impressao_digital` é tamanho+mtime, não hash
+        # do conteúdo: é o suficiente pra saber "o arquivo é este mesmo" sem
+        # reler os bytes todos (o que custaria quase tanto quanto revarrer).
+        if not args.forcar and isinstance(entry, dict) and entry.get("fp") == fp:
+            achados = entry.get("achados", [])
+            conf = [a for a in achados if a.get("confirmado")]
+            if args.json:
+                print(json.dumps({"fonte": fonte.name, "achados": achados, "cache": True},
+                                 ensure_ascii=False, indent=2))
+            else:
+                print(f"{fonte.name}: cache — {len(conf)} repetição(ões) confirmada(s) "
+                      f"(fonte sem mudança desde a última varredura; "
+                      f"--forcar revarre do zero)")
+            return
+
+        achados = varrer(fonte, args.modelo)
+        conf = [a for a in achados if a.get("confirmado")]
+        mapa[fonte.stem] = {"fp": fp,
+                             "achados": [{"t": a.get("t_fino", a["t"]),
+                                          "fim": a.get("fim_fino", round(a["t"] + a["janela"], 2)),
+                                          "occ1": a.get("occ1"), "occ2": a.get("occ2"),
+                                          "ngrama": a["ngrama"], "vezes": a["vezes"],
+                                          "confirmado": a["confirmado"]} for a in achados]}
         mapa_p.write_text(json.dumps(mapa, ensure_ascii=False, indent=2), encoding="utf-8")
         if args.json:
             print(json.dumps({"fonte": fonte.name, "achados": achados},
@@ -235,9 +261,7 @@ def main() -> None:
     if video is None:
         sys.exit(f"nenhum render encontrado em {edit} — renderize antes de ouvir")
 
-    tmp = edit / ".preview_cache" / "ouvir"
-    tmp.mkdir(parents=True, exist_ok=True)
-    achados = varrer(video, tmp, args.modelo)
+    achados = varrer(video, args.modelo)
 
     confirmados = [a for a in achados if a.get("confirmado")]
     if args.json:

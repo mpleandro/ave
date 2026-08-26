@@ -94,6 +94,11 @@ def _palavras(edit: Path) -> list[dict]:
     Ordem de leitura e não ordem de relógio: os tempos do Whisper não são
     monotônicos (medido: 'hambúrguer' 40.10–40.48 sobrepõe 'É' 40.02–40.96), e
     ordenar por tempo embaralha a frase.
+
+    Cada palavra carrega `arquivo` (o stem do transcrito de origem) — um EDL
+    com mais de uma fonte tem relógios independentes que se sobrepõem (a
+    fonte do gancho e a do vídeo final começam as duas em ~0s), e sem essa
+    marca uma palavra do arquivo errado casa por pura coincidência de tempo.
     """
     out: list[dict] = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
@@ -104,7 +109,7 @@ def _palavras(edit: Path) -> list[dict]:
             txt = (w.get("text") or "").strip()
             if txt and norm(txt):
                 out.append({"t": float(w["start"]), "fim": float(w["end"]),
-                            "txt": txt, "n": norm(txt)})
+                            "txt": txt, "n": norm(txt), "arquivo": p.stem})
     return out
 
 
@@ -116,12 +121,21 @@ def _palavras_do_corte(edit: Path) -> list[dict]:
     porque lá as duas versões estão longe uma da outra.
     """
     edl = json.loads((edit / "edl.json").read_text())
+    sources = edl.get("sources", {})
     todas = _palavras(edit)
     out: list[dict] = []
     base = 0.0
     for idx, r in enumerate(edl.get("ranges", [])):
         ini, fim = float(r["start"]), float(r["end"])
+        # o stem do ARQUIVO da fonte deste range — nunca a chave lógica
+        # ("gancho", "final"): é contra esse stem que `_palavras` marcou cada
+        # palavra, e sem resolver por aqui um range de uma fonte pega palavra
+        # de outra que caiu, por acaso, na mesma janela de tempo absoluto.
+        src_path = sources.get(r.get("source"))
+        src_stem = Path(src_path).stem if src_path else None
         for w in todas:
+            if src_stem is not None and w["arquivo"] != src_stem:
+                continue
             # centro dentro do range: a borda pode ter aparado a palavra, e
             # exigir contenção total descartaria a primeira/última de cada trecho
             centro = (w["t"] + w["fim"]) / 2

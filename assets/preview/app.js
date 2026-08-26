@@ -354,6 +354,25 @@ const STYLE_CATALOG = {
       name: 'Caixinha de perguntas',
       def: false,
       icon: '<svg viewBox="0 0 16 16"><path d="M2 3.6A1.6 1.6 0 013.6 2h8.8A1.6 1.6 0 0114 3.6v5.8a1.6 1.6 0 01-1.6 1.6H8l-3 2.6v-2.6H3.6A1.6 1.6 0 012 9.4V3.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><rect x="4.2" y="4.6" width="7.6" height="1.4" rx=".7"/><rect x="4.2" y="7.2" width="5" height="1.4" rx=".7"/></svg>',
+      // O mock imita o ADESIVO DE VERDADE (fidelidade com o app, não com a
+      // marca — ver caixinha.css): faixa escura no topo, corpo branco embaixo,
+      // cantos largos, sem inclinação. As cores são as MESMAS fixas do
+      // render, não um placeholder — mudar o CSS real muda este mock junto
+      // só se alguém lembrar de atualizar os dois; os dois vivem lidos lado a
+      // lado na mesma aba, então uma prévia que mentisse sobre a forma seria
+      // pior que nenhuma.
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="76" r="12" fill="rgba(255,255,255,.12)"/>
+        <path d="M18 112a15 15 0 0130 0z" fill="rgba(255,255,255,.12)"/>
+        <rect x="9" y="16" width="48" height="27" rx="6" fill="#fff" opacity=".92"/>
+        <rect x="9" y="16" width="48" height="11" rx="6" fill="#20252b"/>
+        <rect x="9" y="22" width="48" height="5" fill="#20252b"/>
+        <rect x="14" y="19.7" width="21" height="3" rx="1.5" fill="#fff" opacity=".85"/>
+        <rect x="14" y="33" width="34" height="3" rx="1.5" fill="#20252b" opacity=".55"/>
+        <rect x="14" y="38" width="24" height="3" rx="1.5" fill="#20252b" opacity=".32"/>
+      </svg>`,
     },
     {
       id: 'brollOverlay',
@@ -364,6 +383,21 @@ const STYLE_CATALOG = {
       name: 'Broll Overlay',
       def: false,
       icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="9.6" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="8.6" y="7.2" width="6.2" height="6.6" rx="1.4" fill="var(--bg1)" stroke="currentColor" stroke-width="1.4"/></svg>',
+      // O formato tem quatro tipos (`words`/`stat`/`labels`/`media`) e três
+      // posições — nenhum mock cabe todos. Este mostra o mais comum: uma
+      // faixa escurecida (o `dim`, NUNCA opacity no vídeo — ver
+      // brollOverlay_markup) por cima do a-roll, com a palavra de destaque
+      // (`bo-w.acc`) na cor de acento, e os anéis do cenário "hero" ao fundo.
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="46" cy="26" r="13" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.3"/>
+        <circle cx="46" cy="26" r="19" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="1.1"/>
+        <rect x="3" y="80" width="60" height="35" rx="5" fill="rgba(0,0,0,.42)"/>
+        <rect x="11" y="88" width="19" height="4.2" rx="2.1" fill="rgba(255,255,255,.55)"/>
+        <rect x="32" y="88" width="15" height="4.2" rx="2.1" fill="rgb(var(--orange-rgb) / .9)"/>
+        <rect x="11" y="95.5" width="28" height="4.2" rx="2.1" fill="rgba(255,255,255,.55)"/>
+      </svg>`,
     },
     {
       /* NOTÍCIA — cartela banda (motor `cartela`) que virou elemento por
@@ -374,6 +408,22 @@ const STYLE_CATALOG = {
       name: 'Notícia',
       def: false,
       icon: '<svg viewBox="0 0 16 16"><rect x="1.4" y="3" width="13.2" height="10" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="3.2" y="4.8" width="4.4" height="3.4" rx=".5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="8.6" y="4.9" width="4.6" height="1.2" rx=".6"/><rect x="8.6" y="7" width="4.6" height="1.2" rx=".6"/><rect x="3.2" y="9.6" width="10" height="1.2" rx=".6"/></svg>',
+      // Espelha `paint` do variants.json (`lines: papelEscuro, barra: accent,
+      // olho: sobreAccent`): cartão claro, barra lateral na cor de acento, o
+      // rótulo (olho) sentado SOBRE a barra em contraste, manchete escura
+      // preenchendo a largura (`quebra: "encher"`).
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="80" r="12" fill="rgba(255,255,255,.12)"/>
+        <path d="M18 114a15 15 0 0130 0z" fill="rgba(255,255,255,.12)"/>
+        <rect x="7" y="17" width="52" height="34" rx="4" fill="#eee7d8" opacity=".95"/>
+        <rect x="7" y="17" width="5" height="34" rx="2" fill="rgb(var(--orange-rgb) / .9)"/>
+        <rect x="18" y="21.5" width="19" height="6" rx="3" fill="rgb(var(--orange-rgb) / .9)"/>
+        <rect x="21" y="23.6" width="13" height="1.8" rx=".9" fill="#fff" opacity=".92"/>
+        <rect x="18" y="33" width="36" height="4.6" rx="1" fill="#241f18" opacity=".82"/>
+        <rect x="18" y="40" width="28" height="4.6" rx="1" fill="#241f18" opacity=".82"/>
+      </svg>`,
     },
   ],
 };
@@ -592,6 +642,14 @@ const HL_FALLBACK = {
 };
 const hlStyle = (id) =>
   ((LIVE.variants && LIVE.variants.headlines) || {})[id] || HL_FALLBACK[id] || HL_FALLBACK.card;
+
+// Mesmo padrão de `hlStyle`, para a legenda — espelha a busca já usada em
+// `renderLive` (linha ~3138). Faltava ESTE helper: `sendStyle()` chamava uma
+// função `capVariant()` que nunca existiu, e quebrava com `ReferenceError`
+// ANTES do `fetch('/api/save')` — o clique em "Enviar e renderizar" morria
+// ali, sem POST nenhum sair e sem toast nenhum avisar. Sem `.family`: o campo
+// do variant é `.cssFamily` (ver `vestirPal`/`renderLive`), não `.family`.
+const capVariant = (id) => ((LIVE.variants && LIVE.variants.styles) || {})[id] || {};
 
 /* ---------- as duas famílias ----------
  * Catálogo CURADO do Google Fonts, não a API inteira. Duas razões, e a segunda
@@ -2521,12 +2579,25 @@ function renderSetup() {
       if (!e) continue;
       const trava = elLocked(e);
       const on = !!S.style.elements[e.id] && !trava;
-      const row = el('div', `chk${on ? ' on' : ''}${trava ? ' locked' : ''}`, eh);
+      // ELEMENTOS COM MOCK viram cartão — prévia em cima, como Nenhum/Dividida
+      // (mesmo `.opt-preview.frame`, mesmo `--mock-w/h`), com o rótulo embaixo.
+      // A caixa continua QUADRADA (`chk-box`, não o círculo de `opt-mark`): o
+      // formato do marcador é o que diferencia "escolha única" (headline,
+      // legenda) de "liga/desliga independente" (elementos) nesta interface, e
+      // ganhar uma prévia não muda essa semântica. Os SEM mock (tracking,
+      // zoom, sfx…) continuam a fileira de sempre — não têm o que desenhar.
+      const row = el('div', `chk${e.mock ? ' chkcard' : ''}${on ? ' on' : ''}${trava ? ' locked' : ''}`, eh);
       row.dataset.id = e.id;
       if (trava) row.title = trava.split('\n')[0];
-      el('div', 'chk-box', row);
-      el('div', 'chk-ico', row).innerHTML = e.icon || '';
-      el('div', 'chk-name', row).textContent = e.name;
+      if (e.mock) {
+        el('div', 'opt-preview frame', row).innerHTML = e.mock;
+        el('div', 'chk-name', row).textContent = e.name;
+        el('div', 'chk-box', row); // posição vem do CSS — ver .chk.chkcard .chk-box
+      } else {
+        el('div', 'chk-box', row);
+        el('div', 'chk-ico', row).innerHTML = e.icon || '';
+        el('div', 'chk-name', row).textContent = e.name;
+      }
     }
   }
   refreshLayerSummaries();
@@ -2728,7 +2799,7 @@ async function sendStyle() {
     textColor: S.style.textColor || '#FFFFFF',
     fontMain: S.style.fontMain || FONT_MAIN_DEF,
     fontAccent: S.style.fontAccent || FONT_ACCENT_DEF,
-    capFont: S.style.capFont || capVariant().family || FONT_MAIN_DEF,
+    capFont: S.style.capFont || capVariant(S.style.captions || 'karaoke').cssFamily || FONT_MAIN_DEF,
     // se a segunda família chega a aparecer neste layout — sem isto a skill
     // não sabe se a fonte de destaque é uma instrução ou um valor sem uso
     fontAccentUsed: !!(hlStyle(S.style.headline) || {}).fontRole,
@@ -3603,8 +3674,14 @@ function setTlMode(compact) {
                     : 'Recolher para vídeo + áudio';
   try { localStorage.setItem('avelin.tlMode', compact ? 'compact' : 'full'); } catch (e) { /* privado */ }
   // a régua e a waveform desenham em canvas dimensionado pelo layout: trocar a
-  // densidade muda a altura da pista de áudio, então remede e redesenha
-  requestAnimationFrame(() => { fitZoom(); renderAll(); });
+  // densidade muda a ALTURA da pista de áudio, então remede e redesenha.
+  // NÃO chama `fitZoom()` — isso reseta o zoom pra "ajustar à janela"
+  // (`S.pps = S.minPps`), e o toggle aqui é sobre ALTURA (quais trilhas
+  // aparecem), não sobre a escala horizontal. `toggleMark()` chama esta
+  // função pra expandir a timeline compacta antes de cravar o pino do IN —
+  // com `fitZoom()` aqui, marcar o início do corte jogava fora qualquer zoom
+  // que a pessoa tivesse acabado de ajustar à mão.
+  requestAnimationFrame(() => { renderAll(); });
 }
 $('tlMode').addEventListener('click', () =>
   setTlMode(!$('timeline').classList.contains('compact')));
