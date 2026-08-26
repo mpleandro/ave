@@ -35,3 +35,43 @@
   mix-blend-mode: screen;
   z-index: 5;
 }
+
+/* ===================== Motor de transições — as 8 candidatas novas =====================
+ * ~/.avelin/propostas/transicoes-10.html, aplicadas em 2026-08-23. `chama`/
+ * `deslize`/`cortina`/`iris`/`falha` são paineis: uma camada opaca por cima
+ * escondendo o instante do corte, porque o preview.mp4 é UM arquivo já
+ * cortado — não existe crossfade real entre duas tomadas aqui. `tranco`,
+ * `estouro` e `zoomBlur` não têm div própria: animam `#a-roll`/`#vidwin`
+ * direto (ver `_transicao_*` em compose_shortform.py).
+ */
+.ave-trans-chama,
+.ave-trans-deslize,
+.ave-trans-cortina,
+.ave-trans-iris {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 5;
+}
+
+.ave-trans-cortina,
+.ave-trans-iris {
+  opacity: 1;      /* a visibilidade aqui é o clip-path, não a opacidade */
+  clip-path: circle(0% at 50% 50%);
+}
+
+.ave-trans-falha {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.ave-trans-falha-tira {
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  opacity: 0;
+  mix-blend-mode: screen;
+}

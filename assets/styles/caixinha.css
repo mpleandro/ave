@@ -20,31 +20,31 @@
 }
 
 .ave-caixa .cx-card {
-  width: var(--cx-w, 820px);
-  border-radius: var(--cx-radius, 30px);
+  width: var(--cx-w, 1040px);
+  border-radius: var(--cx-radius, 46px);
   overflow: hidden;
-  box-shadow: var(--cx-shadow, 0 26px 60px -18px rgba(0, 0, 0, .55));
-  transform: rotate(var(--cx-tilt, -1.6deg));  /* inclinação fixa, sem tween */
+  box-shadow: var(--cx-shadow, 0 3px 14px rgba(0, 0, 0, .18));
+  transform: rotate(var(--cx-tilt, 0deg));  /* inclinação fixa, sem tween */
   transform-origin: 50% 40%;
 }
 
 .ave-caixa .cx-faixa {
-  height: var(--cx-bar-h, 96px);
+  height: var(--cx-bar-h, 132px);
   display: flex; align-items: center; justify-content: center; gap: 12px;
-  background: var(--cx-bar-bg, #26262b);
-  color: var(--cx-bar-fg, #e9e9ea);
+  background: var(--cx-bar-bg, #20252b);
+  color: var(--cx-bar-fg, #ffffff);
   font-family: var(--cx-font), system-ui, sans-serif;
-  font-size: var(--cx-bar-size, 30px); font-weight: 600;
+  font-size: var(--cx-bar-size, 39px); font-weight: var(--cx-bar-weight, 700);
   letter-spacing: .01em;
 }
 
 .ave-caixa .cx-corpo {
   background: var(--cx-body-bg, #fff);
-  color: var(--cx-body-fg, #1c1c1e);
+  color: var(--cx-body-fg, #111111);
   font-family: var(--cx-font), system-ui, sans-serif;
-  font-size: var(--cx-body-size, 46px);
+  font-size: var(--cx-body-size, 47px);
   line-height: var(--cx-body-lh, 1.28);
-  font-weight: 500;
+  font-weight: var(--cx-body-weight, 400);
   text-align: center;
   padding: var(--cx-body-pad, 44px);
 }

@@ -124,13 +124,22 @@ const CARTELAS = [
   ['fita', 'Fita'], ['jornal', 'Recorte de jornal'], ['terminal', 'Terminal'],
   ['alerta', 'Alerta'], ['placar', 'Placar'], ['sombra_longa', 'Sombra longa'],
   ['neon', 'Neon tubo'], ['balao', 'Balão de fala'], ['filete', 'Filete duplo'],
-  ['adesivo', 'Adesivo'], ['noticia', 'Notícia'],
+  ['adesivo', 'Adesivo'],
+  // 'noticia' NÃO mora aqui: virou elemento independente em STYLE_CATALOG.elements
+  // (ela e a Caixinha disputavam a mesma zona alta da tela sem nenhuma arbitragem —
+  // ver elLocked() e a trava cruzada elemento↔headline).
   ['capa', 'Capa sólida'], ['capa_blur', 'Capa desfocada'], ['cortina', 'Cortina'],
   ['meia_tela', 'Meia-tela'], ['moldura', 'Moldura'], ['contagem', 'Contagem'],
   ['knockout', 'Knockout'], ['poster', 'Pôster tipográfico'], ['aspas', 'Aspas'],
   ['ficha', 'Ficha técnica'],
 ];
 const CT_IDS = new Set(CARTELAS.map((c) => c[0]));
+// As dez cartelas "banda" (cheia:false, entram SOBRE o vídeo) — disputam a
+// mesma zona alta que a Caixinha e a Notícia. Lista explícita, não um slice
+// da ordem do array: a trava não pode quebrar em silêncio se alguém reordenar
+// CARTELAS por outro motivo.
+const CARTELA_BANDA_IDS = new Set(['fita', 'jornal', 'terminal', 'alerta', 'placar',
+                                    'sombra_longa', 'neon', 'balao', 'filete', 'adesivo']);
 
 const PORTED = {
   captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked',
@@ -140,7 +149,7 @@ const PORTED = {
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
                       'relevo', 'grifo', 'contorno_duplo',
                       ...CARTELAS.map((c) => c[0])]),
-  edits: new Set(['limpa', 'split', 'split2', 'brollOverlay', 'caixinha']),
+  edits: new Set(['limpa', 'split', 'split2']),
 };
 
 // Quadro de foco de câmera — substitui o "boneco" genérico (círculo+blob) nos
@@ -219,49 +228,11 @@ const STYLE_CATALOG = {
         <rect x="40" y="62.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
       </svg>`,
     },
-    {
-      /* CAIXINHA DE PERGUNTAS — o adesivo do Instagram como gancho do vídeo.
-         A miniatura mostra o gesto do formato: faixa escura com a chamada,
-         corpo branco com a pergunta, e a pessoa falando atrás. */
-      id: 'caixinha',
-      name: 'Caixinha',
-      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
-        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
-        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="62" r="13" fill="rgba(255,255,255,.16)"/>
-        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
-        <rect x="9" y="17" width="48" height="30" rx="5" fill="#fff"/>
-        <path d="M9 22a5 5 0 015-5h38a5 5 0 015 5v4H9z" fill="#26262b"/>
-        <rect x="19" y="20" width="28" height="2.6" rx="1.3" fill="rgba(255,255,255,.75)"/>
-        <rect x="14" y="31" width="38" height="3" rx="1.5" fill="rgba(0,0,0,.72)"/>
-        <rect x="14" y="37" width="30" height="3" rx="1.5" fill="rgba(0,0,0,.55)"/>
-        <rect x="33" y="49" width="24" height="10" rx="5" fill="rgb(var(--orange-rgb) / .85)"/>
-      </svg>`,
-    },
-    {
-      /* BROLL OVERLAY — animações HyperFrames POR CIMA do vídeo, para ênfase.
-         O mock mostra o gesto: quadro escurecido (scrim) com um elemento de
-         destaque no centro. As janelas vivem em `brollOverlays[]` do
-         edit-data; o conteúdo nasce de uma conversa (sugestões da IA sobre o
-         transcrito + escolha do usuário), nunca de um catálogo fixo. */
-      id: 'brollOverlay',
-      name: 'Broll Overlay',
-      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
-        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
-        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
-        <circle cx="33" cy="48" r="13" fill="rgba(255,255,255,.10)"/>
-        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.10)"/>
-        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(0,0,0,.55)"/>
-        <rect x="10" y="44" width="46" height="20" rx="4" fill="var(--bg1)" stroke="rgb(var(--orange-rgb) / .8)"/>
-        <rect x="15" y="50" width="24" height="4" rx="2" fill="rgb(var(--orange-rgb) / .9)"/>
-        <rect x="15" y="57" width="34" height="3" rx="1.5" fill="rgba(255,255,255,.6)"/>
-        <path d="M46 50l6 4-6 4z" fill="rgb(var(--orange-rgb) / .9)"/>
-        <rect x="12" y="74" width="42" height="11" rx="5.5" fill="var(--bg1)" stroke="rgb(var(--blue-rgb) / .65)"/>
-        <rect x="16" y="78.5" width="12" height="2.4" rx="1.2" fill="rgb(var(--blue-rgb) / .9)"/>
-        <rect x="30" y="78.5" width="8" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
-        <rect x="40" y="78.5" width="10" height="2.4" rx="1.2" fill="rgba(255,255,255,.5)"/>
-      </svg>`,
-    },
+    // Caixinha e Broll Overlay NÃO moram mais aqui — viraram elementos
+    // independentes em STYLE_CATALOG.elements. Como "tipo de edição" era um
+    // radio ÚNICO, escolher Caixinha excluía Broll Overlay e vice-versa, sem
+    // nenhum motivo técnico: o compositor já os monta como dados
+    // independentes (`questionBox`, `brollOverlays[]`). Ver elLocked().
   ],
   // No names on purpose: the sample headline IS the label. Ids and geometry
   // mirror HL_STYLES in the template's Main.tsx — keep the two in step.
@@ -371,6 +342,38 @@ const STYLE_CATALOG = {
             + 'que roda com a biblioteca local.',
       def: true,
       icon: '<svg viewBox="0 0 16 16"><path d="M12.6 1.6L6.9 3a.7.7 0 00-.55.68v5.6a2 2 0 101.35 1.9V5.9l4.4-1.05v2.9a2 2 0 101.35 1.9V2.3a.7.7 0 00-.85-.7z"/><path d="M2.4 2.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/></svg>',
+    },
+    /* CAIXINHA, BROLL OVERLAY e NOTÍCIA — três elementos de tela, sem campo de
+     * texto/cor/fonte aqui de propósito. Ligar um sem conteúdo é o sinal para
+     * o agente perguntar via AskUserQuestion na conversa (o mesmo protocolo
+     * que o Broll Overlay já seguia: "o conteúdo não vem de catálogo, nasce
+     * de uma conversa") — não um formulário na tela. Ver check_supported()
+     * gêmeo em phase2.py. */
+    {
+      id: 'caixinha',
+      name: 'Caixinha de perguntas',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><path d="M2 3.6A1.6 1.6 0 013.6 2h8.8A1.6 1.6 0 0114 3.6v5.8a1.6 1.6 0 01-1.6 1.6H8l-3 2.6v-2.6H3.6A1.6 1.6 0 012 9.4V3.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><rect x="4.2" y="4.6" width="7.6" height="1.4" rx=".7"/><rect x="4.2" y="7.2" width="5" height="1.4" rx=".7"/></svg>',
+    },
+    {
+      id: 'brollOverlay',
+      /* O NOME É DO ELEMENTO, não do dado que ele preenche em Fase 1
+       * (`brollGraphics[]`/`inserts[]`) — esta é a ênfase COSMÉTICA sobre o
+       * a-roll já cortado (`brollOverlays[]`), decidida numa conversa sobre o
+       * transcrito aprovado, nunca no meio do corte. */
+      name: 'Broll Overlay',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="9.6" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="8.6" y="7.2" width="6.2" height="6.6" rx="1.4" fill="var(--bg1)" stroke="currentColor" stroke-width="1.4"/></svg>',
+    },
+    {
+      /* NOTÍCIA — cartela banda (motor `cartela`) que virou elemento por
+       * disputar a mesma zona alta que a Caixinha, sem nenhuma arbitragem
+       * antes disto. A trava contra Headline (qualquer cartela banda, `cheia:
+       * false`) mora em elLocked(). */
+      id: 'noticia',
+      name: 'Notícia',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.4" y="3" width="13.2" height="10" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="3.2" y="4.8" width="4.4" height="3.4" rx=".5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="8.6" y="4.9" width="4.6" height="1.2" rx=".6"/><rect x="8.6" y="7" width="4.6" height="1.2" rx=".6"/><rect x="3.2" y="9.6" width="10" height="1.2" rx=".6"/></svg>',
     },
   ],
 };
@@ -1337,7 +1340,6 @@ for (const [id] of PAL) CAP_BUILDERS[id] = (h) => buildPalavraDemo(h, id);
 // três arquivos, e errar a sincronia desloca a agulha e o scrub em silêncio —
 // nada quebra, só passa a apontar para o instante errado.
 const LABEL_W = parseFloat(tok('--label-w')) || 132;
-const MIN_SEG = 0.2; // s
 const THUMB_EVERY = 2.0;
 
 // ---------- state ----------
@@ -1355,7 +1357,6 @@ let S = {
   tab: 1,
   pps: 10, // px per second (zoom)
   minPps: 4,
-  selected: -1, // selected clip index (draft)
   lastSig: '', // change detection
   savedPending: false,
   notes: [], // correction markers [{id,start,end,text}] — draft-timeline seconds
@@ -1364,7 +1365,6 @@ let S = {
   words: [],        // transcrito do corte (/gen/words.json)
   cutWords: new Set(), // índices riscados = PEDIDO de corte, não corte feito
   cutBreaths: new Set(), // respiros marcados: índice da palavra que vem ANTES
-  undo: [],         // pilha de instantâneos de S.draft (apagar / redimensionar)
   approved: false,  // aprovação enviada nesta sessão (some a barra na hora)
   selWords: new Set(),
   processing: false, // a IA está refazendo algo lá fora
@@ -1386,13 +1386,34 @@ let S = {
  * A resposta vem do servidor (`keys`), não de um campo fixo no catálogo:
  * assim a trava some sozinha quando a chave entra, sem ninguém ter de lembrar
  * de destravar nada. */
+const ZONA_ALTA_MSG = 'a caixinha e o headline disputam a mesma zona da tela — desligue um dos dois';
+
 function elLocked(e) {
-  if (!e.needsKey) return '';
-  const keys = S.keys || {};
-  // sem resposta do servidor ainda: não trave. Um "false" por ausência de
-  // dado travaria a opção no primeiro segundo de cada carregamento.
-  if (!(e.needsKey in keys)) return '';
-  return keys[e.needsKey] ? '' : (e.keyMsg || 'Falta a chave de API para isto.');
+  if (e.needsKey) {
+    const keys = S.keys || {};
+    // sem resposta do servidor ainda: não trave. Um "false" por ausência de
+    // dado travaria a opção no primeiro segundo de cada carregamento.
+    if (e.needsKey in keys && !keys[e.needsKey]) return e.keyMsg || 'Falta a chave de API para isto.';
+  }
+  /* ZONA ALTA: Caixinha, Notícia e qualquer cartela "banda" ocupam o mesmo
+   * canto superior da tela por padrão (top:300, janela do gancho) — e por
+   * decisão do usuário a saída é TRAVAR a combinação, não reposicionar por
+   * conta própria. Ver CARTELA_BANDA_IDS. */
+  if (e.id === 'caixinha'
+      && (CARTELA_BANDA_IDS.has(S.style.headline) || S.style.elements.noticia)) {
+    return ZONA_ALTA_MSG;
+  }
+  if (e.id === 'noticia') {
+    if (S.style.elements.caixinha) return ZONA_ALTA_MSG;
+    /* Notícia É uma cartela banda que só mudou de endereço na interface — ela
+     * ocupa o MESMO hook/trilha que qualquer headline do radio (mesmo motor
+     * `cartela`, ver o branch `elif "noticia" in pecas` em
+     * compose_shortform.py). As duas nunca coexistem tecnicamente, então
+     * escolher um headline real desliga a porta da Notícia até ele voltar a
+     * "Nenhum". */
+    if (S.style.headline) return 'desligue o headline escolhido em Headline para ligar a Notícia';
+  }
+  return '';
 }
 
 function defaultStyle() {
@@ -1421,7 +1442,6 @@ function defaultStyle() {
        então trocar de estilo traz de volta a letra com que ele foi desenhado. */
     capFont: null,
     capDy: 0,   // deslocamento GLOBAL da legenda, em px de referência 1080
-    headlineText: '',
     elements,
     note: '',
   };
@@ -1479,39 +1499,19 @@ function jcutGeom(i) {
   };
 }
 
-// limites de ofício: mais de 1s de lead põe a imagem no meio da fala seguinte,
-// e mais de 1s de cauda aparada come palavra em qualquer take que feche justo
-const JCUT_MAX_F = 30;
-
 /* The draft timeline has to model the J-cut, not just sum the ranges: a take's
  * picture is shorter than its range by the lead it gives up plus the tail it had
  * trimmed. Summing raw ranges made the ruler read 8.07s over a 7.60s render, and
  * every clip after the first sat late by the accumulated lead. Each item also
  * carries its AUDIO placement (aout/adur), which is what the A1/A2 lanes draw —
  * derived here so the lanes follow the user's trims instead of going stale. */
-/* `freeze` congela UM trecho no tamanho que ele tinha antes do arrasto.
- *
- * Sem isso, puxar o início de um trecho encolhe o bloco pela direita — a borda
- * esquerda está presa pelo trecho anterior, porque esta é a linha do tempo do
- * CORTE, não da fonte. O resultado é que a alça que a pessoa está segurando não
- * se move e a outra ponta sim, que lê como "mexi no começo e ele arrastou o
- * fim". Congelando durante o arrasto, nada se desloca: a parte removida aparece
- * escurecida e a alça acompanha o cursor. O rearranjo acontece ao soltar, uma
- * vez só, que é quando a pessoa espera por ele. */
-/* Qual take está sendo aparado agora — usado para CONGELAR o bloco durante o
-   arraste, para que aparar o começo não encolha o bloco pela direita. Precisa
-   ser global: a onda e os clipes desenham a mesma decisão, e uma cópia local
-   em cada um foi o que deixou as duas pistas discordando. */
-const trimIdx = () => (drag && drag.type === 'trim' ? drag.i : null);
-
-function draftLayout(freeze) {
+function draftLayout() {
   let t = 0;
   let at = 0;
   return S.draft.map((r, i) => {
     if (r.removed) return { ...r, out: t, dur: 0, aout: at, adur: 0 };
     const g = jcutGeom(i);
-    const frozen = freeze != null && i === freeze;
-    const span = frozen ? r.orig.end - r.orig.start : r.end - r.start;
+    const span = r.end - r.start;
     const adur = Math.max(0, span - g.tail);
     const dur = Math.max(0, adur - g.lead);
     const item = { ...r, out: t, dur, aout: Math.max(0, at - g.lead), adur, lead: g.lead };
@@ -1539,12 +1539,7 @@ function renderedLayout() {
     return item;
   });
 }
-// Durante um aparo, o total também congela: se ele encolhesse, a régua e a
-// largura da linha do tempo se reescalariam no meio do arrasto e TUDO andaria
-// debaixo do cursor.
-const draftTotal = () =>
-  draftLayout(drag && drag.type === 'trim' ? drag.i : null)
-    .reduce((a, r) => a + r.dur, 0);
+const draftTotal = () => draftLayout().reduce((a, r) => a + r.dur, 0);
 
 // draft time → rendered time (for scrubbing the old render while editing)
 function draftToRendered(t) {
@@ -1575,45 +1570,6 @@ function renderedToDraft(t) {
 // ---------- dirty tracking ----------
 const wordsDirty = () => S.cutWords.size > 0 || S.cutBreaths.size > 0;
 
-/* ---------- DESFAZER ----------
- * Cobre DUAS ações, de propósito: apagar um take da linha do tempo e
- * redimensioná-lo. São as únicas destrutivas de verdade — desfazer uma rasura
- * de palavra ou um respiro já é clicar de novo no mesmo lugar, e empilhar isso
- * aqui faria ⌘Z desfazer algo diferente do que a pessoa acabou de fazer, que é
- * pior que não ter undo.
- *
- * Instantâneo de `S.draft` inteiro, não uma inversa por ação: um take carrega
- * start, end, removed, leadF, tailF e `orig`, e restaurar campo a campo é onde
- * se acaba devolvendo QUASE o estado certo. São ~30 objetos rasos por edição.
- *
- * `pushUndo()` é sempre a PRIMEIRA linha de quem muta — chamada depois, salva o
- * estado já alterado e o desfazer vira um no-op silencioso. */
-const UNDO_MAX = 50;
-
-function pushUndo(label) {
-  S.undo.push({ label, draft: (S.draft || []).map((r) => ({ ...r, orig: { ...r.orig } })) });
-  if (S.undo.length > UNDO_MAX) S.undo.shift();
-  refreshUndo();
-}
-
-function undoLast() {
-  const s = S.undo.pop();
-  if (!s) return;
-  S.draft = s.draft;
-  S.selected = -1;   // o índice selecionado pode ter mudado de dono
-  renderAll();
-  refreshHeader();
-  refreshUndo();
-  toast(`desfeito: ${s.label}`, 1800);
-}
-
-function refreshUndo() {
-  const b = $('btnUndo');
-  if (!b) return;
-  const s = S.undo[S.undo.length - 1];
-  b.disabled = !s;
-  b.title = s ? `Desfazer ${s.label} (⌘Z)` : 'Nada a desfazer';
-}
 const jcutDirty = () => S.draft.some((r) => r.leadF != null || r.tailF != null);
 
 function edlDirty() {
@@ -1665,7 +1621,7 @@ function styleState() {
   const same = (k, d) => val(S.style, k, d) === val(cur, k, d);
   const ok = same('edit', def.edit) && same('headline', def.headline)
     && same('captions', def.captions) && same('accent', def.accent)
-    && same('capColor', def.capColor) && same('headlineText', def.headlineText)
+    && same('capColor', def.capColor)
     && same('capDy', 0)
     /* `elements` compara CHAVE A CHAVE, não como objeto inteiro.
      *
@@ -1794,14 +1750,6 @@ function refreshActionBar() {
    * relance — e repetia o que o próprio rótulo do botão já diz. */
   $('actionWhat').textContent = '';
 
-  /* O aviso que substituiu o modal. `actionWhat` estava vazio desde que a
-     CONSEQUÊNCIA virou `title` do botão — e um alerta não é uma consequência:
-     é uma coisa errada agora, que precisa estar na tela antes do clique. */
-  if (styleDirty() && S.style.headline && !(S.style.headlineText || '').trim()) {
-    $('actionWhat').innerHTML = '<span class="warn-inline">⚠ headline sem texto — '
-      + 'vai sair sem headline</span>';
-  }
-
   const caro = style || ins || cuts;
   $('setupGo').innerHTML = `<span class="btn-ai">${ICON.ai}</span>`
     + (caro ? 'Enviar e renderizar' : 'Enviar marcações');
@@ -1876,7 +1824,6 @@ async function applyState(data) {
   S.jcut = (data.edl && data.edl.jcut_timeline) || null;
   S.rendered = ranges.map((r) => ({ source: r.source, start: +r.start, end: +r.end, beat: r.beat || '' }));
   S.draft = S.rendered.map((r) => ({ ...r, removed: false, orig: { start: r.start, end: r.end } }));
-  S.selected = -1;
 
   // style picks: the skill's copy wins, so applying a change (or reopening the
   // session) shows what is actually rendered — not a stale local selection
@@ -1894,6 +1841,14 @@ async function applyState(data) {
               ...(S.state.style || {}) };
   S.style.elements = { ...defaultStyle().elements, ...((S.prefs || {}).elements || {}),
                        ...((S.state.style || {}).elements || {}) };
+  /* MIGRAÇÃO: Caixinha e Broll Overlay eram radio de "tipo de edição", e
+     Notícia era uma cartela de "headline" — as três viraram toggles
+     independentes em `elements`. Projetos salvos ANTES desta mudança ainda
+     carregam o pick antigo; sem isto, reabri-los perderia a escolha em
+     silêncio (nenhum id bate mais no catálogo de origem). */
+  if (S.style.edit === 'caixinha') { S.style.elements.caixinha = true; S.style.edit = 'limpa'; }
+  if (S.style.edit === 'brollOverlay') { S.style.elements.brollOverlay = true; S.style.edit = 'limpa'; }
+  if (S.style.headline === 'noticia') { S.style.elements.noticia = true; S.style.headline = ''; }
   $('setupNote').value = S.style.note || '';
   // a skill pediu uma escolha de estilo → leva o usuário para a Finalização,
   // onde o painel de camadas agora mora
@@ -2325,151 +2280,14 @@ function applyAccent() {
   p.style.setProperty('--hl-main', normHex(S.style.textColor) || '#FFFFFF');
 }
 
-/* One spectral swatch (the OS picker) plus a hex field — no preset row. A grid of
- * canned colours competes with the style cards for attention and still never has
- * the brand colour the user actually wants. */
-/* O MESMO widget para as duas cores. Generalizado por parâmetro em vez de
- * copiado: o par de campos (roda do sistema + hexa, sincronizados nos dois
- * sentidos) tem sutileza suficiente — não brigar com quem digita no meio da
- * tecla — para que duas cópias divergissem na primeira correção. */
-function renderColor(hostId, key, fallback, label) {
-  const host = $(hostId);
-  if (!host) return;
-  host.innerHTML = '';
-  const cur = normHex(S.style[key]) || fallback;
-
-  const custom = el('label', 'swatch custom', host);
-  custom.title = 'Escolher cor';
-  custom.style.setProperty('--swatch-fill', cur);
-  const inp = el('input', '', custom);
-  inp.type = 'color';
-  inp.value = cur;
-
-  const field = el('div', 'hex-field', host);
-  el('span', 'hex-hash', field).textContent = '#';
-  const hex = el('input', 'hex-input', field);
-  hex.type = 'text';
-  hex.spellcheck = false;
-  hex.maxLength = 7;
-  hex.value = cur.slice(1).toUpperCase();
-  hex.setAttribute('aria-label', `${label} em hexadecimal`);
-
-  const commit = (v, {fromHexField} = {}) => {
-    const n = normHex(v);
-    if (!n) return false;
-    S.style[key] = n;
-    custom.style.setProperty('--swatch-fill', n);
-    inp.value = n;
-    if (!fromHexField) hex.value = n.slice(1).toUpperCase();
-    applyAccent();   // live — no full rebuild, so dragging the picker stays smooth
-    paintHeadlines();
-    updateAccentNote();
-    updateSummary();
-    LIVE.key = null; renderLive();   // a legenda sobre o vídeo segue a cor na hora
-    return true;
-  };
-
-  inp.addEventListener('input', () => commit(inp.value));
-  // typing: accept as soon as it parses, but never fight the user mid-keystroke
-  hex.addEventListener('input', () => {
-    field.classList.toggle('bad', !normHex(hex.value) && hex.value.trim() !== '');
-    commit(hex.value, {fromHexField: true});
-  });
-  // leaving an unparseable value snaps back rather than silently keeping the old
-  // colour behind text that says something else
-  hex.addEventListener('blur', () => {
-    field.classList.remove('bad');
-    // `key`/`def`, NAO `accent`/ACCENT_DEFAULT: fixo no accent, digitar algo
-    // invalido no campo da cor PRINCIPAL e sair preenchia ele com o hex do
-    // destaque — o campo passava a mentir sobre a propria cor.
-    hex.value = (normHex(S.style[key]) || fallback).slice(1).toUpperCase();
-  });
-  hex.addEventListener('keydown', (e) => { if (e.key === 'Enter') hex.blur(); });
-
-  updateAccentNote();
-}
-
-function renderAccents() {
-  renderColor('optAccent', 'accent', ACCENT_DEFAULT, 'Cor de destaque');
-  renderColor('optCapColor', 'capColor', '#FFFFFF', 'Cor principal da legenda');
-  // A headline tem os mesmos DOIS controles, na camada dela. O destaque é a
-  // MESMA chave `accent` — mudar por um lado muda o outro, que é o ponto.
-  renderColor('optAccentHl', 'accent', ACCENT_DEFAULT, 'Cor de destaque');
-  renderColor('optTextColor', 'textColor', '#FFFFFF', 'Cor principal da headline');
-  renderFonts();
-}
-
-/* O seletor de família. Um `<select>` e não uma grade de cartões: são 27
- * famílias, e cada opção se desenha NA PRÓPRIA FONTE — é assim que se escolhe
- * tipo, olhando a letra, não lendo o nome dela. */
-function renderFont(hostId, key, fallback, label) {
-  const host = $(hostId);
-  if (!host) return;
-  host.innerHTML = '';
-  const cur = S.style[key] || fallback;
-  // só as do GOOGLE precisam ser carregadas; as locais já estão no sistema e
-  // as empacotadas entram pelo @font-face de ensureBundled()
-  ensureFonts(gfonts().map((f) => f.n));
-  const sel = el('select', 'font-sel', host);
-  sel.setAttribute('aria-label', label);
-  const GRUPO = { display: 'sem serifa', serif: 'com serifa',
-                  manuscrita: 'manuscrita', local: 'do seu computador' };
-  let grupo = null;
-  let og = null;
-  for (const f of allFonts()) {
-    if (f.k !== grupo) {
-      grupo = f.k;
-      og = el('optgroup', '', sel);
-      og.label = GRUPO[grupo] || grupo;
-    }
-    const o = el('option', '', og || sel);
-    o.value = f.n;
-    o.textContent = f.n;
-    // a opção desenhada NA PRÓPRIA FONTE — é assim que se escolhe tipo
-    o.style.fontFamily = cssFamily(f.n);
-    if (f.n === cur) o.selected = true;
-  }
-  const amostra = el('div', 'font-sample', host);
-  const pinta = (n) => { amostra.style.fontFamily = cssFamily(n); amostra.textContent = 'Aa Gg 123'; };
-  pinta(cur);
-  sel.addEventListener('change', () => {
-    S.style[key] = sel.value;
-    pinta(sel.value);
-    updateFontNote();
-    updateSummary();
-    // as prévias medem com a fonte REAL: sem esperar o carregamento, a primeira
-    // montagem ajusta o corpo pela fonte de sistema e sai com a largura errada
-    ensureFonts([S.style.fontMain, S.style.fontAccent]);
-    // fonte local já está no sistema: esperar `document.fonts.load` por ela
-    // resolve na hora, mas a chamada existe para as que baixam
-    document.fonts.load(`900 40px "${sel.value}"`).then(() => renderSetup(), () => renderSetup());
-  });
-}
-
-function renderFonts() {
-  renderFont('optFontMain', 'fontMain', FONT_MAIN_DEF, 'Fonte principal');
-  renderFont('optFontAccent', 'fontAccent', FONT_ACCENT_DEF, 'Fonte de destaque');
-  // A legenda tem o par dela. O padrão de cada campo é a família do ESTILO
-  // escolhido, não uma constante: assim trocar de estilo traz de volta a letra
-  // com que ele foi desenhado, até alguém escolher outra de propósito.
-  const v = capVariant();
-  renderFont('optCapFontMain', 'capFont', v.family || FONT_MAIN_DEF, 'Fonte da legenda');
-  updateFontNote();
-  updateCapFontNote();
-}
-
-// os números do estilo de legenda escolhido
-const capVariant = () =>
-  ((LIVE.variants && LIVE.variants.styles) || {})[S.style.captions] || {};
-
-function updateCapFontNote() {
-  const n = $('capFontNote');
-  if (!n) return;
-  const fam = S.style.capFont || capVariant().family;
-  n.textContent = isLocal(fam)
-    ? 'do seu computador: sai igual aqui, não em outra máquina'
-    : (S.style.capFont ? '' : 'a família de fábrica deste estilo');
-}
+/* COR E FONTE SAÍRAM DA INTERFACE — accent, cor da legenda, cor/fonte da
+ * headline não têm mais picker aqui (nem os antigos renderColor()/
+ * renderFont(s)()/renderAccents()/updateAccentNote()/updateFontNote()/
+ * updateCapFontNote(), todos removidos por ficarem sem host na tela).
+ * Quem quiser mudar qualquer uma pede pelo chat — a IA edita
+ * preview_style.json/edit-data.json direto. O dado (S.style.accent/
+ * textColor/capColor/fontMain/fontAccent/capFont) continua existindo e
+ * alimentando applyAccent()/as prévias normalmente. */
 
 /* ---------- a marca ----------
  * Cor e família não mudam de vídeo para vídeo: são de quem faz. Guardadas em
@@ -2477,8 +2295,6 @@ function updateCapFontNote() {
  * próximo — em vez de o usuário redigitar o mesmo hexadecimal toda vez e um
  * dia errar um dígito, entregando dois laranjas parecidos na mesma série.
  * O agente escreve no mesmo arquivo quando descobre a marca por outro caminho. */
-const BRAND_KEYS = ['accent', 'textColor', 'capColor', 'fontMain', 'fontAccent',
-                    'capFont'];
 
 async function loadBrand() {
   try {
@@ -2501,68 +2317,10 @@ async function loadEstilo() {
   } catch (e) { S.prefs = null; }
 }
 
-async function saveBrand(btn) {
-  const body = {};
-  for (const k of BRAND_KEYS) if (S.style[k]) body[k] = S.style[k];
-  try {
-    const r = await fetch('/api/brand', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || 'falhou');
-    S.brand = d.brand;
-    if (btn) { btn.textContent = '✓ guardado'; setTimeout(() => { btn.textContent = 'salvar como minha marca'; }, 2200); }
-  } catch (e) { toast(`não consegui guardar a marca: ${e.message}`, 4000); }
-}
-
-// a marca já está gravada e IGUAL ao que está na tela? então não há o que salvar
-const brandMatches = () =>
-  !!S.brand && BRAND_KEYS.every((k) => !S.style[k] || S.brand[k] === S.style[k]);
-
-/* Quais layouts realmente usam a SEGUNDA família. Mesma honestidade da nota do
- * destaque: escolher uma manuscrita para um layout que não a desenha é escolher
- * no vazio, e a interface tem de dizer isso. */
-function updateFontNote() {
-  const n = $('fontNote');
-  if (!n) return;
-  const S2 = hlStyle(S.style.headline);
-  const papel = (S2 && S2.fontRole)
-    ? 'a de destaque desenha a primeira linha deste layout'
-    : 'este layout usa só a principal';
-  /* O PREÇO DA FONTE LOCAL, dito onde ela é escolhida. Ela funciona porque o
-     render roda NESTA máquina — e é exatamente por isso que o projeto deixa de
-     sair igual em outra. Descobrir isso ao trocar de computador, com o vídeo já
-     aprovado, seria caro; a frase custa uma linha. */
-  const locais = [
-    isLocal(S.style.fontMain) && 'principal',
-    (S2 && S2.fontRole) && isLocal(S.style.fontAccent) && 'destaque',
-  ].filter(Boolean);
-  n.textContent = locais.length
-    ? `${papel} · a ${locais.join(' e a ')} ${locais.length > 1 ? 'são' : 'é'} `
-      + 'do seu computador: sai igual aqui, não em outra máquina'
-    : papel;
-}
-
 const accentUsed = () =>
   ACCENT_USERS.headlines.includes(S.style.headline)
   || ACCENT_USERS.captions.includes(S.style.captions);
 
-function updateAccentNote() {
-  const where = [
-    ACCENT_USERS.headlines.includes(S.style.headline) && 'na headline',
-    ACCENT_USERS.captions.includes(S.style.captions) && 'na legenda',
-  ].filter(Boolean);
-  const n = $('accentNote');
-  if (!n) return; // as linhas ainda não foram montadas — nada a atualizar
-  n.textContent = where.length
-    ? `aplicada ${where.join(' e ')}`
-    : 'os estilos escolhidos não usam destaque';
-}
-
-/* Separate from renderSetup so the live colour drag can refresh it without
- * rebuilding every demo. Skipping it there left the footer naming the previous
- * colour while the previews already showed the new one. */
 function updateSummary() {
   const box = $('depsSummary');
   if (!box) return;   // o resumo saiu da tela — nada a escrever
@@ -2586,12 +2344,12 @@ function updateSummary() {
  * Uma linha sem controle NENHUM ainda aparece, com o motivo escrito. Some-la
  * faria o painel prometer que a lista está completa. */
 const LAYERS = [
-  { id: 'elementos', name: 'Elementos visuais', sub: 'Figurinhas, imagens, formas e gráficos',
-    ico: 'inserts', caixaText: true, groups: ['edits'] },
-  { id: 'headline', name: 'Headline', sub: 'Título, cores, fontes e layout',
-    ico: 'text', headlineText: true, hlColors: true, fonts: true, groups: ['headlines'] },
-  { id: 'legendas', name: 'Legendas', sub: 'Estilo, cores e fontes',
-    ico: 'captions', colors: true, capFonts: true, groups: ['captions'] },
+  { id: 'elementos', name: 'Elementos visuais', sub: 'Layout do corte, caixinha, broll overlay e notícia',
+    ico: 'inserts', groups: ['edits'], elements: ['caixinha', 'brollOverlay', 'noticia'] },
+  { id: 'headline', name: 'Headline', sub: 'Layout — o texto é combinado no chat',
+    ico: 'text', groups: ['headlines'] },
+  { id: 'legendas', name: 'Legendas', sub: 'Estilo',
+    ico: 'captions', groups: ['captions'] },
   { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
     ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
   { id: 'transicoes', name: 'Transições', sub: 'Cortes, fades e transições entre clipes',
@@ -2705,11 +2463,24 @@ function renderSetup() {
       // clicáveis, em vez de sumirem: esconder faria a aba mentir sobre o que o
       // produto vai ser, e escolher um deles levaria a um beco sem saída na
       // hora de renderizar.
-      const off = PORTED[group] && !PORTED[group].has(o.id);
+      let off = PORTED[group] && !PORTED[group].has(o.id);
+      let offMsg = 'ainda não disponível';
+      /* ZONA ALTA (ver elLocked()): "Nenhum" (id vazio) fica sempre disponível
+       * — é a porta de saída de quem quer desligar um headline para ligar a
+       * Notícia ou a Caixinha. */
+      if (group === 'headlines' && o.id) {
+        if (S.style.elements.noticia) {
+          off = true;
+          offMsg = 'desligue a Notícia em Elementos visuais para escolher um headline';
+        } else if (CARTELA_BANDA_IDS.has(o.id) && S.style.elements.caixinha) {
+          off = true;
+          offMsg = ZONA_ALTA_MSG;
+        }
+      }
       const card = el('div', `opt${o.id === chosen ? ' on' : ''}${off ? ' unavailable' : ''}`, host);
       card.dataset.group = group;
       card.dataset.id = o.id;
-      if (off) card.title = 'ainda não disponível';
+      if (off) card.title = offMsg;
       // headline previews are two short lines — they do not need the caption
       // box's height, and with four groups on one screen that height is scarce
       const kind = o.mock ? 'frame' : o.ct ? 'cap ctbox' : o.hl ? 'cap hlbox' : 'cap';
@@ -2758,7 +2529,6 @@ function renderSetup() {
       el('div', 'chk-name', row).textContent = e.name;
     }
   }
-  renderAccents();
   refreshLayerSummaries();
   updateSummary();
   LIVE.key = null; // o estilo pode ter mudado — força o redesenho da prévia
@@ -2816,172 +2586,21 @@ function buildLayerRows() {
   const L = LAYERS.find((x) => x.id === activeLayer) || LAYERS[0];
   if (L.soon) { el('div', 'layer-soon', body).textContent = L.soon; return; }
 
-  if (L.headlineText) {
-    /* A headline é a única escolha desta tela que é CONTEÚDO, não estilo — e
-       por isso ela nunca coube num catálogo de cartões. Quem escreve é o
-       usuário; os cartões abaixo só decidem como ela é pintada. */
-    const g = el('div', 'dep-group', body);
-    el('span', 'group-title', el('div', 'group-head', g)).textContent = 'Texto da headline';
-    const ta = el('textarea', 'hl-text', g);
-    ta.id = 'headlineText';
-    ta.rows = 2;
-    ta.placeholder = 'Ex.: 3 respostas dizem / se você está na carreira certa';
-    ta.value = S.style.headlineText || '';
-    /* A BARRA É O CONTROLE DE QUEBRA, e precisa estar escrito onde se escreve.
-       Sem a dica ela é um recurso invisível: quem não sabe deixa o equilíbrio
-       automático decidir e nunca descobre que podia mandar. */
-    el('span', 'group-note', g).textContent =
-      'use " / " para quebrar a linha onde você quiser — sem barra, o corte é '
-      + 'equilibrado pela largura medida e o corpo se ajusta sozinho';
-  }
-
   for (const gid of L.groups || []) {
     const g = el('div', 'dep-group', body);
     el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
     el('div', 'opt-grid', g).id = `opt-${gid}`;
   }
-  /* A CAIXINHA DE PERGUNTAS pede o único dado do formato que não se mede: o
-     texto. Aparece DEPOIS da grade de tipos de edição e só quando ela está
-     escolhida — campos de um formato que não foi escolhido são ruído em toda
-     abertura da aba. */
-  if (L.caixaText && S.style.edit === 'caixinha') {
-    const g = el('div', 'dep-group', body);
-    el('span', 'group-title', el('div', 'group-head', g)).textContent = 'Caixinha de perguntas';
-    /* OS TETOS VÊM DO `variants.json`, não de constantes aqui — a mesma régua
-       que o compositor usa. 60 na faixa escura, 72 no corpo branco: é o que
-       cabe legível no adesivo a 1080 de largura. O campo TRAVA na digitação e
-       mostra o quanto falta, em vez de deixar escrever e cortar depois. */
-    const lim = (LIVE.variants && LIVE.variants.caixinha) || {};
-    const LIM_CH = lim.limiteChamada || 60;
-    const LIM_PG = lim.limitePergunta || 72;
-    const contador = (campo, teto) => {
-      const marca = el('span', 'cx-count', g);
-      const pinta = () => {
-        const n = campo.value.length;
-        marca.textContent = `${n}/${teto}`;
-        marca.classList.toggle('no-limite', n >= teto);
-      };
-      campo.addEventListener('input', pinta);
-      pinta();
-      return marca;
-    };
-    const chamada = el('input', 'hl-text cx-input', g);
-    chamada.id = 'caixaChamada';
-    chamada.type = 'text';
-    chamada.maxLength = LIM_CH;
-    chamada.placeholder = 'chamada do adesivo — ex.: mande sua dúvida 🤎';
-    chamada.value = (S.style.caixaChamada || '').slice(0, LIM_CH);
-    contador(chamada, LIM_CH);
-    const perg = el('textarea', 'hl-text', g);
-    perg.id = 'caixaPergunta';
-    perg.rows = 2;
-    perg.maxLength = LIM_PG;
-    perg.placeholder = 'a pergunta que veio da caixinha';
-    perg.value = (S.style.caixaPergunta || '').slice(0, LIM_PG);
-    contador(perg, LIM_PG);
-    el('span', 'group-note', g).textContent =
-      'a caixinha entra no gancho, fixa, junto com você falando; se ela sai depois '
-      + 'de lida ou fica até o fim é decidido no chat, com os tempos medidos do corte';
-  }
-
-
-
-  /* CORES E FONTES DEPOIS DO LAYOUT, e não antes.
-     A ordem anterior pedia a cor de destaque antes de existir um layout que a
-     pintasse — decidir a cor de uma coisa que ainda não foi escolhida. Agora a
-     página desce: escolha o layout em cima, acerte cor e fonte embaixo. */
-  /* O acabamento só abre DEPOIS do layout. Enquanto não abre, diz por quê —
-     um espaço vazio leria como interface incompleta, não como um passo a
-     cumprir. */
-  if ((L.hlColors || L.fonts) && !S.style.headlinePicked) {
-    el('div', 'layer-soon', body).textContent =
-      'escolha um layout acima e as cores e fontes aparecem aqui';
-  }
-
-  if (L.hlColors && S.style.headlinePicked) {
-    const g = el('div', 'dep-group acabamento', body);
-    const h = el('div', 'group-head', g);
-    el('span', 'group-title', h).textContent = 'Cores';
-    el('span', 'group-note', h).id = 'accentNote';
-    const row = el('div', 'color-row', g);
-    const main = el('div', 'color-slot', row);
-    el('span', 'color-lab', main).textContent = 'principal';
-    el('div', 'swatches', main).id = 'optTextColor';
-    const acc = el('div', 'color-slot', row);
-    el('span', 'color-lab', acc).textContent = 'destaque';
-    el('div', 'swatches', acc).id = 'optAccentHl';
-  }
-
-  if (L.fonts && S.style.headlinePicked) {
-    /* DUAS famílias, e o par não é enfeite: o manuscrito desenha a primeira
-       linha na de destaque e a segunda na principal. Nos outros layouts a de
-       destaque fica sem uso — e a nota abaixo diz isso, em vez de deixar o
-       usuário escolher uma fonte que não vai aparecer em lugar nenhum. */
-    const g = el('div', 'dep-group acabamento', body);
-    const h = el('div', 'group-head', g);
-    el('span', 'group-title', h).textContent = 'Fontes';
-    el('span', 'group-note', h).id = 'fontNote';
-    const row = el('div', 'color-row', g);
-    const a = el('div', 'color-slot', row);
-    el('span', 'color-lab', a).textContent = 'principal';
-    el('div', 'font-pick', a).id = 'optFontMain';
-    const b = el('div', 'color-slot', row);
-    el('span', 'color-lab', b).textContent = 'destaque';
-    el('div', 'font-pick', b).id = 'optFontAccent';
-    /* Guardar é EXPLÍCITO. Salvar sozinho a cada mexida transformaria uma
-       experiência ("e se eu testar em verde?") na marca da pessoa. */
-    const save = el('button', 'linkish brand-save', g);
-    save.type = 'button';
-    save.textContent = 'salvar como minha marca';
-    save.title = 'guarda cor e fonte para os próximos projetos (~/.avelin/brand.json)';
-    save.addEventListener('click', (ev) => { ev.stopPropagation(); saveBrand(save); });
-  }
-
-  if ((L.colors || L.capFonts) && !S.style.captionsPicked) {
-    /* MESMO PORTÃO DA HEADLINE: primeiro o que a legenda É, depois com que cor
-       e que letra. Antes de haver estilo escolhido, perguntar a cor de
-       destaque é perguntar a cor de uma coisa que ainda não existe — e metade
-       dos estilos de legenda não pinta destaque nenhum. */
-    el('div', 'layer-soon', body).textContent =
-      'escolha um estilo acima e as cores e fontes aparecem aqui';
-  }
-
-  if (L.colors && S.style.captionsPicked) {
-    /* DUAS cores, e a distinção importa: a principal é o corpo da legenda (era
-       branco cravado na folha), a de destaque é a que pinta a palavra realçada
-       — e ela é a MESMA da headline, porque um vídeo com dois laranjas
-       diferentes não lê como um vídeo, lê como um erro. */
-    const g = el('div', 'dep-group acabamento', body);
-    const h = el('div', 'group-head', g);
-    el('span', 'group-title', h).textContent = 'Cores';
-    el('span', 'group-note', h).id = 'accentNote';
-    const row = el('div', 'color-row', g);
-    const main = el('div', 'color-slot', row);
-    el('span', 'color-lab', main).textContent = 'principal';
-    el('div', 'swatches', main).id = 'optCapColor';
-    const acc = el('div', 'color-slot', row);
-    el('span', 'color-lab', acc).textContent = 'destaque';
-    el('div', 'swatches', acc).id = 'optAccent';
-  }
-
-  if (L.capFonts && S.style.captionsPicked) {
-    /* UMA fonte. Estilos que alternam famílias (a serifada do empilhado) o
-       fazem por identidade própria — expor isso como escolha dissolveria o
-       estilo, e quem quer outra letra ali quer outro estilo. */
-    const g = el('div', 'dep-group acabamento', body);
-    const h = el('div', 'group-head', g);
-    el('span', 'group-title', h).textContent = 'Fontes';
-    el('span', 'group-note', h).id = 'capFontNote';
-    const row = el('div', 'color-row', g);
-    const a = el('div', 'color-slot', row);
-    el('span', 'color-lab', a).textContent = 'família';
-    el('div', 'font-pick', a).id = 'optCapFontMain';
-    const save = el('button', 'linkish brand-save', g);
-    save.type = 'button';
-    save.textContent = 'salvar como minha marca';
-    save.title = 'guarda cor e fonte para os próximos projetos (~/.avelin/brand.json)';
-    save.addEventListener('click', (ev) => { ev.stopPropagation(); saveBrand(save); });
-  }
+  /* CORES, FONTES E O TEXTO DE HEADLINE/CAIXINHA/NOTÍCIA SAÍRAM DA INTERFACE.
+   * Accent, cor da legenda, cor/fonte da headline e o conteúdo escrito de
+   * Headline, Caixinha e Notícia não têm mais controle aqui — quem quiser
+   * mudar qualquer um pede pelo chat, e é a IA que edita
+   * `preview_style.json`/`edit-data.json` direto. Escolher um estilo de
+   * Headline (ou ligar Caixinha/Notícia) sem o texto correspondente é o sinal
+   * para o agente perguntar via AskUserQuestion (mesmo protocolo que o Broll
+   * Overlay já seguia) — ver check_supported() gêmeo em phase2.py. Caixinha e
+   * Notícia NÃO têm headline (mesma zona alta, travada em elLocked()): se um
+   * dos dois estiver ligado, pule a pergunta de texto de headline. */
 
   if (L.elements) el('div', 'check-row', body).id = `optEl-${L.id}`;
 }
@@ -3004,23 +2623,14 @@ function refreshLayerSummaries() {
 }
 
 $('layersPanel').addEventListener('click', (e) => {
-  // the accent controls manage themselves (live, no rebuild) — keep the card
-  // handler off them, or a click in the hex field would count as a style pick
-  // os DOIS controles de cor se gerem sozinhos (ao vivo, sem remontar).
-  // Faltando o da principal aqui, um clique no campo hex dela contava como
-  // escolha de estilo e remontava o cartao por baixo do cursor.
-  if (e.target.closest('#optAccent') || e.target.closest('#optCapColor')
-      || e.target.closest('#optAccentHl') || e.target.closest('#optTextColor')
-      || e.target.closest('#optFontMain') || e.target.closest('#optFontAccent')
-      || e.target.closest('#optCapFontMain')) return;
-
-  // acordeão mestre: recolhe o painel inteiro e devolve a altura para a timeline
+  // acordeão mestre: recolhe o painel inteiro e devolve a largura para a
+  // coluna de trabalho (era altura, na timeline; virou largura, na linha)
   if (e.target.closest('#layersToggle')) {
     const wrap = $('layersPanel');
     wrap.classList.toggle('collapsed');
     // abrir as camadas devolve a linha do tempo: é ela que convive com o painel
     if (!wrap.classList.contains('collapsed') && S.view !== 'tl') setView('tl');
-    // a timeline acabou de ganhar (ou perder) altura — reajusta a escala nela
+    // a timeline acabou de ganhar (ou perder) largura ao lado — reajusta a escala
     requestAnimationFrame(() => { fitZoom(); renderAll(); });
     return;
   }
@@ -3030,7 +2640,14 @@ $('layersPanel').addEventListener('click', (e) => {
   // controle futuro colocado no cabeçalho passe a alternar a linha sem querer.
   const chip = e.target.closest('.layer-chip');
   if (chip) {
+    const wrap = $('layersPanel');
+    /* Em tela larga `.open` não muda nada visível — o corpo já mora no fluxo
+       normal. Em tela estreita (`.layers` espremida pelo `@container`) ele
+       vira o flyover: clicar na mesma aba que já está aberta fecha; clicar em
+       outra troca de camada e mantém aberto. */
+    const jaAberta = chip.dataset.layer === activeLayer && wrap.classList.contains('open');
     activeLayer = chip.dataset.layer;
+    wrap.classList.toggle('open', !jaAberta);
     // trocar de CAMADA começa do topo: é conteúdo novo, e manter a rolagem
     // anterior abriria a camada nova no meio dela, sem contexto
     $('layerBody').scrollTop = 0;
@@ -3042,20 +2659,7 @@ $('layersPanel').addEventListener('click', (e) => {
   if (opt) {
     const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
     S.style[key] = opt.dataset.id;
-    /* ESCOLHER O LAYOUT ABRE O ACABAMENTO. São dois momentos: em cima o que a
-       headline É, embaixo com que cor e que letra. Antes de haver layout
-       escolhido, perguntar a cor de destaque é perguntar a cor de uma coisa que
-       ainda não existe — metade dos layouts nem pinta destaque. */
-    const doCaption = opt.dataset.group === 'captions';
-    const revelouCap = doCaption && !S.style.captionsPicked;
-    if (doCaption) S.style.captionsPicked = true;
     const doHeadline = opt.dataset.group === 'headlines';
-    /* Só na PRIMEIRA escolha o acabamento aparece — e só aí faz sentido descer
-       até ele. Descer a cada troca de layout arrastaria a tela para longe dos
-       cartões justamente enquanto a pessoa compara um com o outro, que é o
-       mesmo incômodo que a rolagem preservada existe para eliminar. */
-    const revelou = doHeadline && !S.style.headlinePicked;
-    if (doHeadline) S.style.headlinePicked = true;
     /* ESCOLHER TEM DE MOSTRAR. O gancho vive nos primeiros segundos do corte;
        com o ponteiro em 00:40 o usuário clicaria num layout e o vídeo não
        mudaria nada — escolher sem ver a escolha é o mesmo que não ter
@@ -3067,14 +2671,6 @@ $('layersPanel').addEventListener('click', (e) => {
     }
     LIVE.hookKey = null;   // o layout mudou: a prévia ao vivo remonta
     renderSetup();
-    if (revelou || revelouCap) {
-      // desce até o acabamento sem tirar da tela o estilo que acabou de ser
-      // escolhido — `nearest` rola o mínimo, `start` jogaria os cartões para cima
-      requestAnimationFrame(() => {
-        const alvo = document.querySelector('.dep-group.acabamento');
-        if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      });
-    }
     return;
   }
   const chk = e.target.closest('.chk:not(.layer-chip)');
@@ -3095,30 +2691,25 @@ $('layersPanel').addEventListener('click', (e) => {
   }
 });
 
-/* AS PRÉVIAS DESENHAM O TEXTO QUE VOCÊ ESTÁ ESCREVENDO.
- *
- * Antes elas mostravam uma frase de exemplo fixa, e o layout se escolhia sobre
- * um texto que não era o do vídeo — o que esconde justamente a decisão que
- * importa: quantas linhas a SUA frase faz, onde ela quebra e que corpo sobra.
- * Com o `/` isso deixou de ser detalhe: a mesma frase rende duas ou três linhas
- * conforme onde a barra cai, e cada layout reage diferente.
- *
- * Com atraso porque remontar onze prévias medidas a cada tecla trava a
- * digitação — a medição roda com a fonte real, uma vez por prévia. */
-let hlTextTimer = null;
-document.addEventListener('input', (e) => {
-  if (!e.target || e.target.id !== 'headlineText') return;
-  S.style.headlineText = e.target.value;
-  clearTimeout(hlTextTimer);
-  hlTextTimer = setTimeout(() => renderSetup(), 260);
-});
+// EM TELA ESTREITA o corpo da camada aberta é um flyover (ver app.css); clicar
+// fora dele fecha, como qualquer popover. Em tela larga `.open` não muda nada
+// visível, então este listener não tem efeito lá — não precisa checar largura.
+// CAPTURA, não borbulhamento: o clique numa aba chama `renderSetup()` na hora
+// (mesmo handler, fase de borbulhamento), que refaz `#layerTabs` do zero — o
+// BOTÃO clicado sai da árvore antes do clique terminar de subir. Na fase de
+// bolha, `e.target.closest('#layersPanel')` desse botão já desligado da
+// árvore dá `null`, e este listener lia isso como "clique fora" e fechava o
+// flyover no mesmo gesto que acabou de abri-lo. Na captura, que roda ANTES do
+// handler do próprio painel, o alvo ainda está no lugar.
+document.addEventListener('click', (e) => {
+  const wrap = $('layersPanel');
+  if (wrap.classList.contains('open') && !e.target.closest('#layersPanel')) {
+    wrap.classList.remove('open');
+  }
+}, true);
 
 async function sendStyle() {
   S.style.note = $('setupNote').value.trim();
-  for (const [id, chave] of [['caixaPergunta', 'caixaPergunta'],
-                             ['caixaChamada', 'caixaChamada']]) {
-    if ($(id)) S.style[chave] = $(id).value;
-  }
   const rerender = !S.state.awaitingStyle;
   const payload = {
     // a save with Fase 2 already on disk is a RE-RENDER request, not a first
@@ -3142,6 +2733,8 @@ async function sendStyle() {
     // não sabe se a fonte de destaque é uma instrução ou um valor sem uso
     fontAccentUsed: !!(hlStyle(S.style.headline) || {}).fontRole,
     capDy: S.style.capDy || 0,   // deslocamento GLOBAL da legenda, px de ref 1080
+    // sem campo na tela — passa adiante o que o chat já tiver escrito direto
+    // em `preview_style.json`/`edit-data.json`, para não apagar ao reenviar
     headlineText: (S.style.headlineText || '').trim(),
     // a caixinha de perguntas: o único dado do formato que não se mede
     caixaPergunta: (S.style.caixaPergunta || '').trim(),
@@ -3170,51 +2763,17 @@ async function sendStyle() {
   return !!j.ok;
 }
 
-// Declarado ANTES de renderClips porque ela lê o arrasto em curso para
-// congelar o trecho sendo aparado; um `let` depois do primeiro uso cai na
-// zona morta temporal e derruba a primeira renderização.
-let drag = null; // {type:'scrub'|'trim'|'chip-trim'|'chip-move', ...}
+let scrubbing = false; // arrastando na timeline para mover a agulha
 
 function renderClips() {
   laneVideo.innerHTML = '';
-  const trimming = drag && drag.type === 'trim' ? drag.i : null;
-  const dl = draftLayout(trimming);
+  const dl = draftLayout();
   const rl = renderedLayout();
-  const editable = true;
   dl.forEach((r, i) => {
-    if (r.removed && r.dur === 0) {
-      // removed: show a slim ghost at its slot
-      const g = el('div', 'clip removed', laneVideo);
-      g.style.left = `${r.out * S.pps}px`;
-      g.style.width = `${Math.max((r.orig.end - r.orig.start) * S.pps * 0.4, 34)}px`;
-      g.dataset.i = i;
-      g.title = 'clique e pressione delete para restaurar';
-      return;
-    }
     const c = el('div', 'clip', laneVideo);
     c.style.left = `${r.out * S.pps}px`;
     c.style.width = `${Math.max(r.dur * S.pps, 8)}px`;
     c.dataset.i = i;
-    if (i === S.selected) c.classList.add('selected');
-    if (r.start !== r.orig.start || r.end !== r.orig.end) c.classList.add('dirty');
-
-    // Enquanto este trecho está sendo aparado, ele fica no tamanho antigo e o
-    // que sai aparece escurecido nas pontas — assim a alça acompanha o cursor
-    // em vez de a outra borda se mexer.
-    if (i === trimming) {
-      const head = (r.start - r.orig.start) * S.pps;
-      const tail = (r.orig.end - r.end) * S.pps;
-      if (head > 0.5) {
-        const g = el('div', 'trim-cut', c);
-        g.style.left = '0px';
-        g.style.width = `${head}px`;
-      }
-      if (tail > 0.5) {
-        const g = el('div', 'trim-cut', c);
-        g.style.right = '0px';
-        g.style.width = `${tail}px`;
-      }
-    }
 
     // filmstrip from the rendered cut
     if (S.thumbCount > 0 && rl[i]) {
@@ -3234,17 +2793,6 @@ function renderClips() {
     lab.textContent = `${r.beat || r.source} `;
     const dur = el('div', 'clip-dur', c);
     dur.textContent = `${r.dur.toFixed(2)}s`;
-
-    if (editable) {
-      const hl = el('div', 'handle l', c); hl.dataset.i = i;
-      const hr = el('div', 'handle r', c); hr.dataset.i = i;
-      // no trecho congelado a alça senta na BORDA DO CORTE, não na do bloco —
-      // é ela que tem que acompanhar o cursor
-      if (i === trimming) {
-        hl.style.left = `${(r.start - r.orig.start) * S.pps}px`;
-        hr.style.right = `${(r.orig.end - r.end) * S.pps}px`;
-      }
-    }
   });
 }
 
@@ -3314,43 +2862,13 @@ function renderJcutAudio() {
   t2.classList.toggle('hidden', !on);
   if (!on) return;
 
-  // Desenhadas sobre o layout do RASCUNHO, com o mesmo congelamento da trilha
-  // de vídeo. Sem ele o bloco de áudio encolhia pela DIREITA quando a pessoa
-  // puxava o início — o corte "andava" para o lado oposto ao que ela mexia.
-  const trimming = drag && drag.type === 'trim' ? drag.i : null;
-  draftLayout(trimming).forEach((r, i) => {
+  draftLayout().forEach((r, i) => {
     if (r.removed && r.adur === 0) return;
     const lane = i % 2 === 0 ? l1 : l2;
     const b = el('div', 'ablock', lane);
     b.style.left = `${r.aout * S.pps}px`;
     b.style.width = `${Math.max(r.adur * S.pps, 6)}px`;
     el('div', 'ablock-label', b).textContent = r.beat || r.source || '';
-    // As bordas do bloco de ÁUDIO editam o J-cut daquele trecho: a esquerda é
-    // quanto da voz entra antes da imagem, a direita é quanto da cauda é
-    // aparada. Não mexem no range — mexem em `jcut_lead_frames`/`tail_frames`,
-    // que o render.py já lê por trecho.
-    el('div', 'handle l', b).dataset.i = i;
-    el('div', 'handle r', b).dataset.i = i;
-    const g = jcutGeom(i);
-    b.title = `${r.beat || r.source}\nvoz entra ${Math.round(g.lead * (S.fps || 30))}f antes da imagem`
-      + `\ncauda aparada ${Math.round(g.tail * (S.fps || 30))}f`
-      + '\n\narraste as bordas para ajustar';
-
-    // o que sai do áudio, escurecido na ponta em que está saindo
-    if (i === trimming) {
-      const head = (r.start - r.orig.start) * S.pps;
-      const tail = (r.orig.end - r.end) * S.pps;
-      if (head > 0.5) {
-        const g = el('div', 'trim-cut', b);
-        g.style.left = '0px';
-        g.style.width = `${head}px`;
-      }
-      if (tail > 0.5) {
-        const g = el('div', 'trim-cut', b);
-        g.style.right = '0px';
-        g.style.width = `${tail}px`;
-      }
-    }
 
     // the lead: sound already playing while the previous take is still on screen
     if (r.lead > 1e-6) {
@@ -3438,9 +2956,6 @@ function renderChips() {
         chip.classList.add('planned');
         chip.title = `${c.label} — RESERVADO: guarda o tempo, a mídia ainda não existe`;
       }
-      if (c.start !== c.orig.start || c.end !== c.orig.end) chip.classList.add('dirty');
-      el('div', 'handle l', chip).dataset.i = i;
-      el('div', 'handle r', chip).dataset.i = i;
     }
   }
 
@@ -3858,8 +3373,7 @@ function drawWave() {
   const mid = h / 2;
   const pps = S.wave.peaksPerSec;
 
-  const tri = trimIdx();
-  const itens = draftLayout(tri).filter((it) => !it.removed && it.adur > 0);
+  const itens = draftLayout().filter((it) => !it.removed && it.adur > 0);
   const blocos = itens.map((it) => [it.aout * S.pps, (it.aout + it.adur) * S.pps]);
 
   ctx.fillStyle = tokA('--orange-soft-rgb', 0.07);
@@ -3969,6 +3483,10 @@ function seekDraft(tDraft) {
 
 // ---------- interactions ----------
 
+// A timeline é só visualização a partir daqui: nenhum clique nela corta,
+// arrasta ou seleciona um elemento — só move a agulha. Handles, chips e
+// seleção de clipe ficam para trás como decoração; o pedido de mudança vai
+// por marcação (tecla M) ou pelo campo de texto, nunca manuseando o bloco.
 panel.addEventListener('pointerdown', (e) => {
   // The gutter is chrome, not timeline. Without this guard a pointerdown on a
   // track icon fell through to the scrub branch below, which both yanked the
@@ -3978,144 +3496,26 @@ panel.addEventListener('pointerdown', (e) => {
   // programmatic .click() did.
   if (e.target.closest('.track-label') || e.target.closest('button')) return;
 
-  const handle = e.target.closest('.handle');
-  const clip = e.target.closest('.clip');
-  const chip = e.target.closest('.chip.insert');
-
-  if (handle && clip) {
-    const i = +handle.dataset.i;
-    // no INÍCIO do arrasto, uma vez. Empilhar a cada `pointermove` encheria a
-    // pilha de estados intermediários e ⌘Z andaria um pixel por vez.
-    pushUndo('redimensionar trecho');
-    drag = { type: 'trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, r: { ...S.draft[i] } };
-    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
-    e.preventDefault();
-    return;
-  }
-  const ablock = e.target.closest('.ablock');
-  if (handle && ablock) {
-    const i = +handle.dataset.i;
-    const g = jcutGeom(i);
-    const fps = S.fps || 30;
-    drag = { type: 'jcut', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX,
-             lead0: Math.round(g.lead * fps), tail0: Math.round(g.tail * fps) };
-    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
-    e.preventDefault();
-    return;
-  }
-  if (handle && chip) {
-    const i = +handle.dataset.i;
-    drag = { type: 'chip-trim', i, side: handle.classList.contains('l') ? 'l' : 'r', x0: e.clientX, c: { ...S.insertsDraft[i] } };
-    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
-    e.preventDefault();
-    return;
-  }
-  if (chip) {
-    const i = +chip.dataset.i;
-    drag = { type: 'chip-move', i, x0: e.clientX, c: { ...S.insertsDraft[i] } };
-    try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
-    e.preventDefault();
-    return;
-  }
-  if (clip) {
-    S.selected = +clip.dataset.i;
-    renderClips();
-    return;
-  }
-  // background / ruler → scrub
+  // background / ruler / clip / chip → scrub, sempre
   const rect = timelineEl.getBoundingClientRect();
   const t = (e.clientX - rect.left - LABEL_W) / S.pps;
-  drag = { type: 'scrub' };
+  scrubbing = true;
   seekDraft(t);
   try { panel.setPointerCapture(e.pointerId); } catch (err) { /* synthetic/touch */ }
 });
 
 panel.addEventListener('pointermove', (e) => {
-  if (!drag) return;
-  if (drag.type === 'scrub') {
-    const rect = timelineEl.getBoundingClientRect();
-    seekDraft((e.clientX - rect.left - LABEL_W) / S.pps);
-    return;
-  }
-  const dt = (e.clientX - drag.x0) / S.pps;
-
-  if (drag.type === 'jcut') {
-    const r = S.draft[drag.i];
-    const fps = S.fps || 30;
-    const df = Math.round(dt * fps);
-    if (drag.side === 'l') {
-      // puxar a borda ESQUERDA para a esquerda aumenta o lead
-      r.leadF = Math.max(0, Math.min(JCUT_MAX_F, drag.lead0 - df));
-    } else {
-      // puxar a borda DIREITA para a esquerda apara mais cauda
-      r.tailF = Math.max(0, Math.min(JCUT_MAX_F, drag.tail0 - df));
-    }
-    renderClips();
-    renderJcutAudio();
-    drawWave();
-    refreshHeader();
-    const g = jcutGeom(drag.i);
-    showTooltip(e, drag.side === 'l'
-      ? `voz entra <b>${Math.round(g.lead * fps)}f</b> antes da imagem`
-      : `cauda aparada <b>${Math.round(g.tail * fps)}f</b>`);
-    return;
-  }
-
-  if (drag.type === 'trim') {
-    const r = S.draft[drag.i];
-    if (drag.side === 'l') {
-      r.start = Math.min(Math.max(0, drag.r.start + dt), r.end - MIN_SEG);
-    } else {
-      r.end = Math.max(drag.r.end + dt, r.start + MIN_SEG);
-      const srcDur = (S.state.sourceDurations || {})[r.source];
-      if (srcDur) r.end = Math.min(r.end, srcDur);
-    }
-    renderClips();
-    renderJcutAudio();
-    drawWave();
-    refreshHeader();
-    const d = drag.side === 'l' ? r.start - r.orig.start : r.end - r.orig.end;
-    showTooltip(e, `${fmt(r.start)} → ${fmt(r.end)} <span class="delta">(${d >= 0 ? '+' : ''}${d.toFixed(2)}s)</span>`);
-  } else if (drag.type === 'chip-trim') {
-    const c = S.insertsDraft[drag.i];
-    if (drag.side === 'l') c.start = Math.min(Math.max(0, drag.c.start + dt), c.end - 0.15);
-    else c.end = Math.max(drag.c.end + dt, c.start + 0.15);
-    renderChips();
-    refreshHeader();
-    showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}`);
-  } else if (drag.type === 'chip-move') {
-    const c = S.insertsDraft[drag.i];
-    const dur = drag.c.end - drag.c.start;
-    c.start = Math.max(0, drag.c.start + dt);
-    c.end = c.start + dur;
-    renderChips();
-    refreshHeader();
-    showTooltip(e, `${fmt(c.start)} → ${fmt(c.end)}`);
-  }
+  if (!scrubbing) return;
+  const rect = timelineEl.getBoundingClientRect();
+  seekDraft((e.clientX - rect.left - LABEL_W) / S.pps);
 });
 
 ['pointerup', 'pointercancel'].forEach((ev) =>
   panel.addEventListener(ev, () => {
-    const wasTrim = drag && drag.type === 'trim';
-    drag = null;
+    scrubbing = false;
     hideTooltip();
-    // o rearranjo acontece agora, ao soltar: durante o arrasto o trecho ficava
-    // congelado para a alça acompanhar o cursor
-    // renderAll: ao soltar, o rearranjo vale para TUDO — vídeo, áudio, régua e
-    // largura da linha do tempo, que ficaram congelados durante o arrasto
-    if (wasTrim) { renderAll(); refreshHeader(); }
   })
 );
-
-// double-click a clip = reset it
-laneVideo.addEventListener('dblclick', (e) => {
-  const clip = e.target.closest('.clip');
-  if (!clip) return;
-  const r = S.draft[+clip.dataset.i];
-  pushUndo('restaurar bordas');
-  r.start = r.orig.start; r.end = r.orig.end; r.removed = false;
-  renderAll(); refreshHeader();
-});
 
 // keyboard
 document.addEventListener('keydown', (e) => {
@@ -4140,6 +3540,10 @@ document.addEventListener('keydown', (e) => {
     toast('IN cancelado', 1600);
     return;
   }
+  if (e.key === 'Escape' && $('layersPanel').classList.contains('open')) {
+    $('layersPanel').classList.remove('open');
+    return;
+  }
   if (e.code === 'Space') {
     e.preventDefault();
     video.paused ? video.play() : video.pause();
@@ -4154,14 +3558,6 @@ document.addEventListener('keydown', (e) => {
     renderTx();
     refreshHeader();
     e.preventDefault();
-  } else if ((e.key === 'Delete' || e.key === 'Backspace') && S.selected >= 0) {
-    const r = S.draft[S.selected];
-    pushUndo(r.removed ? 'restaurar trecho' : 'apagar trecho');
-    r.removed = !r.removed;
-    renderAll(); refreshHeader();
-  } else if ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
-    e.preventDefault();
-    undoLast();
   }
 });
 
@@ -4190,9 +3586,6 @@ $('btnApprove').addEventListener('click', async () => {
   }
 });
 
-$('btnUndo').innerHTML = ICON.undo;
-$('btnUndo').addEventListener('click', undoLast);
-
 /* MODO da linha do tempo: compacta (vídeo + waveform geral) ⇄ expandida (com
    marcações, legendas, J-cut, efeitos). Compacta é o PADRÃO — a leitura de
    clip único, estilo NLE — e a escolha é lembrada, como a do J-cut. Substitui
@@ -4201,10 +3594,9 @@ $('btnUndo').addEventListener('click', undoLast);
 $('tlMode').innerHTML = '<span class="caret">⌄</span><span>Camadas</span>';
 function setTlMode(compact) {
   $('timeline').classList.toggle('compact', compact);
-  // compacta, a timeline devolve a altura que não usa: o painel encolhe ao
-  // conteúdo e o de camadas do render pode crescer além do teto usual
+  // compacta, a timeline devolve a altura que não usa dentro da coluna de
+  // trabalho — as camadas do render, ao lado, não são afetadas
   $('timelinePanel').classList.toggle('compacta', compact);
-  $('layersPanel').classList.toggle('tl-compacta', compact);
   const b = $('tlMode');
   b.setAttribute('aria-expanded', String(!compact));
   b.title = compact ? 'Expandir as camadas (marcações, legendas, J-cut, efeitos)'
@@ -4388,12 +3780,6 @@ async function sendTimeline() {
   S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
   S.cutWords.clear();
   S.cutBreaths.clear();
-  // A pilha morre no salvamento, e tem de morrer: o pedido já saiu daqui, e os
-  // takes marcados como removidos acabaram de ser FILTRADOS de S.draft. Um
-  // instantâneo anterior traria de volta trechos que já foram enviados como
-  // apagados — a tela passaria a discordar do que o outro lado recebeu.
-  S.undo.length = 0;
-  refreshUndo();
   renderTx();
   return true;
 }
@@ -4501,7 +3887,6 @@ $('btnDiscard').addEventListener('click', () => {
   S.pendingIn = null;
   S.editingNote = null;
   $('noteEditor').classList.add('hidden');
-  S.selected = -1;
   renderAll(); refreshHeader();
   toast('Ajustes descartados', 2000);
 });

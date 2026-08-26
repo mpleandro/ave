@@ -416,7 +416,15 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   salvo nos layouts com `quebra: "encher"` (hoje o `noticia`), que enchem a
   largura em N linhas como manchete de verdade. Layouts com linha herói
   (`gigante`, `etiqueta`, `manuscrito`) têm corpo por linha, e o herói é medido
-  sozinho contra a largura inteira.
+  sozinho contra a largura inteira. **O TEXTO não tem campo na tela** — a aba
+  só escolhe o layout. Escolher um estilo de headline sem `hook.lines` ainda
+  gravado é o sinal para perguntar com `AskUserQuestion` (2–3 sugestões
+  tiradas do transcrito aprovado + Other para o usuário ditar a própria
+  frase), o mesmo protocolo do Broll Overlay — e então escrever o texto direto
+  em `preview_style.json`/`edit-data.json` (`hook.lines`/`hook.enabled`), sem
+  reabrir a tela. **Caixinha e Notícia NÃO têm headline** (mesma zona alta,
+  travada em `elLocked()` no app.js) — com qualquer um dos dois ligado, pule a
+  pergunta em vez de oferecer um headline que nunca vai renderizar.
 - **As fontes do PRÓPRIO USUÁRIO entram no seletor** (`local_fonts.py` indexa
   as instaladas — 617 nesta máquina — e o servidor as publica em
   `/api/localfonts`). É o que permite usar a tipografia da MARCA, que o Google
@@ -542,6 +550,39 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
    **Multicam confirmada:** o deslocamento que o helper mediu é o sync. Ranges
    do ângulo secundário usam a mesma janela de áudio com a fonte trocada e o
    tempo corrigido por ele — não uma segunda passada de transcrição.
+1c. **COM MAIS DE UM ARQUIVO DE VÍDEO, a MESMA pergunta do passo 1b já pede o
+   detalhe de ESTILO — antes de qualquer corte ser gerado.** Com só 1 arquivo
+   (o caso mais comum — só a fala), pule este passo; não há material extra
+   para decidir broll/overlay/split sobre.
+
+   A pergunta do 1b já pergunta o USO da fonte ambígua (opções (a)-(d) acima).
+   Na MESMA interação, acrescente o detalhe que o Fase 2 vai precisar para
+   renderizar de verdade — não uma pergunta nova, um degrau a mais na mesma:
+   - opção (a) "toma a tela inteira" (broll/insert) → pergunte posição
+     (`pos: top/bottom/full`) e se escurece (`dim`);
+   - opção (c) "aparece pequena por cima" (overlay) → pergunte se é COM
+     transparência ou sólido;
+   - sempre aceite descrição livre ("Other") em vez de forçar nas opções —
+     "sobe mais de um arquivo, a IA pergunta o estilo antes de cortar" vale
+     tanto para o vocabulário certo quanto para o que o usuário quiser dizer
+     com as próprias palavras.
+
+   **Por quê ANTES do corte, e não só antes do portão:** a intenção de estilo
+   pode mudar a PRÓPRIA decisão de corte — é a lição da Roleta (projeto #29,
+   ver "Papel de cada fonte" adiante): *"o corte foi construído em volta de um
+   elemento invisível [...] se a roleta não coubesse no vão reservado, a
+   descoberta viria depois do portão."* O vão reservado em `edit-data.json`
+   (`planned: true`, passo 1b) já nasce sabendo o que vai ocupá-lo, em vez de
+   reservar um tempo genérico para descobrir depois se coube.
+
+   **Depois do corte, ANTES do portão, sempre que houver mais de 1 arquivo de
+   vídeo:** rode a Fase 2 (`helpers/phase2.py`) com o que foi coletado aqui —
+   `elements`/`inserts[]` já povoados, legenda e headline no padrão — e é ESSE
+   render (não o `preview.mp4` cru) que vira o portão de aprovação. Faça isto
+   MESMO quando a resposta a todas as fontes extras foi "é só referência":
+   a classificação do `source_roles.py` é palpite em casos como arquivos
+   sequenciais de uma gravação vs. imagens pensadas como broll — rodar e
+   mostrar o resultado composto é a confirmação barata de que o palpite bateu.
 2a. **VARRA O ÁUDIO DA FONTE — `verify_takes.py --fonte` — antes de escolher qualquer tomada.**
 
    ```bash

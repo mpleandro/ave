@@ -142,38 +142,71 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     # controle: o que responde ao clique e nao ao resultado.
     if pick.get("capColor"):
         data.setdefault("captions", {})["color"] = pick["capColor"]
-    if pick.get("headline"):
+    elements = pick.get("elements") or {}
+    for k, v in elements.items():
+        data.setdefault("elements", {})[k] = v
+    # NOTÍCIA é uma cartela de headline que virou elemento (disputava a mesma
+    # zona alta que a Caixinha sem nenhuma arbitragem) — mas o motor de render
+    # é o MESMO `hook.style`/`hook.lines` de qualquer outra cartela. A UI
+    # trava as duas escolhas como mutuamente exclusivas (elLocked() em
+    # app.js), então no máximo uma das duas chega aqui verdadeira.
+    if elements.get("noticia"):
+        data.setdefault("hook", {})["style"] = "noticia"
+    elif pick.get("headline"):
         data.setdefault("hook", {})["style"] = pick["headline"]
-    # O TEXTO da headline vem da caixa do editor. Sem este ramo o `hook` ficava
-    # só com o estilo e nenhuma linha — e o compositor pula um hook sem
-    # `enabled`, então o vídeo saía SEM headline nenhuma, em silêncio, com o
-    # usuário tendo acabado de escrever a frase.
+    # O TEXTO da headline não tem mais campo na interface — o texto não é
+    # estilo, é conteúdo, e chega depois por uma conversa (AskUserQuestion),
+    # o MESMO protocolo da Caixinha/Notícia. `headlineText` só sobrevive aqui
+    # como o canal pelo qual O AGENTE escreve a resposta em
+    # `preview_style.json` antes de rodar a Fase 2 de novo — nunca a
+    # interface. Sem texto, NÃO desligamos o hook: deixamos `style` gravado e
+    # `lines` ausente, e é isso que `check_elements_filled()` usa pra barrar
+    # a Fase 2 e pedir a pergunta, em vez de renderizar em silêncio sem
+    # headline nenhuma.
     txt = (pick.get("headlineText") or "").strip()
     if txt:
         hook = data.setdefault("hook", {})
         hook["lines"] = balance_two_lines(txt)
         hook["enabled"] = True
         hook.setdefault("endSec", 4.0)
-    elif pick.get("headline") and not (data.get("hook") or {}).get("lines"):
-        # estilo escolhido e nenhum texto: desliga em vez de renderizar vazio
-        data.setdefault("hook", {})["enabled"] = False
     if pick.get("edit"):
         data["editStyle"] = pick["edit"]
-    # CAIXINHA DE PERGUNTAS: o texto digitado na aba vira o dado do adesivo.
-    # `end` fica ausente de propósito — quanto tempo ela permanece é decisão
-    # POR VÍDEO (escolha do usuário, 2026-08-19), feita no chat com os tempos
-    # medidos do corte; ausente significa "até o fim", que é o padrão seguro.
-    if (pick.get("caixaPergunta") or "").strip():
+    # CAIXINHA DE PERGUNTAS: liga por `elements.caixinha`, não pela presença
+    # de texto — o texto não tem mais campo na interface, e chega depois, por
+    # uma conversa (AskUserQuestion, ver check_elements_filled()). Desligar
+    # LIMPA o dado antigo: sem isto, trocar de elemento deixava `questionBox`
+    # vazado para o próximo render (achado na investigação desta
+    # reestruturação — trocar de "tipo de edição" no radio antigo não
+    # limpava o campo escondido da Caixinha).
+    if elements.get("caixinha"):
         cx = data.setdefault("questionBox", {})
-        cx["pergunta"] = pick["caixaPergunta"].strip()
-        if (pick.get("caixaChamada") or "").strip():
-            cx["chamada"] = pick["caixaChamada"].strip()
+        pergunta = (pick.get("caixaPergunta") or "").strip()
+        if pergunta:
+            cx["pergunta"] = pergunta
+        chamada = (pick.get("caixaChamada") or "").strip()
+        if chamada:
+            cx["chamada"] = chamada
         cx.setdefault("start", 0.0)
-    for k, v in (pick.get("elements") or {}).items():
-        data.setdefault("elements", {})[k] = v
+    else:
+        data.pop("questionBox", None)
     if pick.get("observation"):
         data["observation"] = pick["observation"]
     return data, True
+
+
+def _cartela_ids() -> set[str]:
+    """Os ids de headline cujo motor é `cartela` (`variants.json`).
+
+    `PORTED_HEADLINES` foi escrita antes do motor `cartela` existir e nunca
+    ganhou os ids dele — sem isto, qualquer cartela (Notícia incluída)
+    passaria por `apply_style_pick()` só para `check_supported()` barrá-la
+    como "não portada" logo depois, mesmo com o motor inteiro implementado.
+    """
+    try:
+        v = json.loads((SKILL / "assets" / "styles" / "variants.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return set()
+    return {k for k, s in (v.get("headlines") or {}).items() if s.get("motor") == "cartela"}
 
 
 def check_supported(data: dict) -> None:
@@ -186,10 +219,51 @@ def check_supported(data: dict) -> None:
             f"Escolha um dos prontos na aba Estilo, ou peça o port deste.\n"
         )
     hook = data.get("hook", {})
-    if hook.get("enabled") and hook.get("style") not in PORTED_HEADLINES:
+    if hook.get("enabled") and hook.get("style") not in (PORTED_HEADLINES | _cartela_ids()):
         sys.exit(
             f"\nO estilo de headline '{hook.get('style')}' ainda não foi portado, "
             f"e o hook está ligado.\nDesligue o hook ou peça o port.\n"
+        )
+
+
+def check_elements_filled(data: dict) -> None:
+    """Caixinha, Notícia e agora Headline perderam a caixa de texto da
+    interface (a aba Estilo só escolhe layout/liga o elemento) — o conteúdo
+    nasce de uma conversa, o MESMO protocolo que o Broll Overlay já seguia.
+    Escolher o estilo/ligar o elemento sem o texto correspondente não é erro
+    do usuário: é o sinal para o agente rodando a sessão perguntar via
+    `AskUserQuestion` e escrever a resposta aqui antes de rodar a Fase 2 de
+    novo.
+    """
+    els = data.get("elements") or {}
+    if els.get("caixinha") and not (data.get("questionBox") or {}).get("pergunta"):
+        sys.exit(
+            "\nA Caixinha de perguntas está ligada, mas falta a pergunta.\n"
+            "Pergunte ao usuário (AskUserQuestion) qual é a pergunta — e, se "
+            "quiser, a chamada do adesivo — e escreva em edit-data.json → "
+            "questionBox.pergunta / .chamada antes de rodar a Fase 2 de novo.\n"
+        )
+    if els.get("noticia") and not (data.get("hook") or {}).get("lines"):
+        sys.exit(
+            "\nA Notícia está ligada, mas falta o texto da manchete.\n"
+            "Pergunte ao usuário (AskUserQuestion) o texto e escreva em "
+            "edit-data.json → hook.lines antes de rodar a Fase 2 de novo.\n"
+        )
+    # HEADLINE de verdade (nem Caixinha nem Notícia, que têm gate próprio
+    # acima e NÃO usam headline — mesma zona alta, mutuamente exclusivas em
+    # elLocked() no app.js): estilo escolhido na aba, texto ausente.
+    hook = data.get("hook") or {}
+    if (hook.get("style") and hook.get("style") != "noticia"
+            and not els.get("caixinha") and not els.get("noticia")
+            and not hook.get("lines")):
+        sys.exit(
+            "\nUm estilo de headline foi escolhido, mas falta o texto.\n"
+            "Leia o transcrito do corte aprovado, redija 2–3 candidatas de "
+            "headline (curiosity gap / claim forte / número / urgência) e "
+            "pergunte ao usuário com AskUserQuestion (Other pra ele ditar a "
+            "própria frase) — depois escreva a escolhida em edit-data.json → "
+            "hook.lines (e hook.enabled: true) antes de rodar a Fase 2 de "
+            "novo.\n"
         )
 
 
@@ -298,6 +372,7 @@ def main() -> None:
     if args.style:
         data.setdefault("captions", {})["style"] = args.style
     check_supported(data)
+    check_elements_filled(data)
     data_path.parent.mkdir(parents=True, exist_ok=True)
     data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
     if picked:

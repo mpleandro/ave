@@ -64,6 +64,16 @@ TRACK = {
     "flash": 9,      # por cima de tudo que é imagem
     "soundtrack": 10,
     "sfx": 11,
+    # CAIXINHA, em track PRÓPRIA — não mais "overlay". Caixinha e Broll
+    # Overlay eram radio único ("tipo de edição"); virando toggles
+    # independentes (Elementos visuais), uma janela de Broll Overlay que
+    # sobrepõe no tempo a Caixinha (que por padrão fica ligada do início ao
+    # fim) acusaria "overlapping_clips_same_track" nos dois dividindo o track
+    # 5. O número em si não carrega ordem de pintura — cada `data-track-index`
+    # só precisa ser um valor ÚNICO para o linter de sobreposição; por isso
+    # mora aqui, no vão já reservado como "fora da faixa do SFX", em vez de
+    # forçar renumeração de tudo abaixo.
+    "caixinha": 15,
     # FORA da faixa do SFX. `SFX_LAYERS` numera 12–14 à mão logo abaixo, e o
     # áudio do a-roll ocupa a duração inteira: dividir track com um efeito curto
     # daria "overlapping_clips_same_track" em todo projeto com som.
@@ -519,22 +529,24 @@ def caixinha_markup(data: dict, duration: float, events: list, accent: str) -> t
 
     events.append((s, "element"))   # som de entrada, mesmo sem tween visual
     estilo = (f'--cx-top:{q.get("top", cx.get("topoPadrao", 300))}px;'
-              f' --cx-w:{cx.get("largura", 820)}px; --cx-radius:{cx.get("raio", 30)}px;'
-              f' --cx-tilt:{cx.get("inclinacao", -1.6)}deg;'
-              f' --cx-bar-h:{cx.get("faixaAltura", 96)}px;'
-              f' --cx-bar-bg:{cx.get("faixaFundo", "#26262b")};'
-              f' --cx-bar-fg:{cx.get("faixaCor", "#e9e9ea")};'
-              f' --cx-bar-size:{cx.get("faixaTamanho", 30)}px;'
+              f' --cx-w:{cx.get("largura", 1040)}px; --cx-radius:{cx.get("raio", 46)}px;'
+              f' --cx-tilt:{cx.get("inclinacao", 0)}deg;'
+              f' --cx-bar-h:{cx.get("faixaAltura", 132)}px;'
+              f' --cx-bar-bg:{cx.get("faixaFundo", "#20252b")};'
+              f' --cx-bar-fg:{cx.get("faixaCor", "#ffffff")};'
+              f' --cx-bar-size:{cx.get("faixaTamanho", 39)}px;'
+              f' --cx-bar-weight:{cx.get("faixaPeso", 700)};'
               f' --cx-body-bg:{cx.get("corpoFundo", "#fff")};'
-              f' --cx-body-fg:{cx.get("corpoCor", "#1c1c1e")};'
-              f' --cx-body-size:{cx.get("corpoTamanho", 46)}px;'
+              f' --cx-body-fg:{cx.get("corpoCor", "#111111")};'
+              f' --cx-body-size:{cx.get("corpoTamanho", 47)}px;'
+              f' --cx-body-weight:{cx.get("corpoPeso", 400)};'
               f' --cx-body-lh:{cx.get("corpoEntrelinha", 1.28)};'
               f' --cx-body-pad:{cx.get("corpoPadding", 44)}px;'
-              f' --cx-shadow:{cx.get("sombra", "0 26px 60px -18px rgba(0,0,0,.55)")};'
+              f' --cx-shadow:{cx.get("sombra", "0 3px 14px rgba(0,0,0,.18)")};'
               f' --cx-accent:{accent};'
               f' --cx-font:{VARIANTS["styles"]["karaoke"]["cssFamily"]}')
     html = (f'  <div class="ave-caixa clip" data-start="{s:.3f}" data-duration="{d:.3f}"'
-            f' data-track-index="{TRACK["overlay"]}"'
+            f' data-track-index="{TRACK["caixinha"]}"'
             f' style="{estilo}">\n'
             f'    <div class="cx-card">\n'
             f'      <div class="cx-faixa">{chamada}</div>\n'
@@ -1709,7 +1721,7 @@ def tracking_path(data, W, H, duration, track_file: Path, step: int = 3):
 
 
 def camera_parts(data, duration):
-    """(js da timeline, estilo do a-roll, blocos de flash).
+    """(js da timeline, estilo do a-roll, blocos de transição).
 
     A câmera é um item da aba Estilo com três partes separáveis. `zoomCuts` é o
     que faz um plano fixo parecer editado — sem ele o vídeo é uma câmera parada
@@ -1744,42 +1756,244 @@ def camera_parts(data, duration):
 
     fps = data.get("fps", 30)
     W = data.get("width", 1080)
-    fl = VARIANTS["flash"]
+    accent = data.get("accent") or "#FF6B1A"
     for k, tr in enumerate(data.get("transitions") or []):
         at = float(tr.get("at", 0))
         if at >= duration:
             continue
-        start = max(0.0, at - fl["durationFrames"] / fps)
-        dur = (fl["durationFrames"] * 2) / fps
-        blocks.append(
-            f'  <div id="flash{k}" class="ave-flash clip" data-start="{start:.3f}" '
-            f'data-duration="{min(dur, duration - start):.3f}" data-track-index="{TRACK['flash']}" '
-            f'style="--flash-intensity:{tr.get("intensity", fl["intensity"])}; '
-            f'--flash-blur:{fl["blur"]}"></div>'
-        )
-        # A varredura em PIXELS da composição, não em `xPercent`: o percentual
-        # é da largura do elemento (150px) e nunca daria a travessia. Sai de
-        # fora da borda esquerda e termina fora da direita, com folga para o
-        # desfoque não entregar a borda dura do retângulo.
-        folga = 220
-        js += (f"\n  tl.fromTo('#flash{k}', {{x:{-folga}}}, "
-               f"{{x:{W + folga}, duration:{dur:.3f}, ease:'power1.inOut'}}, "
-               f"{start:.3f});")
-        # O brilho SOBE e DESCE. Antes ia de 0 a 1 ao longo de toda a
-        # travessia: o feixe ficava mais forte justamente ao sair de cena e
-        # então era cortado no pico, quando o clipe acabava — o contrário de
-        # um flash, que estoura no meio e se apaga.
-        js += (f"\n  tl.to('#flash{k}', {{opacity:1, duration:{dur / 2:.3f}, "
-               f"ease:'power2.out'}}, {start:.3f});")
-        js += (f"\n  tl.to('#flash{k}', {{opacity:0, duration:{dur / 2:.3f}, "
-               f"ease:'power2.in'}}, {start + dur / 2:.3f});")
-        # Trava dura no fim. O render não toca a linha do tempo, ele BUSCA
-        # quadro a quadro — e uma busca que caia depois do fade pode não ter
-        # passado por ele, deixando o feixe aceso preso na tela. O `check`
-        # barra por isso quando a saída termina em borda de clipe, que é
-        # exatamente onde um flash de transição sempre termina.
-        js += (f"\n  tl.set('#flash{k}', {{opacity:0}}, {start + dur:.3f});")
+        tipo = tr.get("tipo", "flash")
+        builder = _TRANSICAO_BUILDERS.get(tipo, _transicao_flash)
+        blk, tj = builder(k, tr, at, duration, fps, W, accent)
+        if blk:
+            blocks.append(blk)
+        js += tj
     return js, style, blocks
+
+
+def _transicao_flash(k, tr, at, duration, fps, W, accent):
+    """A transição de hoje: um feixe varrendo o quadro. Mantida byte a byte —
+    é o que já roda em todo edit-data salvo sem `tipo`."""
+    fl = VARIANTS["flash"]
+    start = max(0.0, at - fl["durationFrames"] / fps)
+    dur = min((fl["durationFrames"] * 2) / fps, duration - start)
+    blk = (
+        f'  <div id="flash{k}" class="ave-flash clip" data-start="{start:.3f}" '
+        f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
+        f'style="--flash-intensity:{tr.get("intensity", fl["intensity"])}; '
+        f'--flash-blur:{fl["blur"]}"></div>'
+    )
+    # A varredura em PIXELS da composição, não em `xPercent`: o percentual
+    # é da largura do elemento (150px) e nunca daria a travessia. Sai de
+    # fora da borda esquerda e termina fora da direita, com folga para o
+    # desfoque não entregar a borda dura do retângulo.
+    folga = 220
+    js = (f"\n  tl.fromTo('#flash{k}', {{x:{-folga}}}, "
+          f"{{x:{W + folga}, duration:{dur:.3f}, ease:'power1.inOut'}}, "
+          f"{start:.3f});")
+    # O brilho SOBE e DESCE. Antes ia de 0 a 1 ao longo de toda a
+    # travessia: o feixe ficava mais forte justamente ao sair de cena e
+    # então era cortado no pico, quando o clipe acabava — o contrário de
+    # um flash, que estoura no meio e se apaga.
+    js += (f"\n  tl.to('#flash{k}', {{opacity:1, duration:{dur / 2:.3f}, "
+           f"ease:'power2.out'}}, {start:.3f});")
+    js += (f"\n  tl.to('#flash{k}', {{opacity:0, duration:{dur / 2:.3f}, "
+           f"ease:'power2.in'}}, {start + dur / 2:.3f});")
+    # Trava dura no fim. O render não toca a linha do tempo, ele BUSCA
+    # quadro a quadro — e uma busca que caia depois do fade pode não ter
+    # passado por ele, deixando o feixe aceso preso na tela. O `check`
+    # barra por isso quando a saída termina em borda de clipe, que é
+    # exatamente onde um flash de transição sempre termina.
+    js += (f"\n  tl.set('#flash{k}', {{opacity:0}}, {start + dur:.3f});")
+    return blk, js
+
+
+def _transicao_chama(k, tr, at, duration, fps, W, accent):
+    """Flash de cor sólida no accent — mais barato que o flash (sem feixe/blur)."""
+    cfg = VARIANTS["transicoes"]["chama"]
+    pre = cfg["attackFrames"] / fps
+    hold = cfg["holdFrames"] / fps
+    post = cfg["releaseFrames"] / fps
+    start = max(0.0, at - pre)
+    dur = min(pre + hold + post, duration - start)
+    peak = tr.get("intensity", cfg["intensity"])
+    cor = tr.get("cor") or accent
+    blk = (f'  <div id="chama{k}" class="ave-trans-chama clip" data-start="{start:.3f}" '
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
+           f'style="background:{cor}"></div>')
+    js = (f"\n  tl.fromTo('#chama{k}', {{opacity:0}}, "
+          f"{{opacity:{peak}, duration:{pre:.3f}, ease:'power1.in'}}, {start:.3f});")
+    js += (f"\n  tl.to('#chama{k}', {{opacity:0, duration:{post:.3f}, "
+           f"ease:'power1.out'}}, {at + hold:.3f});")
+    return blk, js
+
+
+def _transicao_tranco(k, tr, at, duration, fps, W, accent):
+    """Shake de câmera em torno do corte. Anima `#a-roll` (x/y) diretamente —
+    seguro porque `camera.js` só toca `scale` nesse elemento, nunca x/y."""
+    cfg = VARIANTS["transicoes"]["tranco"]
+    step = cfg["stepFrames"] / fps
+    js = ""
+    for off, x, y in cfg["keyframes"]:
+        t = max(0.0, at + off * step)
+        if t >= duration:
+            continue
+        js += f"\n  tl.to('#a-roll', {{x:{x}, y:{y}, duration:{step:.3f}, ease:'none'}}, {t:.3f});"
+    return "", js
+
+
+def _transicao_estouro(k, tr, at, duration, fps, W, accent):
+    """Zoom-punch seco, sem blur. Anima `#vidwin` (não `#a-roll`) para não
+    brigar com o `scale` do zoom de câmera no mesmo elemento."""
+    cfg = VARIANTS["transicoes"]["estouro"]
+    scale = cfg["scale"]
+    inn = cfg["inFrames"] / fps
+    outt = min(cfg["outFrames"] / fps, duration - at)
+    js = (f"\n  tl.fromTo('#vidwin', {{scale:1}}, "
+          f"{{scale:{scale}, duration:{inn:.3f}, ease:'power2.in'}}, {max(0.0, at - inn):.3f});")
+    js += (f"\n  tl.to('#vidwin', {{scale:1, duration:{outt:.3f}, "
+           f"ease:'power2.out'}}, {at:.3f});")
+    return "", js
+
+
+def _transicao_zoom_blur(k, tr, at, duration, fps, W, accent):
+    """Igual ao estouro, com borrão radial crescendo junto — o zoom de
+    CapCut/Reels. Mesma razão de animar `#vidwin`, não `#a-roll`."""
+    cfg = VARIANTS["transicoes"]["zoomBlur"]
+    scale, blur = cfg["scale"], cfg["blur"]
+    inn = cfg["inFrames"] / fps
+    outt = min(cfg["outFrames"] / fps, duration - at)
+    js = (f"\n  tl.fromTo('#vidwin', {{scale:1, filter:'blur(0px)'}}, "
+          f"{{scale:{scale}, filter:'blur({blur}px)', duration:{inn:.3f}, ease:'power2.in'}}, "
+          f"{max(0.0, at - inn):.3f});")
+    js += (f"\n  tl.to('#vidwin', {{scale:1, filter:'blur(0px)', duration:{outt:.3f}, "
+           f"ease:'power2.out'}}, {at:.3f});")
+    return "", js
+
+
+def _transicao_deslize(k, tr, at, duration, fps, W, accent):
+    """Painel cobrindo a emenda, deslizando na direção pedida. NÃO é o swipe
+    com as duas tomadas de verdade (custaria dois elementos de vídeo no MESMO
+    arquivo, um congelado antes do corte) — só vale a pena se o efeito
+    precisar mostrar as duas imagens, o que não é o caso aqui."""
+    cfg = VARIANTS["transicoes"]["deslize"]
+    direcao = tr.get("direcao", cfg["direcaoPadrao"])
+    inn = cfg["inFrames"] / fps
+    hold = cfg["holdFrames"] / fps
+    outt = cfg["outFrames"] / fps
+    start = max(0.0, at - inn)
+    dur = min(inn + hold + outt, duration - start)
+    # Eixo Y usa a MESMA folga em pixels que o X (W): não temos a altura da
+    # composição aqui, e a folga só precisa ser "maior que a tela" — W já é.
+    eixo = "y" if direcao in ("cima", "baixo") else "x"
+    entra_de = {"direita": W, "esquerda": -W, "cima": -W, "baixo": W}[direcao]
+    sai_para = {"direita": -W, "esquerda": W, "cima": W, "baixo": -W}[direcao]
+    cor = tr.get("cor") or cfg["cor"]
+    blk = (f'  <div id="deslize{k}" class="ave-trans-deslize clip" data-start="{start:.3f}" '
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
+           f'style="background:{cor}"></div>')
+    js = (f"\n  tl.fromTo('#deslize{k}', {{{eixo}:{entra_de}}}, "
+          f"{{{eixo}:0, duration:{inn:.3f}, ease:'power1.in'}}, {start:.3f});")
+    js += (f"\n  tl.to('#deslize{k}', {{{eixo}:{sai_para}, duration:{outt:.3f}, "
+           f"ease:'power1.out'}}, {at + hold:.3f});")
+    return blk, js
+
+
+def _transicao_cortina(k, tr, at, duration, fps, W, accent):
+    """Chapa no accent sobe cobrindo o quadro e continua subindo até sumir —
+    cortina de teatro, um sentido só (não abre e fecha no mesmo lugar)."""
+    cfg = VARIANTS["transicoes"]["cortina"]
+    inn, hold, outt = cfg["inFrames"] / fps, cfg["holdFrames"] / fps, cfg["outFrames"] / fps
+    start = max(0.0, at - inn)
+    dur = min(inn + hold + outt, duration - start)
+    cor = tr.get("cor") or accent
+    blk = (f'  <div id="cortina{k}" class="ave-trans-cortina clip" data-start="{start:.3f}" '
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
+           f'style="background:{cor}"></div>')
+    js = (f"\n  tl.fromTo('#cortina{k}', {{clipPath:'inset(100% 0 0 0)'}}, "
+          f"{{clipPath:'inset(0% 0 0 0)', duration:{inn:.3f}, ease:'power1.in'}}, {start:.3f});")
+    js += (f"\n  tl.to('#cortina{k}', {{clipPath:'inset(0 0 100% 0)', duration:{outt:.3f}, "
+           f"ease:'power1.out'}}, {at + hold:.3f});")
+    return blk, js
+
+
+def _transicao_iris(k, tr, at, duration, fps, W, accent):
+    """Mesma mecânica da cortina, recorte circular: fecha e abre no MESMO
+    ponto — diferente da cortina, que é direcional."""
+    cfg = VARIANTS["transicoes"]["iris"]
+    inn, hold, outt = cfg["inFrames"] / fps, cfg["holdFrames"] / fps, cfg["outFrames"] / fps
+    start = max(0.0, at - inn)
+    dur = min(inn + hold + outt, duration - start)
+    raio, cx, cy = cfg["raio"], cfg["centroX"], cfg["centroY"]
+    cor = tr.get("cor") or accent
+    blk = (f'  <div id="iris{k}" class="ave-trans-iris clip" data-start="{start:.3f}" '
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
+           f'style="background:{cor}"></div>')
+    js = (f"\n  tl.fromTo('#iris{k}', {{clipPath:'circle(0% at {cx}% {cy}%)'}}, "
+          f"{{clipPath:'circle({raio}% at {cx}% {cy}%)', duration:{inn:.3f}, ease:'power1.in'}}, "
+          f"{start:.3f});")
+    js += (f"\n  tl.to('#iris{k}', {{clipPath:'circle(0% at {cx}% {cy}%)', duration:{outt:.3f}, "
+           f"ease:'power1.out'}}, {at + hold:.3f});")
+    return blk, js
+
+
+def _transicao_falha(k, tr, at, duration, fps, W, accent):
+    """RGB split — três tiras coloridas saltando horizontalmente em torno do
+    corte. Pontua uma virada grande sem a chapa opaca da cortina/íris."""
+    cfg = VARIANTS["transicoes"]["falha"]
+    window = cfg["windowFrames"] / fps
+    start = max(0.0, at - window / 2)
+    dur = min(window, duration - start)
+    # Mesmo salto relativo para as três tiras, com uma fase (`atraso`) que as
+    # desalinha — é o que lê como falha de sinal em vez de três barras
+    # descendo juntas.
+    passos = [(0.10, -22), (0.22, 26), (0.34, -12), (0.46, 16), (0.62, -6)]
+    blk_parts, js = [], ""
+    for i, tira in enumerate(cfg["tiras"]):
+        eid = f"falha{k}_{i}"
+        atraso = i * 0.06 * window
+        blk_parts.append(
+            f'    <div id="{eid}" class="ave-trans-falha-tira" '
+            f'style="top:{tira["top"]}%; height:{tira["height"]}%; background:{tira["cor"]}"></div>'
+        )
+        js += f"\n  tl.set('#{eid}', {{opacity:0, x:0}}, {start:.3f});"
+        for frac, x in passos:
+            t = start + atraso + frac * window
+            if t >= start + dur:
+                break
+            js += f"\n  tl.to('#{eid}', {{x:{x}, opacity:1, duration:0.02, ease:'none'}}, {t:.3f});"
+        js += f"\n  tl.to('#{eid}', {{opacity:0, x:0, duration:0.02, ease:'none'}}, {start + dur:.3f});"
+    blk = (f'  <div id="falha{k}" class="ave-trans-falha clip" data-start="{start:.3f}" '
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}">\n'
+           + "\n".join(blk_parts) + "\n  </div>")
+    return blk, js
+
+
+_TRANSICAO_BUILDERS = {
+    "flash": _transicao_flash,
+    "chama": _transicao_chama,
+    "tranco": _transicao_tranco,
+    "estouro": _transicao_estouro,
+    "zoomBlur": _transicao_zoom_blur,
+    "deslize": _transicao_deslize,
+    "cortina": _transicao_cortina,
+    "iris": _transicao_iris,
+    "falha": _transicao_falha,
+}
+
+# Som por tipo, em `VARIANTS["sfx"]" — reaproveita kinds que já existiam no
+# catálogo sem uso (`transition`/`transitionSoft`/`impact`/`element`/`camera`),
+# preparados exatamente para este motor.
+TRANSICAO_SFX = {
+    "flash": "flash",
+    "chama": "flash",
+    "tranco": "impact",
+    "estouro": "impact",
+    "zoomBlur": "impact",
+    "deslize": "element",
+    "cortina": "transitionSoft",
+    "iris": "camera",
+    "falha": "transition",
+}
 
 
 def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vdur=None) -> str:
@@ -1799,8 +2013,12 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         events.append((0.0, "hook"))
     for tr in (data.get("transitions") or []):
         at = float(tr.get("at", 0))
-        if at < duration:
-            events.append((at, "flash"))
+        if at >= duration:
+            continue
+        if tr.get("sfx"):
+            events.append((at, {"file": tr["sfx"], "volume": tr.get("volume", 0.3)}))
+        else:
+            events.append((at, TRANSICAO_SFX.get(tr.get("tipo", "flash"), "flash")))
     for c in (data.get("_soloCues") or []):
         events.append(c)
     # Deixas escritas à mão — o único canal para um som que NÃO nasce de um
@@ -2291,6 +2509,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 <style>
   * {{ margin:0; padding:0; box-sizing:border-box; }}
   html, body {{ width:{W}px; height:{H}px; overflow:hidden; background:#000; }}
+  /* Base explícita, independente de split.css: `estouro`/`zoomBlur` escalam
+     ESTE elemento (não o #a-roll, que a câmera já escala) — sem position+inset
+     próprios ele fica sem caixa (o vídeo lá dentro é absolute e não conta pro
+     tamanho do pai), e o punch não teria o que escalar. */
+  #vidwin {{ position:absolute; inset:0; }}
   #a-roll {{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
              {"transform-origin:0 0;" if track_js else cam_style} }}
 </style>

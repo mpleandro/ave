@@ -2329,6 +2329,66 @@
     "blur": 16,
     "intensity": 1.0
   },
+  "transicoes": {
+    "_note": "Motor de transições em `transitions[].tipo` — candidatas de ~/.avelin/propostas/transicoes-10.html, aplicadas em 2026-08-23. `flash` continua com config própria acima, por compatibilidade com todo edit-data já salvo. `chama`/`tranco`/`estouro`/`zoomBlur` animam o vídeo já cortado direto (filtro/transform no elemento — nada de painel escondendo a emenda); `deslize`/`cortina`/`iris`/`falha` usam um painel por cima para esconder o instante do corte, porque o preview.mp4 é UM arquivo já cortado — não são crossfade real entre duas tomadas. Números aqui são ponto de partida, não lei — ajuste igual se ajusta o `flash`.",
+    "chama": {
+      "attackFrames": 2,
+      "holdFrames": 1,
+      "releaseFrames": 2,
+      "intensity": 0.88,
+      "_note": "Flash de cor sólida no accent do projeto — mais barato que o `flash` (sem feixe, sem blur)."
+    },
+    "tranco": {
+      "stepFrames": 1,
+      "keyframes": [[-3, 0, 0], [-2, 9, -6], [-1, -10, 5], [0, 7, -5], [1, -5, 3], [2, 0, 0]],
+      "_note": "Shake de câmera em torno do corte. `keyframes` é [passo relativo ao corte, x, y] em px — anima `#a-roll` diretamente; seguro porque a câmera (`camera.js`) só toca `scale`, nunca x/y."
+    },
+    "estouro": {
+      "scale": 1.08,
+      "inFrames": 5,
+      "outFrames": 6,
+      "_note": "Zoom-punch seco, sem blur — anima `#vidwin` (não `#a-roll`), para não brigar com o `scale` do zoom de câmera no mesmo elemento."
+    },
+    "zoomBlur": {
+      "scale": 1.14,
+      "blur": 18,
+      "inFrames": 6,
+      "outFrames": 9,
+      "_note": "Igual ao `estouro`, com borrão radial crescendo junto — o zoom de CapCut/Reels. Mesma razão de animar `#vidwin`."
+    },
+    "deslize": {
+      "direcaoPadrao": "direita",
+      "inFrames": 5,
+      "holdFrames": 0,
+      "outFrames": 5,
+      "cor": "#0D2137",
+      "_note": "Painel cobrindo a emenda, deslizando na direção de `direcao` (`cima|baixo|esquerda|direita`, dado por transição). NÃO é o swipe com as duas tomadas de verdade — isso exigiria dois elementos de vídeo apontando pro mesmo arquivo (um congelado antes do corte), custa mais e só vale se o efeito precisar mostrar as DUAS imagens."
+    },
+    "cortina": {
+      "inFrames": 4,
+      "holdFrames": 3,
+      "outFrames": 4,
+      "_note": "Chapa no accent sobe cobrindo o quadro (clip-path) e continua subindo até sumir — cortina de teatro, um sentido só, não abre e fecha no mesmo lugar."
+    },
+    "iris": {
+      "inFrames": 4,
+      "holdFrames": 3,
+      "outFrames": 4,
+      "raio": 85,
+      "centroX": 50,
+      "centroY": 42,
+      "_note": "Mesma mecânica da cortina, recorte circular: fecha e abre no MESMO ponto (`centroX/centroY`), diferente da cortina que é direcional."
+    },
+    "falha": {
+      "windowFrames": 7,
+      "tiras": [
+        {"top": 18, "height": 11, "cor": "rgba(255,0,80,.55)"},
+        {"top": 44, "height": 9, "cor": "rgba(0,220,255,.5)"},
+        {"top": 66, "height": 13, "cor": "rgba(255,214,0,.4)"}
+      ],
+      "_note": "RGB split — três tiras coloridas saltando horizontalmente em torno do corte. Pontua uma virada grande (capítulo, insert) sem a chapa opaca da cortina/íris."
+    }
+  },
   "_split_readme": "Layouts da tela dividida. `focusY` é um y DA FONTE que vai parar no topo da janela de vídeo (y_src desenha em (y_src-focusY)*zoom). Os defaults servem uma cabeça de ~660px começando em y 455 — MEÇA antes de confiar: tire um quadro do corte, leia o topo do cabelo e o queixo, e ajuste. Cada janela pode sobrepor focusY/zoom, porque num corte multi-take a cabeça se move (medido: ~170px entre tomadas).",
   "split": {
     "top": {
@@ -2691,21 +2751,23 @@
   "_bundled_readme": "Família com `file` NÃO vem do Google: o arquivo viaja em assets/styles/fonts/ e a composição emite um @font-face apontando para styles/fonts/<file>. Existe porque nem toda família do catálogo do Google é servida pelo caminho que o cache do HyperFrames usa, e a falha aparecia só na composição — a prévia funcionava, porque o navegador carrega direto do Google.",
   "_capcut_readme": "Estilos MEDIDOS dos pacotes do CapCut instalado (helpers/capcut_captions.py). Os NÚMEROS são leitura de arquivo, não escolha: o estouro é 0→120%→100% em 403ms com dois beziers, e a varredura é 0→100% em 1733ms com um. TRÊS NOMES DO CAPCUT, UMA CURVA: 'Multiline Combo', 'Multi-Line' e 'Bounce Out' têm keyframes idênticos byte a byte — verificado por diff. O que os separa é o AGRUPAMENTO (`grupo`), ou seja o que estoura junto. Por isso três entradas compartilham pop.css/pop.js em vez de existirem três cópias.",
   "caixinha": {
-    "_note": "Caixinha de perguntas do Instagram. A geometria imita a INTERFACE do app, não a marca de quem edita: um adesivo que não se parece com o adesivo lê como cartão genérico e perde a graça do formato. Sem animação — fica fixa na tela do início ao fim da janela.",
-    "largura": 820,
-    "raio": 30,
-    "faixaAltura": 96,
-    "faixaFundo": "#26262b",
-    "faixaCor": "#e9e9ea",
-    "faixaTamanho": 30,
+    "_note": "Caixinha de perguntas do Instagram. A geometria imita a INTERFACE do app, não a marca de quem edita: um adesivo que não se parece com o adesivo lê como cartão genérico e perde a graça do formato. Sem animação — fica fixa na tela do início ao fim da janela. Redesenhada em 2026-08-25 a partir de um export real do adesivo (sticker do Instagram, 1040×380): faixa mais alta e mais larga, negrito de verdade na chamada, sombra rasa em vez da flutuante, e SEM inclinação — o adesivo do app não é torto.",
+    "largura": 1040,
+    "raio": 46,
+    "faixaAltura": 132,
+    "faixaFundo": "#20252b",
+    "faixaCor": "#ffffff",
+    "faixaTamanho": 39,
+    "faixaPeso": 700,
     "faixaTracking": 0.01,
     "corpoFundo": "#ffffff",
-    "corpoCor": "#1c1c1e",
-    "corpoTamanho": 46,
+    "corpoCor": "#111111",
+    "corpoTamanho": 47,
+    "corpoPeso": 400,
     "corpoEntrelinha": 1.28,
     "corpoPadding": 44,
-    "sombra": "0 26px 60px -18px rgba(0,0,0,.55)",
-    "inclinacao": -1.6,
+    "sombra": "0 3px 14px rgba(0,0,0,.18)",
+    "inclinacao": 0,
     "topoPadrao": 300,
     "limiteChamada": 60,
     "limitePergunta": 72,

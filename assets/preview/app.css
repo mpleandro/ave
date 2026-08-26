@@ -289,19 +289,43 @@ main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding
    (landscape) or beside it (portrait) without touching the DOM again */
 /* the stage holds player + editor; main keeps the footer out of the split */
 .stage { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
-.editor-col { flex: 1 1 0; display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
-.editor-col .transport { align-self: center; }
+/* A COLUNA DO EDITOR É UMA LINHA, não uma pilha: `#workCol` (transporte +
+   timeline) de um lado, `#layersPanel`/`#gateNote` do outro. Antes as camadas
+   do render eram o ÚLTIMO item empilhado dentro desta coluna — e um vídeo
+   horizontal alto o bastante (ou uma janela baixa) empurrava o painel inteiro
+   para fora da viewport, sem scroll visível que avisasse. Lado a lado, elas
+   competem por LARGURA com a timeline, não por altura com o vídeo — e largura
+   é o que `.layers` sabe ceder (ver o container query logo abaixo). */
+.editor-col { flex: 1 1 0; display: flex; flex-direction: row; gap: 10px; min-height: 0; min-width: 0; }
+/* EM RETRATO, `.editor-col` divide a LINHA com o vídeo (`body.portrait .stage`
+   logo abaixo) — e ali `min-width: 0` é o problema, não a solução: numa
+   janela estreita ele deixa `.editor-col` encolher além do que `.work-col` /
+   `.layers` realmente precisam, e os dois (que têm piso próprio) acabam
+   pintando por cima do vídeo em vez de dividir a linha com ele. Fora do
+   retrato `.editor-col` não disputa linha com mais nada — `min-width: 0` ali
+   só deixa a timeline encolher direito (é o comportamento certo, mantido
+   acima). `auto` devolve o piso ao conteúdo: o vídeo cede espaço primeiro
+   (`body { overflow: hidden }` corta a sobra fora da tela), não o contrário. */
+body.portrait .editor-col { min-width: auto; }
 /* A LINHA DO TEMPO VEM PRIMEIRO. As camadas do render são a segunda pergunta —
-   o corte é o trabalho, o estilo é o acabamento — e enquanto elas ficavam por
-   cima a hierarquia dizia o contrário de todo o resto da skill, que trata o
-   portão de fase como regra dura.
-   Feito por `order`, não movendo o nó: o painel da linha do tempo depende de o
-   `.track-label` ter um ancestral SEM `overflow:hidden` para a máscara sticky
-   funcionar, e remexer no DOM é justamente onde essa condição se perde. */
-.editor-col > #layersPanel { order: 2; }
-/* A tarja do portão ocupa o lugar onde as camadas VÃO aparecer — mesma posição,
-   para que destravar leia como troca de conteúdo e não como algo que brotou. */
-.editor-col > #gateNote { order: 2; }
+   o corte é o trabalho, o estilo é o acabamento — hierarquia que a ordem no
+   DOM já resolve agora (workCol antes de layersPanel/gateNote), sem precisar
+   de `order`. */
+/* `min-width: 200px`, não mais alto: um piso confortável já protege a
+   timeline contra o `.layers` sem entrar em rota de colisão com o vídeo em
+   retrato ESTREITO — o vídeo tem piso próprio (`38vw`) e os dois pisos juntos
+   podem somar mais que a tela numa janela curta. Testado com vídeo vertical
+   em 420px: acima de 280px os dois brigavam pela mesma faixa e a caixa do
+   vídeo pintava por cima da coluna de trabalho. */
+.work-col {
+  flex: 1 1 480px; min-width: 200px; min-height: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+/* A tarja do portão ocupa o MESMO lugar onde as camadas do render vão aparecer
+   — para que destravar leia como troca de conteúdo e não como algo que
+   brotou. Não precisa encolher até o trilho de ícones (não é uma faixa de
+   abas): só encurta o texto. */
+#gateNote { flex: 0 1 300px; min-width: 180px; align-self: flex-start; }
 .gate-note {
   padding: 10px 14px; border-radius: 10px; font-size: 12px; line-height: 1.55;
   color: var(--dim); background: rgb(var(--orange-rgb) / .07);
@@ -332,13 +356,11 @@ main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding
 .timeline.compact #jcutToggle { pointer-events: none; opacity: .5; }
 
 /* Compacta, a timeline DEVOLVE a altura que não usa: o painel encolhe ao
-   conteúdo (vídeo + waveform ocupam ~130px) e quem cresce é o painel de
-   camadas do render — legendas, headlines e afins ganham a tela que o vazio
-   ocupava. O teto de 46vh existe para as camadas nunca engolirem a timeline;
-   com ela compacta, não há o que engolir. */
+   conteúdo (vídeo + waveform ocupam ~130px) e a coluna de trabalho sobra mais
+   curta. As camadas do render não disputam mais essa altura — ficam ao LADO,
+   não em cima — então este modo não precisa mexer nelas. */
 .timeline-panel.compacta { flex: 0 0 auto; min-height: 0; }
 .timeline-panel.compacta .timeline { min-height: 0; }
-.layers.tl-compacta { max-height: 72vh; }
 
 /* O botão do modo, na calha da régua. `position:relative` para pintar ACIMA
    da máscara sticky da calha, como os .tl-chip. */
@@ -366,7 +388,6 @@ body.portrait .player-frame { align-self: flex-start; }
 body.portrait .player-frame { height: 100%; max-height: none; align-items: center; }
 body.portrait .player-frame video { height: 100%; width: auto; max-height: none; max-width: 38vw; }
 body.portrait .editor-col { order: 1; }
-body.portrait .editor-col .transport { align-self: stretch; width: auto; }
 
 .player-frame {
   position: relative;
@@ -592,20 +613,8 @@ canvas { display: block; }
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04));
-  cursor: grab;
-  transition: box-shadow 0.12s;
+  pointer-events: none;
 }
-.clip:hover { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3); z-index: 3; }
-.clip.selected { box-shadow: 0 0 0 2px var(--orange); z-index: 4; }
-.clip.dirty { border: 1.5px dashed var(--orange); }
-.clip.removed { opacity: 0.28; filter: grayscale(1); }
-.clip.removed::after {
-  content: 'REMOVIDO';
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 900; letter-spacing: 1px; color: var(--mark);
-}
-
 .clip .thumbs { position: absolute; inset: 0; display: flex; overflow: hidden; }
 .clip .thumbs img { height: 100%; flex: 0 0 auto; pointer-events: none; opacity: 0.85; }
 
@@ -632,18 +641,6 @@ canvas { display: block; }
   pointer-events: none;
 }
 
-.clip .handle {
-  position: absolute;
-  top: 0; bottom: 0;
-  width: 9px;
-  cursor: ew-resize;
-  z-index: 3;
-}
-.clip .handle.l { left: 0; border-left: 3px solid transparent; }
-.clip .handle.r { right: 0; border-right: 3px solid transparent; }
-.clip:hover .handle.l { border-left-color: var(--orange); }
-.clip:hover .handle.r { border-right-color: var(--orange); }
-
 /* caption + insert chips */
 .chip {
   position: absolute;
@@ -668,10 +665,9 @@ canvas { display: block; }
   background: rgb(var(--orange-rgb) / 0.16);
   border: 1px solid rgb(var(--orange-rgb) / 0.55);
   color: var(--orange-soft);
-  cursor: grab;
+  pointer-events: none;
 }
 .chip.insert.hook { background: rgb(var(--orange-soft-rgb) / 0.2); border-color: rgb(var(--orange-soft-rgb) / 0.6); color: var(--orange-soft); }
-.chip.insert.dirty { border-style: dashed; }
 .chip.music {
   background: repeating-linear-gradient(-45deg, rgb(var(--orange-soft-rgb) / 0.14) 0 10px, rgb(var(--orange-soft-rgb) / 0.22) 10px 20px);
   border: 1px solid rgb(var(--orange-soft-rgb) / 0.5);
@@ -694,10 +690,6 @@ canvas { display: block; }
   font-size: 10px;
   letter-spacing: 0.2px;
 }
-.chip .handle { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
-.chip .handle.l { left: 0; }
-.chip .handle.r { right: 0; }
-
 /* needle */
 .needle {
   position: absolute;
@@ -857,21 +849,40 @@ kbd {
    ocupa metade da tela, então a mesma janela dá um painel largo em paisagem e
    estreito em retrato. Uma media query acertaria um caso e erraria o outro.
    O escopo é o painel de propósito: a linha do tempo fica FORA dele, e a regra
-   de nunca criar contenção acima de .track-label continua intacta. */
+   de nunca criar contenção acima de .track-label continua intacta.
+
+   A ALTURA agora vem de ESTICAR na linha (`.editor-col` é `flex-direction:
+   row`) — o painel ocupa a mesma altura da coluna de trabalho ao lado, sem
+   teto em `vh`. Quem cede é a LARGURA: `flex: 0 1 300px` prefere 300px mas
+   encolhe até `min-width: 56px` — o trilho de ícones, com a MESMA folga
+   horizontal de sempre (`padding` não muda no trilho — um `@container` não
+   confia em mudar o padding do próprio elemento que ele mede, ver a regra
+   `.layers.open` mais abaixo) — antes de tirar espaço do `.work-col`, que
+   tem prioridade (`flex: 1 1 480px` lá em cima). */
 .layers {
   container-type: inline-size;
   container-name: layers;
-  flex: 0 1 auto;
+  position: relative;
+  flex: 0 1 300px;
+  min-width: 56px;
   min-height: 0;
-  max-height: 46vh;
   overflow: hidden;
   padding: 10px 14px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-/* recolhido, o painel encolhe até a tira e devolve a altura para a timeline */
-.layers.collapsed { max-height: none; flex: 0 0 auto; }
+/* recolhido, o painel encolhe até a tira e devolve a LARGURA para a coluna de
+   trabalho — a mesma ideia de antes (devolver o que não está em uso), só que
+   o eixo virou horizontal. `min-width: 210px`, não 0: sem ela a tira some de
+   verdade (nem ícone nem rótulo) — largura vira 0 tentando encolher ao
+   conteúdo, cruza os 100px do trilho de tela estreita, o `@container` esconde
+   `.layers-bar` achando que é o MESMO colapso, e ninguém sobra para dar
+   largura ao próprio `auto`. Os dois colapsos são coisas diferentes: este é
+   escolhido (o usuário clicou o acordeão), o do trilho é FORÇADO pelo espaço.
+   210px é o que cabe "CAMADAS DO RENDER" (maiúsculas, letter-spacing) sem
+   cortar contra o `overflow: hidden` do painel. */
+.layers.collapsed { flex: 0 0 auto; width: auto; min-width: 210px; }
 .layers.collapsed .layers-body-wrap,
 .layers.collapsed .layers-actions { display: none; }
 
@@ -893,8 +904,15 @@ kbd {
 .layers.collapsed .layers-bar { border-bottom: 0; padding-bottom: 2px; }
 .layers-caret { font-size: 12px; color: var(--dim); transition: transform 0.2s var(--ease-out); }
 .layers.collapsed .layers-caret { transform: rotate(-90deg); }
+/* `flex: 0 1 auto` (não `0 0`) + o trio de recorte: painel estreito o
+   bastante encolhe o rótulo com reticências em vez de estourar a caixa e
+   deixar o `overflow: hidden` do `.layers` cortar a palavra no meio. */
 .layers-eyebrow {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 1.2px;
@@ -976,6 +994,54 @@ kbd {
   background-clip: padding-box;
 }
 /* Em modo ícone esta linha é o ÚNICO lugar que nomeia a camada aberta. */
+
+/* ---------- trilho de ícones (tela estreita) ----------
+   Abaixo de ~100px de largura o painel PAROU de caber como coluna: é a hora
+   de virar um trilho só de ícones, empilhados na vertical, e mandar o corpo
+   (`.layer-body`) para fora do fluxo — ele só existe como um FLYOVER ancorado
+   à esquerda do trilho, aberto por clique numa aba (classe `.open`, ligada em
+   app.js) e fechado clicando fora ou em Esc. É o mesmo painel de sempre; só
+   muda ONDE o corpo mora enquanto está aberto.
+   `container` (não media query): o mesmo `@container` que já esconde o
+   resumo em 620px mede A LARGURA DO PAINEL, que encolhe cedo em retrato e
+   tarde em paisagem — o breakpoint certo depende de quem está espremendo,
+   não da janela inteira. */
+@container layers (max-width: 100px) {
+  .layers-bar { display: none; }
+  .layer-tabs { flex-direction: column; }
+  .layer-chip { justify-content: center; padding: 9px 0; }
+  .layer-chip-name, .layer-chip-sum { display: none; }
+  .layers-body-wrap { overflow: visible; }
+  .layer-body { display: none; }
+  .layers.open .layer-body {
+    display: flex;
+    position: absolute;
+    top: 0; right: 100%; margin-right: 8px;
+    width: min(300px, 82vw);
+    height: 100%;
+    max-height: none;
+    background: var(--glass);
+    backdrop-filter: blur(18px) saturate(1.2);
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    border: 1px solid var(--stroke);
+    border-radius: var(--radius);
+    box-shadow: -14px 8px 34px rgba(0, 0, 0, 0.5);
+    z-index: 30;
+    padding: 12px 14px;
+  }
+}
+/* FORA do `@container`, de propósito: um container query não confia em regra
+   que muda `overflow`/`z-index` do PRÓPRIO elemento que ele está medindo (o
+   risco de ciclo — mudar o elemento poderia mudar a medida que decide a
+   regra), e browsers testados aqui simplesmente IGNORAM essas duas
+   declarações quando escritas dentro do bloco. Fora dele, condicionadas só
+   pela classe `.open` (que só o JS liga em tela estreita), funcionam. Sem
+   `overflow: visible` o flyover (que mora FORA da caixa de `.layers`, em
+   `right: 100%`) fica cortado pelo `overflow: hidden` do modo largo; sem o
+   `z-index` numérico aqui, itens flex pintam por ordem de DOM quando nenhum
+   tem `z-index`, e `#workCol` vem ANTES de `#layersPanel` na árvore — o
+   flyover pintava atrás dele mesmo com `z-index:30` só no `.layer-body`. */
+.layers.open { overflow: visible; z-index: 30; }
 /* o par de cores da legenda: principal e destaque, lado a lado */
 .color-row { display: flex; flex-wrap: wrap; gap: 18px; }
 .color-slot { display: flex; flex-direction: column; gap: 5px; }
@@ -1000,20 +1066,6 @@ kbd {
   white-space: nowrap; min-width: 84px;
 }
 
-/* a headline é conteúdo, então ganha uma caixa de texto de verdade */
-.hl-text {
-  width: 100%;
-  min-height: 54px;
-  resize: vertical;
-  font: inherit;
-  font-size: 13px;
-  color: var(--text);
-  background: rgba(0, 0, 0, 0.22);
-  border: 1px solid var(--stroke);
-  border-radius: 10px;
-  padding: 8px 10px;
-}
-.hl-text:focus { outline: none; border-color: rgb(var(--orange-rgb) / 0.5); }
 .layer-soon { font-size: 11.5px; color: var(--dim); font-style: italic; }
 
 .layers-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
@@ -1553,6 +1605,7 @@ button.tl-chip:disabled { cursor: default; }
   overflow: hidden;
   border: 1px solid rgb(var(--orange-soft-rgb) / 0.34);
   background: linear-gradient(180deg, rgb(var(--orange-soft-rgb) / 0.20), rgb(var(--orange-soft-rgb) / 0.08));
+  pointer-events: none;
 }
 .ablock-label {
   position: absolute;
@@ -1600,18 +1653,6 @@ button.tl-chip:disabled { cursor: default; }
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
   color: rgba(255, 255, 255, 0.75);
-}
-
-/* Parte do trecho que sai no aparo — escurecida no lugar, enquanto o bloco
-   segue congelado no tamanho antigo. Mostra o que se perde antes de perder. */
-.clip .trim-cut {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: rgba(8, 11, 16, 0.72);
-  backdrop-filter: saturate(0.2);
-  pointer-events: none;
-  z-index: 3;
 }
 
 
@@ -1754,13 +1795,7 @@ button.tl-chip:disabled { cursor: default; }
   .actionbar #btnDiscard { padding: 8px 11px; }
 }
 
-/* As bordas dos blocos de A1/A2 são arrastáveis: editam o J-cut daquele trecho.
-   Herdam o desenho das alças dos clipes de vídeo, porque é o mesmo gesto. */
 .ablock { position: relative; }
-.ablock .handle { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; z-index: 4; }
-.ablock .handle.l { left: -3px; }
-.ablock .handle.r { right: -3px; }
-.ablock .handle:hover { background: rgb(var(--orange-rgb) / 0.45); border-radius: 3px; }
 
 /* ---------- switch de modo ---------- */
 .viewseg { display: flex; gap: 2px; padding: 2px; border-radius: 10px; background: rgba(0, 0, 0, 0.22); border: 1px solid var(--stroke); }
@@ -2080,10 +2115,6 @@ button.tl-chip:disabled { cursor: default; }
 
 .start-note { margin-top: 20px; font-size: 11.5px; line-height: 1.6; color: var(--dim); }
 .start-elapsed { color: var(--orange-soft); }
-
-/* Aviso inline da barra de ação. Nasceu quando o alerta da headline deixou de
-   ser um confirm() pós-clique e passou a viver na tela, ao lado do botão. */
-.warn-inline { color: #ffb454; font-size: 12px; white-space: nowrap; }
 
 /* O botão de envio no MODO APROVAR (Fase 1, nada alterado). Verde e sem o
    ícone de IA: aprovar não gasta token nem renderiza — é a assinatura do
