@@ -52,11 +52,26 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
+import unicodedata
 from pathlib import Path
 
 HELPERS = Path(__file__).resolve().parent
 sys.path.insert(0, str(HELPERS))
 from cut_words import levels_for  # noqa: E402  (irmão; o limiar já é medido lá)
+from transcribe import call_groq, load_api_key  # noqa: E402
+from detect_restarts import FUNCIONAIS  # noqa: E402  (mesma lista de palavra comum)
+
+# PRONOMES E DEMONSTRATIVOS somam à FUNCIONAIS: "você" abre e fecha uma frase
+# corretamente ("você [pausa] ignora, você não olha mais") sem ser retomada
+# nenhuma — medido como falso positivo real ao testar este arquivo. A
+# retomada que motivou este checador era "categorizar" (palavra de conteúdo,
+# rara); pronome repetido é gramática normal, não sinal de tomada refeita.
+_PALAVRA_COMUM = FUNCIONAIS | {
+    "voce", "voces", "ele", "ela", "eles", "elas", "eu", "nos", "isso", "isto",
+    "aquilo", "este", "esta", "esse", "essa", "aqui", "ali", "la", "ta", "e",
+    "ah", "entao",
+}
 
 EDGE = 0.02          # tolerância ao casar borda de região com borda de trecho
 # Quanto o pico dentro do vão pode chegar perto da mediana da VOZ antes de o vão
@@ -196,6 +211,64 @@ def classificar(palavras: list[dict], at: float) -> tuple[str, str]:
     return "hesitacao", txt
 
 
+def _norm_tok(t: str) -> str:
+    t = unicodedata.normalize("NFD", t.lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]", "", t)
+
+
+_API_KEY_CACHE: list[str | None] = [None]
+
+
+def isolate_check(path: Path, at: float, to: float, antes_txt: str) -> str | None:
+    """Isola e retranscreve em volta do respiro — pega a RETOMADA que a
+    passada rápida uniu como cadência normal (medido neste projeto: "Bom,
+    basicamente vamos..." + "bom, vamos categorizar..." viraram uma frase só
+    com uma pausa de 450ms no meio, e as duas foram parar no corte).
+
+    A régua (pausa+dB+pontuação) só vê o VÃO; nunca ouviu o que vem depois
+    dele. Isso é o que a Hard Rule 15/17 já cobrava para o buraco grande
+    (27s) — aqui é a mesma verificação, só que em toda hesitação candidata a
+    corte, porque foi exatamente uma pausa CURTA (não uma densidade suspeita)
+    que escondeu a retomada real.
+
+    Sinal usado: a ÚLTIMA palavra antes do respiro reaparece de novo DEPOIS
+    dele, na transcrição isolada (sem o contexto longo que suaviza). Isso é
+    o que uma frase refeita produz e uma pausa normal não. Devolve um aviso
+    (string) se achar, ou `None` se a janela está limpa — inclusive quando a
+    chamada falha (rede, chave ausente): sem rede, a régua velha ainda vale,
+    só perde esta camada extra.
+    """
+    if not antes_txt:
+        return None
+    alvo = _norm_tok(antes_txt)
+    if not alvo or alvo in _PALAVRA_COMUM:
+        return None
+    lo = max(0.0, at - 1.3)
+    hi = to + 1.3
+    try:
+        if _API_KEY_CACHE[0] is None:
+            _API_KEY_CACHE[0] = load_api_key()
+        with tempfile.TemporaryDirectory() as tmp_s:
+            tmp = Path(tmp_s)
+            mp3 = tmp / "clip.mp3"
+            subprocess.run(
+                ["ffmpeg", "-y", "-v", "quiet", "-ss", f"{lo:.3f}", "-to", f"{hi:.3f}",
+                 "-i", str(path), "-vn", "-ac", "1", "-ar", "16000", "-b:a", "64k", str(mp3)],
+                check=True, timeout=30)
+            data = call_groq(mp3, _API_KEY_CACHE[0], language="pt")
+    except Exception:
+        return None
+    palavras_iso = [_norm_tok(w.get("text") or w.get("word") or "")
+                    for w in (data.get("words") or [])
+                    if (w.get("type") or "word") == "word"]
+    ocorrencias = [i for i, w in enumerate(palavras_iso) if w == alvo]
+    if len(ocorrencias) >= 2:
+        return (f'"{antes_txt}" reaparece depois do respiro na transcrição '
+                f'isolada — pode ser retomada, não pausa (revise antes de cortar)')
+    return None
+
+
 def avaliar(edit: Path, edl: dict, ritmo: str, verbose: bool = True) -> tuple[list[dict], int, float]:
     """Roda a régua inteira sobre o EDL. Devolve (ranges com marcas, total, ganho)."""
     regra = RITMOS[ritmo]
@@ -258,6 +331,16 @@ def avaliar(edit: Path, edl: dict, ritmo: str, verbose: bool = True) -> tuple[li
                 linhas.append((at, dur, classe, palavra,
                                f"preservado — pico {pico:.0f} dBFS (voz ~{mediana:.0f})"))
                 continue
+            # TERCEIRA OPINIÃO, só para hesitação: a régua até aqui só mediu o
+            # VÃO — nunca ouviu se a frase continua igual depois dele. Uma
+            # retomada real ("Bom, basicamente vamos..." + "bom, vamos
+            # categorizar...") passa pela pausa+dB+pontuação inteiras porque a
+            # pausa em si é curta e normal; só reaparece ouvindo o depois.
+            if classe == "hesitacao":
+                aviso = isolate_check(path, at, to, palavra)
+                if aviso:
+                    linhas.append((at, dur, classe, palavra, f"⚠ NÃO cortado — {aviso}"))
+                    continue
             marcas.append({"at": at, "to": to, "keep": keep})
             ganho += dur - keep
             total += 1

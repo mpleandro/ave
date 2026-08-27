@@ -149,8 +149,25 @@ const PORTED = {
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
                       'relevo', 'grifo', 'contorno_duplo',
                       ...CARTELAS.map((c) => c[0])]),
-  edits: new Set(['limpa', 'split', 'split2']),
+  // os três de `EDIT_ELEMENTS` entram aqui porque o radio de FORMATO os
+  // oferece junto com limpa/split/split2 (ver `radios()`) — e os três têm
+  // caminho de render de verdade no compositor (`questionBox`,
+  // `brollOverlays[]`, `hook.style="noticia"`).
+  edits: new Set(['limpa', 'split', 'split2', 'caixinha', 'brollOverlay', 'noticia']),
 };
+
+/* FORMATO É UMA ESCOLHA SÓ, e ela mora em dois lugares no dado.
+ *
+ * `limpa`/`split`/`split2` viajam em `S.style.edit` (→ `editStyle`); Caixinha,
+ * Broll Overlay e Notícia viajam em `S.style.elements` (→ `questionBox`,
+ * `brollOverlays[]`, `hook.style`). São contratos DIFERENTES com o compositor,
+ * e é por isso que o dado continua separado — mas na TELA os seis são o mesmo
+ * radio: o usuário escolhe um formato, não uma combinação.
+ *
+ * Escolher um destes três zera os outros dois E devolve `edit` a `limpa` (ver
+ * o handler de clique): sem isso, `editStyle: "split"` + `questionBox` sairiam
+ * os dois no render, que é exatamente a combinação que o radio nega. */
+const EDIT_ELEMENTS = ['caixinha', 'brollOverlay', 'noticia'];
 
 // Quadro de foco de câmera — substitui o "boneco" genérico (círculo+blob) nos
 // mocks de tipo de edição por um vocabulário de editor: cantos em L, ponto de
@@ -1456,13 +1473,17 @@ function elLocked(e) {
   /* ZONA ALTA: Caixinha, Notícia e qualquer cartela "banda" ocupam o mesmo
    * canto superior da tela por padrão (top:300, janela do gancho) — e por
    * decisão do usuário a saída é TRAVAR a combinação, não reposicionar por
-   * conta própria. Ver CARTELA_BANDA_IDS. */
-  if (e.id === 'caixinha'
-      && (CARTELA_BANDA_IDS.has(S.style.headline) || S.style.elements.noticia)) {
+   * conta própria. Ver CARTELA_BANDA_IDS.
+   *
+   * Caixinha × Notícia saiu daqui: as duas viraram opções do MESMO radio de
+   * formato (ver EDIT_ELEMENTS), e escolher uma já desliga a outra. Mantida,
+   * a trava responderia sobre o estado ANTERIOR ao clique — travando um
+   * formato porque o formato que ele está prestes a substituir está ligado.
+   * O que sobra é o conflito com o outro GRUPO, o headline, que é real. */
+  if (e.id === 'caixinha' && CARTELA_BANDA_IDS.has(S.style.headline)) {
     return ZONA_ALTA_MSG;
   }
   if (e.id === 'noticia') {
-    if (S.style.elements.caixinha) return ZONA_ALTA_MSG;
     /* Notícia É uma cartela banda que só mudou de endereço na interface — ela
      * ocupa o MESMO hook/trilha que qualquer headline do radio (mesmo motor
      * `cartela`, ver o branch `elif "noticia" in pecas` em
@@ -2300,6 +2321,24 @@ function closeNoteEditor() {
 
 // ---------- style setup ----------
 const styleName = (group, id) => (STYLE_CATALOG[group].find((o) => o.id === id) || {}).name || '—';
+
+/* As OPÇÕES do radio de formato: as três de `edits` mais as três que moram em
+ * `elements` (ver EDIT_ELEMENTS). Uma função, e não uma lista montada uma vez,
+ * porque `STYLE_CATALOG` é dado e a ordem do catálogo é a ordem da tela. */
+const editOptions = () => [
+  ...STYLE_CATALOG.edits,
+  ...EDIT_ELEMENTS.map((id) => STYLE_CATALOG.elements.find((e) => e.id === id)).filter(Boolean),
+];
+/* Qual dos três está ligado (string vazia = o formato é um `edit` comum). */
+const formatoEl = () => EDIT_ELEMENTS.find((id) => S.style.elements[id]) || '';
+/* O NOME do formato escolhido, para os resumos. `styleName('edits', …)` não
+ * serve sozinho: com Caixinha ligada o `edit` é `limpa`, e o resumo diria
+ * "Nenhum" para um vídeo que tem um adesivo na tela. */
+const formatoName = () => {
+  const id = formatoEl();
+  return id ? ((STYLE_CATALOG.elements.find((e) => e.id === id) || {}).name || '—')
+            : styleName('edits', S.style.edit);
+};
 // the accent is a free colour, not a named entry in a list — it names itself
 const accentName = (hex) => String(hex || ACCENT_DEFAULT).toUpperCase();
 const normHex = (v) => {
@@ -2382,10 +2421,13 @@ const accentUsed = () =>
 function updateSummary() {
   const box = $('depsSummary');
   if (!box) return;   // o resumo saiu da tela — nada a escrever
-  const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
+  // os três de EDIT_ELEMENTS saem da lista de "extras": eles SÃO o formato,
+  // e já aparecem nomeados na primeira posição por `formatoName()`.
+  const on = STYLE_CATALOG.elements.filter(
+    (e) => S.style.elements[e.id] && !EDIT_ELEMENTS.includes(e.id));
   const accentBit = accentUsed() ? ` · destaque ${accentName(S.style.accent)}` : '';
   box.textContent =
-    `${styleName('edits', S.style.edit)} · headline ${styleName('headlines', S.style.headline)}` +
+    `${formatoName()} · headline ${styleName('headlines', S.style.headline)}` +
     ` · legenda ${styleName('captions', S.style.captions)}${accentBit} · ` +
     (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
 }
@@ -2402,8 +2444,11 @@ function updateSummary() {
  * Uma linha sem controle NENHUM ainda aparece, com o motivo escrito. Some-la
  * faria o painel prometer que a lista está completa. */
 const LAYERS = [
-  { id: 'elementos', name: 'Elementos visuais', sub: 'Layout do corte, caixinha, broll overlay e notícia',
-    ico: 'inserts', groups: ['edits'], elements: ['caixinha', 'brollOverlay', 'noticia'] },
+  /* Sem `elements`: Caixinha, Broll Overlay e Notícia entram no PRÓPRIO radio
+     de `edits` (ver EDIT_ELEMENTS) em vez de virem como checkbox ao lado dele.
+     Listá-los aqui também os desenharia duas vezes na mesma camada. */
+  { id: 'elementos', name: 'Formato', sub: 'Um formato por vídeo — layout do corte, caixinha, broll overlay ou notícia',
+    ico: 'inserts', groups: ['edits'] },
   { id: 'headline', name: 'Headline', sub: 'Layout — o texto é combinado no chat',
     ico: 'text', groups: ['headlines'] },
   { id: 'legendas', name: 'Legendas', sub: 'Estilo',
@@ -2416,7 +2461,10 @@ const LAYERS = [
     ico: 'music', elements: ['sfx', 'musicAI'] },
 ];
 
-const GROUP_TITLE = { edits: 'Tipo de edição', headlines: 'Estilo de headline', captions: 'Estilo de legenda' };
+// `edits` deixou de ser só "tipo de edição" quando Caixinha, Broll Overlay e
+// Notícia entraram no mesmo radio (ver EDIT_ELEMENTS) — o título tem de
+// cobrir os seis, e "um por vídeo" é a regra que o radio impõe.
+const GROUP_TITLE = { edits: 'Formato — um por vídeo', headlines: 'Estilo de headline', captions: 'Estilo de legenda' };
 /* Uma camada por vez, num INSPETOR de altura fixa — o modelo de NLE.
  * O acordeão anterior crescia para dentro do layout: cada clique mudava a
  * altura do painel e empurrava a linha do tempo e o preview. Trocar de camada
@@ -2514,7 +2562,10 @@ function renderSetup() {
   buildLayerRows();
   capAnims = [];
   const radios = (host, group, chosen) => {
-    const opts = STYLE_CATALOG[group];
+    // O radio de FORMATO junta os dois contratos de dado numa escolha só —
+    // ver EDIT_ELEMENTS. Os outros grupos são o catálogo puro.
+    const opts = group === 'edits' ? editOptions() : STYLE_CATALOG[group];
+    const elAtivo = formatoEl();
     host.innerHTML = '';
     for (const o of opts) {
       // Estilos ainda não portados para o HyperFrames aparecem apagados e não
@@ -2529,13 +2580,28 @@ function renderSetup() {
       if (group === 'headlines' && o.id) {
         if (S.style.elements.noticia) {
           off = true;
-          offMsg = 'desligue a Notícia em Elementos visuais para escolher um headline';
+          offMsg = 'desligue a Notícia em Formato para escolher um headline';
         } else if (CARTELA_BANDA_IDS.has(o.id) && S.style.elements.caixinha) {
           off = true;
           offMsg = ZONA_ALTA_MSG;
         }
       }
-      const card = el('div', `opt${o.id === chosen ? ' on' : ''}${off ? ' unavailable' : ''}`, host);
+      /* No radio de formato, um dos três de `elements` ainda pode estar
+         travado por CONFLITO COM O HEADLINE (a Notícia e a Caixinha disputam a
+         zona alta com uma cartela banda) — o que `elLocked` já sabe responder.
+         O que ele NÃO precisa mais arbitrar é caixinha × notícia entre si: o
+         radio torna essa combinação impossível de construir. */
+      if (group === 'edits' && EDIT_ELEMENTS.includes(o.id)) {
+        const trava = elLocked(o);
+        if (trava) { off = true; offMsg = trava.split('\n')[0]; }
+      }
+      /* MARCADO é o formato ATUAL, e ele pode vir de qualquer um dos dois
+         lados: com Caixinha ligada, `edit` continua `limpa` — marcar por
+         `o.id === chosen` acenderia "Nenhum" junto com ela. */
+      const on = group === 'edits'
+        ? (EDIT_ELEMENTS.includes(o.id) ? o.id === elAtivo : !elAtivo && o.id === chosen)
+        : o.id === chosen;
+      const card = el('div', `opt${on ? ' on' : ''}${off ? ' unavailable' : ''}`, host);
       card.dataset.group = group;
       card.dataset.id = o.id;
       if (off) card.title = offMsg;
@@ -2579,25 +2645,16 @@ function renderSetup() {
       if (!e) continue;
       const trava = elLocked(e);
       const on = !!S.style.elements[e.id] && !trava;
-      // ELEMENTOS COM MOCK viram cartão — prévia em cima, como Nenhum/Dividida
-      // (mesmo `.opt-preview.frame`, mesmo `--mock-w/h`), com o rótulo embaixo.
-      // A caixa continua QUADRADA (`chk-box`, não o círculo de `opt-mark`): o
-      // formato do marcador é o que diferencia "escolha única" (headline,
-      // legenda) de "liga/desliga independente" (elementos) nesta interface, e
-      // ganhar uma prévia não muda essa semântica. Os SEM mock (tracking,
-      // zoom, sfx…) continuam a fileira de sempre — não têm o que desenhar.
-      const row = el('div', `chk${e.mock ? ' chkcard' : ''}${on ? ' on' : ''}${trava ? ' locked' : ''}`, eh);
+      /* Os que sobraram aqui (tracking, zoom, flash, sfx, trilha) são
+         liga/desliga INDEPENDENTE de verdade, e continuam a fileira de chips.
+         Os três que tinham prévia viraram opções do radio de formato — quem
+         desenha o `mock` deles agora é `radios()`. */
+      const row = el('div', `chk${on ? ' on' : ''}${trava ? ' locked' : ''}`, eh);
       row.dataset.id = e.id;
       if (trava) row.title = trava.split('\n')[0];
-      if (e.mock) {
-        el('div', 'opt-preview frame', row).innerHTML = e.mock;
-        el('div', 'chk-name', row).textContent = e.name;
-        el('div', 'chk-box', row); // posição vem do CSS — ver .chk.chkcard .chk-box
-      } else {
-        el('div', 'chk-box', row);
-        el('div', 'chk-ico', row).innerHTML = e.icon || '';
-        el('div', 'chk-name', row).textContent = e.name;
-      }
+      el('div', 'chk-box', row);
+      el('div', 'chk-ico', row).innerHTML = e.icon || '';
+      el('div', 'chk-name', row).textContent = e.name;
     }
   }
   refreshLayerSummaries();
@@ -2684,7 +2741,11 @@ function refreshLayerSummaries() {
     if (!n) continue;
     if (L.soon) { n.textContent = 'em breve'; continue; }
     const bits = [];
-    for (const g of L.groups || []) bits.push(styleName(g, { edits: S.style.edit, headlines: S.style.headline, captions: S.style.captions }[g]));
+    // `edits` passa por `formatoName()`: com um dos três de EDIT_ELEMENTS
+    // ligado, `S.style.edit` é `limpa` e o resumo diria "Nenhum" para um
+    // vídeo que tem adesivo (ou cartela, ou ênfase) na tela.
+    for (const g of L.groups || []) bits.push(g === 'edits' ? formatoName()
+      : styleName(g, { headlines: S.style.headline, captions: S.style.captions }[g]));
     if (L.elements) {
       const on = L.elements.filter((id) => S.style.elements[id]);
       bits.push(on.length ? `${on.length} ativo${on.length === 1 ? '' : 's'}` : 'desligado');
@@ -2728,7 +2789,22 @@ $('layersPanel').addEventListener('click', (e) => {
 
   const opt = e.target.closest('.opt:not(.ghost):not(.unavailable)');
   if (opt) {
-    const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
+    /* FORMATO: um só, sempre. Zerar os três ANTES de ligar o escolhido é o que
+       faz o radio ser radio — e é por isso que a escolha passa por aqui em vez
+       de cair no `S.style[key] = id` genérico abaixo: o formato é o único
+       grupo cuja seleção mora em duas estruturas de dado diferentes. */
+    if (opt.dataset.group === 'edits') {
+      const id = opt.dataset.id;
+      for (const k of EDIT_ELEMENTS) S.style.elements[k] = (k === id);
+      // `limpa` sob os três: o adesivo, a ênfase e a cartela desenham sobre o
+      // quadro cheio. Deixar um `split` anterior de pé mandaria os dois ao
+      // render — a combinação que o radio existe para negar.
+      S.style.edit = EDIT_ELEMENTS.includes(id) ? 'limpa' : id;
+      LIVE.hookKey = null;
+      renderSetup();
+      return;
+    }
+    const key = {headlines: 'headline', captions: 'captions'}[opt.dataset.group];
     S.style[key] = opt.dataset.id;
     const doHeadline = opt.dataset.group === 'headlines';
     /* ESCOLHER TEM DE MOSTRAR. O gancho vive nos primeiros segundos do corte;
@@ -2789,6 +2865,12 @@ async function sendStyle() {
     rerender,
     edit: S.style.edit,
     editName: styleName('edits', S.style.edit),
+    /* O FORMATO como UMA coisa, para quem LÊ o pedido. `edit`/`elements`
+       continuam sendo o contrato de máquina (o phase2.py lê os dois e não
+       sabe deste campo), mas sozinho o `edit` diz "Nenhum" quando a escolha
+       foi Caixinha — e é essa a linha que o watch_edits.py mostra à sessão. */
+    formato: formatoEl() || S.style.edit,
+    formatoName: formatoName(),
     headline: S.style.headline,
     headlineName: styleName('headlines', S.style.headline),
     captions: S.style.captions,

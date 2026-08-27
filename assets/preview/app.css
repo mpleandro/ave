@@ -1269,15 +1269,16 @@ kbd {
    long title can no longer stretch it — "Tela dividida 2" used to make its card
    half again as wide as "Limpa" and the row read as three different sizes. The
    titles wrap instead, and .opt-name reserves two lines so the cards stay level. */
-/* `.check-row` entra aqui também: os elementos com prévia (Caixinha, Broll
-   Overlay, Notícia — ver `.chkcard` mais abaixo) usam o MESMO `--mock-w/h`
-   dos cartões de edição, para as duas fileiras da mesma aba lerem como um
-   sistema só, inclusive nos dois breakpoints de altura curta abaixo. */
-.opt-grid, .check-row { --mock-h: 100px; --mock-w: calc(var(--mock-h) * 66 / 118); }
+.opt-grid { --mock-h: 100px; --mock-w: calc(var(--mock-h) * 66 / 118); }
 .opt-preview.frame { height: var(--mock-h); width: var(--mock-w); }
 .opt-preview.frame svg { height: 100%; width: 100%; display: block; }
-/* + .opt padding (7px × 2) + border (1px × 2) */
-#optEdit .opt { width: calc(var(--mock-w) + 16px); }
+/* + .opt padding (7px × 2) + border (1px × 2).
+   `#opt-edits`, não `#optEdit`: o id nasce em buildLayerRows como
+   `opt-${gid}`, e o seletor antigo nunca casou com nada — a regra existia,
+   documentada, e estava morta. Ela é o que impede um título longo de esticar
+   o cartão, e o radio de formato ganhou justamente os títulos mais longos da
+   aba ("Caixinha de perguntas"), então a diferença agora aparece. */
+#opt-edits .opt { width: calc(var(--mock-w) + 16px); }
 /* O CARTÃO É O QUADRO, na orientação do vídeo carregado (pedido do usuário,
    2026-08-19). Era uma tira de 64px com a legenda centrada nela: dava para
    comparar as LETRAS, não para ver como fica. A legenda vive a 22% do fundo, a
@@ -1302,7 +1303,7 @@ kbd {
   .setup-inner { gap: 10px; }
   .setup-head h2 { font-size: 16px; }
   .setup-head p { display: none; }
-  .opt-grid, .check-row { --mock-h: 108px; }
+  .opt-grid { --mock-h: 108px; }
   /* painel baixo: o quadro encolhe, mas continua sendo um quadro */
   .opt-preview.cap,
   .opt-preview.hlbox,
@@ -1314,7 +1315,7 @@ kbd {
 @media (max-height: 620px) {
   .setup-summary { display: none; }
   .setup-head h2 { font-size: 15px; }
-  .opt-grid, .check-row { --mock-h: 92px; }
+  .opt-grid { --mock-h: 92px; }
   .opt-preview.cap { height: 64px; width: 142px; }
   .opt-preview.hlbox { height: 56px; }
 }
@@ -1478,40 +1479,11 @@ kbd {
 .chk.on .chk-ico { color: var(--blue); }
 .chk-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; }
 
-/* Elementos com PRÉVIA (Caixinha, Broll Overlay, Notícia) — o MESMO cartão de
-   edição (`.opt`: prévia em cima, rótulo centralizado embaixo, marca no
-   canto da prévia), só que a marca continua QUADRADA (`.chk-box`), não o
-   círculo de `.opt-mark`: aqui é liga/desliga independente, não escolha
-   única, e o formato do marcador é o que diz isso nesta interface — ganhar
-   uma prévia não muda a semântica.
-
-   Nome ao LADO da caixa (tentativa anterior) estourava a largura do cartão:
-   "Caixinha de perguntas" não cabe em ~30px de coluna e nomes de flex item
-   não encolhem abaixo da palavra mais larga por padrão (`min-width: auto`,
-   o mesmo bug do zoom da timeline em app.css — ver o comentário em
-   `body.portrait .editor-col`). Nome em baixo, largura do cartão inteiro,
-   resolve isso E bate visualmente com Nenhum/Dividida. */
-.chk.chkcard {
-  position: relative;
-  flex-direction: column;
-  align-items: stretch;
-  align-self: flex-start;
-  width: calc(var(--mock-w) + 16px);
-  padding: 7px;
-  gap: 8px;
-}
-.chk.chkcard .chk-box {
-  position: absolute; top: 15px; right: 15px;
-}
-/* espelha `.opt-name` (mesmo tamanho, duas linhas reservadas) — as duas
-   fileiras da aba leem como o mesmo sistema tipográfico. */
-.chk.chkcard .chk-name {
-  font-size: 10px; font-weight: 500; letter-spacing: 0.2px; line-height: 1.2;
-  text-align: center; color: rgba(255, 255, 255, 0.74);
-  min-height: 2.4em; display: flex; align-items: center; justify-content: center;
-  white-space: normal;
-}
-.chk.chkcard.on .chk-name { color: rgba(255, 255, 255, 0.95); }
+/* Caixinha, Broll Overlay e Notícia NÃO têm regra própria aqui: viraram
+   opções do radio de formato (ver EDIT_ELEMENTS em app.js) e usam o `.opt`
+   de sempre, igual a Nenhum/Dividida. O que existia aqui era um cartão-
+   checkbox (`.chkcard`) para elas — removido junto com a semântica de
+   liga/desliga que ele anunciava. */
 
 /* Acento por camada — Transições (ação, mesmo laranja do botão/cartão) e
    Áudio (mesma cor que a waveform real já pinta em drawWave()). Movimento &

@@ -397,10 +397,22 @@ The cut is approved and nothing about the LOOK of Fase 2 is decided yet. **Do no
 ask the style questions in chat** — set `"awaitingStyle": true` in `state.json`
 and the UI opens its own tab, sitting between FASE 1 and FASE 2:
 
-- **Tipo de edição** — `limpa` ("Nenhum": no split inserts, full frame throughout —
-  **the default**, and the right pick for a talking-head cut or when the user will
+- **Formato — um por vídeo** — um RADIO de seis, não três mais três caixas de
+  marcar: `limpa` ("Nenhum": no split inserts, full frame throughout — **the
+  default**, and the right pick for a talking-head cut or when the user will
   place images by hand later), `split` ("Dividida ↑", art on top), `split2`
-  ("Dividida ↓", art on the bottom).
+  ("Dividida ↓", art on the bottom), mais **Caixinha de perguntas**, **Broll
+  Overlay** e **Notícia**. Os seis são exclusivos entre si por decisão do
+  usuário (2026-08-26): um vídeo tem UM formato.
+  **O dado continua em dois lugares, e é de propósito**: os três primeiros
+  viajam em `edit` (→ `editStyle`) e os três últimos em `elements` (→
+  `questionBox`, `brollOverlays[]`, `hook.style`), porque são contratos
+  diferentes com o compositor. Escolher um dos três últimos **zera os outros
+  dois e devolve `edit` a `limpa`** — `editStyle: "split"` junto de
+  `questionBox` mandaria os dois ao render, que é a combinação que o radio
+  nega. Por isso o pedido também carrega `formato`/`formatoName`, que é o que
+  o `watch_edits.py` mostra: lido sozinho, `editName` diz "Nenhum" para um
+  vídeo que tem adesivo na tela.
 - **Cor de destaque** — `accent`, a hex. Sits BEFORE the text styles, because it
   is what they paint with. One spectral swatch (the OS picker) plus a hex field,
   synced both ways — no preset row. Only `realce`/`misto` headlines and the
@@ -448,10 +460,13 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   `scatter`/"Disperso"), three static (`simples`, `serifada`, `classica`), and
   the editorial pair (`editorial`, `dinamico`/"Dinâmico" — the accumulative,
   centre-anchored cousin).
-- **Elementos da edição** — checkboxes: `tracking` (movimento de tracking),
-  `zoomAuto` (automação de zoom in), `zoomCuts` (zoom in/out nos cortes),
-  `flashCut` (flash na transição), `musicAI` (trilha sonora com IA), plus a
-  free-text observation field.
+- **Elementos da edição** — checkboxes, e agora só o que é liga/desliga de
+  verdade: `tracking` (movimento de tracking), `zoomAuto` (automação de zoom
+  in), `zoomCuts` (zoom in/out nos cortes), `flashCut` (flash na transição),
+  `sfx` (efeitos sonoros), `musicAI` (trilha sonora com IA), mais o campo de
+  observação livre. Caixinha, Broll Overlay e Notícia **não estão mais aqui** —
+  viraram opções do radio de Formato acima; continuam gravadas em `elements`
+  no pedido, mas escolher uma delas é escolher o formato do vídeo.
 
 **O servidor DISPARA a Fase 2 sozinho no salvar** (`--auto` é o padrão do
 `preview_server.py`) — então quando o `watch_edits.py` te avisar de um estilo
