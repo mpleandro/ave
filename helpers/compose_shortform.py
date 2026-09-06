@@ -1427,13 +1427,20 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
     deep = data.get("deep") or "#0D2137"
     mo = json.dumps(h.get("motion") or {}, separators=(",", ":"))
     cheia = " cheia" if h.get("cheia") else ""
+    # `--hl-sobre` (o texto POR CIMA do papel/accent nos layouts antigos —
+    # fita, balão, adesivo, cortina) nasce fixo em cartela.css (#10202e): é
+    # desenho deliberado, não uma cor esquecida. Mas `hook.sobre` no
+    # edit-data é o escape por-projeto, mesma razão do `hook.top` — um fundo
+    # escolhido na aba Estilo pode pedir texto claro em vez do escuro padrão.
+    # Omitido, a regra da folha continua mandando (nada é escrito por cima).
+    sobre = f'--hl-sobre:{hook["sobre"]}; ' if hook.get("sobre") else ""
     bloco = (f'  <div id="hook" class="ave-cartela ct-{style_id}{cheia} clip" '
              f'data-start="0" data-duration="{end:.3f}" '
              f'data-track-index="{TRACK["hook"]}" '
              f'style="--hl-scale:1; --hl-size:{size:.2f}; --hl-lh:{h["lh"]}; '
              f'--hl-top:{top}; --hl-main:{main_color}; --hl-accent:{accent}; '
              f'--hl-accent-rgb:{rgb_trio(accent)}; --hl-deep:{deep}; '
-             f'--hl-sobre-accent:{sobre_accent(accent)}; '
+             f'--hl-sobre-accent:{sobre_accent(accent)}; {sobre}'
              f'--hl-stroke:{h.get("stroke", 0)}; '
              f'--hl-font:{hl_css_family(fonts["main"])}; '
              f'--hl-font-accent:{hl_css_family(fonts["accent"])}"'
@@ -1508,7 +1515,11 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
     # põe DEBAIXO da arte (o linter acusa "texto escondido sob elemento
     # opaco"). Cada layout tem a sua — 738 no `top`, onde o texto senta na
     # costura sob a arte; ~920 no `bottom`, no vão entre o queixo e a costura.
-    top = h["top"]
+    # `hook.top` no edit-data é o escape por-projeto: o catálogo dá um
+    # default genérico, mas o enquadramento de CADA fonte é diferente — uma
+    # gravação que já chega dividida em duas pessoas (OBS/Zoom) pode ter um
+    # rosto exatamente onde o default cairia. Vazio, usa o do catálogo.
+    top = hook.get("top", h["top"])
     for w in (splits or []):
         if w["start"] < end and w["end"] > 0:
             top = VARIANTS["split"][w["layout"]]["hookTop"]

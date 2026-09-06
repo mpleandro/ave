@@ -1897,6 +1897,48 @@ button.tl-chip:disabled { cursor: default; }
   opacity: 1; color: var(--mark); border-color: rgb(var(--mark-rgb) / .55);
   background: rgb(var(--mark-rgb) / .16); text-decoration: line-through;
 }
+/* TEXTO CORRIGIDO — outra gramática visual, porque é outro pedido.
+   Riscar significa "isto sai do vídeo" e usa o --mark. Corrigir não remove nada:
+   conserta o que o Whisper ESCREVEU, com a imagem e o som intactos. Então nada
+   de risco aqui — sublinhado, e no --laranja-suave, que é o acento da marca
+   sobre fundo escuro. A palavra fica em brilho CHEIO (não --dim como a riscada):
+   ela não está de saída, ela é o texto de verdade agora. */
+.tw.fixed {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 rgb(var(--orange-soft-rgb) / 0.85);
+}
+/* Correção GLOBAL ganha o segundo traço: o alcance é maior, e ver a diferença
+   importa — "todas as ocorrências" é justamente o que a pessoa não vai revisar
+   uma por uma, então o painel tem de dizer qual é qual sem abrir o campo. */
+.tw.fixed.fixed-all {
+  box-shadow: inset 0 -2px 0 rgb(var(--orange-soft-rgb) / 0.85),
+              inset 0 -5px 0 -3px rgb(var(--orange-soft-rgb) / 0.5);
+}
+/* O campo mora DENTRO da palavra, herdando a fonte da linha: um input com
+   aparência de formulário quebraria a leitura da frase, que é justamente o que
+   a pessoa está fazendo quando percebe o erro. */
+.tw-edit {
+  font: inherit; color: var(--text);
+  background: rgb(var(--orange-soft-rgb) / 0.14);
+  border: 0; border-bottom: 2px solid var(--orange-soft);
+  border-radius: 3px 3px 0 0; padding: 0 2px; margin: 0;
+  outline: none; min-width: 3ch;
+}
+/* "todas" reusa a caixinha do respiro — mesma escala, mesma discrição. É um
+   modificador do campo aberto, não um botão da tela. */
+.tw-all {
+  display: inline-block; margin-left: 4px; padding: 0 4px; vertical-align: baseline;
+  font: inherit; font-size: 9px; line-height: 1.6; letter-spacing: .3px;
+  color: var(--dim); background: rgba(255, 255, 255, .05);
+  border: 1px solid rgba(255, 255, 255, .1); border-radius: 4px;
+  cursor: pointer; user-select: none;
+}
+.tw-all:hover { color: var(--text); background: rgba(255, 255, 255, .12); }
+.tw-all.on {
+  color: var(--orange-soft); border-color: rgb(var(--orange-soft-rgb) / .6);
+  background: rgb(var(--orange-soft-rgb) / .16);
+}
+
 /* quebra de trecho: onde um take acaba e outro começa */
 .tw-cutmark { display: inline-block; width: 100%; height: 0; }
 .tx-line { display: flex; align-items: baseline; gap: 10px; padding: 1px 0; border-radius: 6px; }
@@ -2167,6 +2209,15 @@ button.tl-chip:disabled { cursor: default; }
    usuário no corte. Volta ao laranja de "Enviar" à primeira alteração. */
 #setupGo.aprovar { background: #22a06b; border-color: #22a06b; }
 #setupGo.aprovar:hover { background: #27b478; }
+/* "Aprovar mesmo assim" — o portão reprovou e o usuário está passando por
+   cima. NÃO pode usar o verde de "aprovar": verde é a cor de "está tudo
+   certo", e aqui não está. Âmbar de aviso, e riscado por baixo para o botão
+   não parecer o mesmo botão de sempre num relance. */
+#setupGo.aprovar.forcar {
+  background: #b8791f; border-color: #d8952f;
+  box-shadow: inset 0 -2px 0 rgb(255 255 255 / .18);
+}
+#setupGo.aprovar.forcar:hover { background: #cf8a26; }
 
 /* contador dos campos da caixinha — o teto visível enquanto se digita, e não
    um corte surpresa depois de salvar */

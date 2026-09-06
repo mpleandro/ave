@@ -23,7 +23,9 @@ the render.
 
 Usage:
     python helpers/speech_regions.py <video>
-    python helpers/speech_regions.py <video> --noise -33dB --min-silence 0.10
+    python helpers/speech_regions.py <video>                 # calibra sozinho
+    python helpers/speech_regions.py <video> --noise=-33dB   # com `=`: o valor
+        começa com '-' e sem o sinal de igual o argparse o lê como outra flag
     python helpers/speech_regions.py <video> --start 30 --end 40
 """
 from __future__ import annotations
@@ -153,7 +155,14 @@ def speech_regions(video: Path, noise: str, min_silence: float,
 def main() -> None:
     ap = argparse.ArgumentParser(description="Print acoustic speech regions (silencedetect)")
     ap.add_argument("video", type=Path)
-    ap.add_argument("--noise", default="-33dB", help="silence threshold (default -33dB)")
+    # `auto` É O PADRÃO, e o −33 fixo virou só o socorro de quando a calibração
+    # não resolve. O default fixo era uma régua errada para metade do material:
+    # este projeto fala a −41 dBFS, e a −33 o detector chama VOZ de silêncio.
+    # Quem sabe o limiar certo é o próprio arquivo (ver `noise_floor_for`), e
+    # ele custa uma passada de ffmpeg — barato demais para justificar um palpite.
+    ap.add_argument("--noise", default="auto",
+                    help="silence threshold: 'auto' calibra no material (padrão) "
+                         "ou um valor fixo como -33dB")
     ap.add_argument("--min-silence", type=float, default=0.10, help="min silence seconds (default 0.10)")
     # 0.05 e não 0.15: ver o aviso no topo. Uma plosiva ou uma palavra de uma
     # sílaba tem 0,08–0,14s, e o piso antigo as descartava — o que fazia esta
@@ -166,9 +175,24 @@ def main() -> None:
     if not args.video.exists():
         sys.exit(f"not found: {args.video}")
 
+    # O LIMIAR ESCOLHIDO VAI NO RELATÓRIO, com as duas populações que o
+    # produziram. Sem isso, duas rodadas com resultados diferentes no mesmo
+    # arquivo são indistinguíveis de um bug — e o número que explica a
+    # diferença fica só na cabeça de quem leu o código.
+    proc = ""
+    if str(args.noise).strip().lower() == "auto":
+        from cut_words import levels_for, noise_floor_for  # noqa: PLC0415
+        piso, med = levels_for(args.video)
+        db = noise_floor_for(args.video)
+        args.noise = f"{db:.0f}dB"
+        proc = (f", calibrado — piso {piso:.1f} / voz {med:.1f} dBFS"
+                if piso is not None and med is not None
+                else ", calibração falhou → socorro fixo")
+
     regions = speech_regions(args.video, args.noise, args.min_silence, args.min_speech)
     hi = args.end if args.end is not None else 1e9
-    print(f"speech regions (noise={args.noise}, min_silence={args.min_silence}s):")
+    print(f"speech regions (noise={args.noise}{proc}, "
+          f"min_silence={args.min_silence}s, min_speech={args.min_speech}s):")
     for a, b in regions:
         if b < args.start or a > hi:
             continue

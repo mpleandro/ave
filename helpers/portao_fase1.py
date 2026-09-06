@@ -81,6 +81,13 @@ def checar_spacing(edit: Path) -> list[dict]:
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
                     if not q.name.startswith(".") and q.stem not in DERIVADOS):
         d = json.loads(p.read_text())
+        # NEM TODO .json EM transcripts/ É UM TRANSCRITO. O `corrections.json`
+        # mora aqui (é o registro de onde o transcrito errou) e é uma LISTA —
+        # `d.get(...)` nele levanta AttributeError e derruba o portão inteiro.
+        # Filtrar por TIPO e não por nome: o próximo arquivo auxiliar que
+        # alguém puser aqui não pode voltar a quebrar isto.
+        if not isinstance(d, dict):
+            continue
         if str(d.get("_transcription_backend") or "").startswith("elevenlabs"):
             continue                       # Scribe mede pausa por conta própria
         if d.get("_spacing_source") == "measured/silencedetect":
@@ -145,7 +152,10 @@ def checar_quotes(edit: Path) -> list[dict]:
     palavras = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
                     if not q.name.startswith(".")):
-        for w in json.loads(p.read_text()).get("words", []):
+        d = json.loads(p.read_text())
+        if not isinstance(d, dict):
+            continue                 # corrections.json é lista — ver checar_spacing
+        for w in d.get("words", []):
             if w.get("type") == "word" and (w.get("text") or "").strip():
                 # `arquivo` é o stem do transcrito de origem — um EDL com mais
                 # de uma fonte tem relógios independentes que se sobrepõem (o
@@ -255,7 +265,205 @@ def checar_quotes(edit: Path) -> list[dict]:
 _DEADAIR_RE = re.compile(r"(\d+\.\d+)[-–](\d+\.\d+)s.*CHECK-DEADAIR")
 
 
+def _resolvidas(edit: Path) -> list[dict]:
+    """Janelas de densidade que um humano JÁ ouviu isolada e registrou.
+
+    Sem isto o portão vira uma parede que se aprende a atravessar. A checagem
+    de densidade acusa "há fala aqui que ninguém transcreveu" — e isso pode ser
+    duas coisas MUITO diferentes: um defeito no CORTE (gaguejo que vai ao ar)
+    ou um defeito no TRANSCRITO (o áudio está ótimo, o texto é que perdeu a
+    frase). O instrumento não separa as duas; só ouvir separa.
+
+    Ouvida a janela, a resposta tem de ficar em algum lugar — senão o portão
+    reprova o mesmo trecho em toda rodada, o operador aprende que aquele
+    bloqueio é ruído, e no dia em que for real ele passa batido. O registro
+    mora no `corrections.json`, que já é o arquivo de "onde o transcrito errou
+    e o que é verdade", com `kind: "densidade"` e o texto que a passada isolada
+    ouviu — a EVIDÊNCIA junto da dispensa, nunca um "ignore isto" pelado.
+
+        [{"source": "<stem da fonte>", "srcStart": 5.23, "srcEnd": 8.42,
+          "kind": "densidade",
+          "heard": "Bom, vamos categorizar nossas atividades…",
+          "note": "conferido isolado 2x — áudio íntegro, o transcrito é que perdeu a cabeça"}]
+    """
+    p = edit / "transcripts" / "corrections.json"
+    if not p.exists():
+        return []
+    try:
+        todas = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [c for c in todas
+            if isinstance(c, dict) and c.get("kind") == "densidade"
+            and c.get("heard")]          # sem o que se ouviu, não é resolução
+
+
+def checar_transcricao(edit: Path) -> list[dict]:
+    """FALA QUE O TRANSCRITO NÃO ESCREVEU — o auditor que faltava no portão.
+
+    O `transcript_audit.py` está documentado como Hard Rule 15 ("RODE ANTES DE
+    ESCREVER O EDL") desde que existe, e o portão nunca o chamou. Ficou como as
+    outras recomendações que viraram este arquivo: sempre presente na
+    documentação, sempre ausente na hora em que o defeito passa.
+
+    Ele mede duas coisas, e as duas custam ffmpeg, não API:
+
+      · **carimbo esticado** — o Whisper estende o fim da palavra por cima da
+        pausa seguinte. BLOQUEIA: o conserto é mecânico (`--fix-times`), é
+        idempotente, e é esse carimbo que vira legenda queimada na Fase 2.
+      · **densidade baixa** — região de fala com poucas palavras dentro, isto é,
+        fala que ninguém transcreveu. Aqui o critério é mais fino do que
+        "achou": só BLOQUEIA quando a janela suspeita cai DENTRO de um range do
+        EDL. Fora dele o áudio não entra no vídeo, e reprovar por isso ensinaria
+        a ignorar o portão — que é como um portão morre.
+    """
+    edl_p = edit / "edl.json"
+    if not edl_p.exists():
+        return []
+    rel = edit / ".preview_cache" / "transcript_audit.json"
+    rel.parent.mkdir(parents=True, exist_ok=True)
+    cod, out = _rodar([str(HELPERS / "transcript_audit.py"), str(edit),
+                       "-o", str(rel)], timeout=900)
+    if not rel.exists():
+        return [{"check": "transcricao", "aviso": True,
+                 "problema": "não consegui auditar a transcrição",
+                 "conserto": out.strip()[-300:] or f"exit {cod}"}]
+    try:
+        achados = json.loads(rel.read_text())
+    except json.JSONDecodeError:
+        return []
+
+    # As janelas do EDL, por arquivo de fonte — é contra elas que a densidade
+    # decide se o defeito ENTRA no vídeo ou só existe no material bruto.
+    try:
+        edl = json.loads(edl_p.read_text())
+    except json.JSONDecodeError:
+        return []
+    stems = {k: Path(v).stem for k, v in (edl.get("sources") or {}).items()}
+    janelas: dict[str, list[tuple[float, float]]] = {}
+    for r in edl.get("ranges", []):
+        stem = stems.get(r.get("source", ""), "")
+        janelas.setdefault(stem, []).append((float(r["start"]), float(r["end"])))
+
+    def no_corte(arquivo: str, a: float, b: float) -> bool:
+        stem = Path(arquivo or "").stem
+        return any(min(b, e) - max(a, ini) > 0.05
+                   for ini, e in janelas.get(stem, []))
+
+    resolvidas = _resolvidas(edit)
+    faltas = []
+    for f in achados:
+        ini, fim = float(f.get("start", 0)), float(f.get("end", 0))
+        arq = f.get("file", "")
+        if "word" in f:            # carimbo esticado
+            faltas.append({
+                "check": "transcricao", "t": ini,
+                "problema": f"{f['word']!r} carimbada em {f.get('dur', 0):.2f}s com "
+                            f"{f.get('excess', 0):.2f}s de silêncio dentro "
+                            f"({arq})",
+                "conserto": f"uv run python helpers/transcript_audit.py {edit} --fix-times",
+            })
+        elif "dens" in f:          # fala sem texto
+            if any(Path(c.get("source", "")).stem == Path(arq or "").stem
+                   and min(fim, float(c.get("srcEnd", 0))) - max(ini, float(c.get("srcStart", 0))) > 0.05
+                   for c in resolvidas):
+                continue               # já ouvida isolada e registrada — ver _resolvidas
+            dentro = no_corte(arq, ini, fim)
+            faltas.append({
+                "check": "transcricao", "t": ini, "aviso": not dentro,
+                "problema": f"{f.get('n', 0)} palavra(s) em {f.get('dur', 0):.2f}s de fala "
+                            f"({f.get('dens', 0):.2f}/s vs mediana {f.get('median', 0):.2f}/s)"
+                            + (" — DENTRO do corte" if dentro else " — fora do corte"),
+                "conserto": "ouça a janela isolada: "
+                            f"transcript_audit.py {edit} --recheck",
+            })
+        else:                      # divergência entre as duas passadas
+            faltas.append({
+                "check": "transcricao", "t": ini, "aviso": True,
+                "problema": f"fonte e corte discordam aqui: "
+                            f"{(f.get('fonte') or '(nada)')[:40]!r} × "
+                            f"{(f.get('corte') or '(nada)')[:40]!r}",
+                "conserto": "resolva com uma TERCEIRA passada isolada (--recheck), "
+                            "nunca escolhendo um lado por preferência",
+            })
+    return faltas
+
+
+def checar_triagem(edit: Path) -> list[dict]:
+    """TODA DÚVIDA FOI RESOLVIDA ANTES DE RENDERIZAR?
+
+    Regra do usuário (2026-08-27), e ela nasceu de um corte entregue com três
+    defeitos que ele ouviu e eu não: *"antes de renderizar a fase 1, pergunta
+    para o usuário tudo o que tiver dúvida, para não ter que consertar e gerar
+    de novo depois"*.
+
+    A aritmética que a justifica: descobrir DEPOIS custa uma rodada de portão
+    (~5 min) mais um re-render (~1 min) mais a atenção de quem já tinha
+    aprovado. Descobrir ANTES custa uma pergunta. E não é hipotético — dois dos
+    três defeitos daquele corte estavam numa lista de 60 candidatos que o
+    `detect_restarts` me entregou e eu classifiquei como ruído SEM OUVIR
+    nenhum, que é exatamente o veredito sem medição que a Hard Rule 18 proíbe.
+
+    O que esta checagem cobra é só isto: cada repetição da classe SEMÂNTICA que
+    sobreviveu ao corte tem uma decisão registrada em `triagem.json` — removida,
+    mantida, ou perguntada e respondida — com o motivo junto. Não cobra a
+    decisão CERTA (ninguém sabe a intenção de quem falou além dele); cobra que
+    alguém tenha olhado.
+
+        [{"ngrama": "acabam surgindo do", "t": 57.19, "decisao": "remover",
+          "motivo": "duas versões da mesma frase; fica a segunda",
+          "quem": "usuario"}]
+
+    A classe `quase` fica de fora do bloqueio de propósito: das 7 que ela achou
+    neste corte, 7 eram prosa normal ("e urgente ~ e importante"). Bloquear por
+    ela ensinaria a forçar o portão, que é como um portão morre.
+    """
+    edl_p = edit / "edl.json"
+    if not edl_p.exists():
+        return []
+    cod, out = _rodar([str(HELPERS / "detect_restarts.py"), str(edit), "--edl", "--json"])
+    try:
+        hits = json.loads(out[out.index("{"):out.rindex("}") + 1]).get("hits", [])
+    except (json.JSONDecodeError, ValueError):
+        return []
+    pendentes = [h for h in hits if h.get("classe") == "semantica"]
+    if not pendentes:
+        return []
+
+    tri = edit / "triagem.json"
+    try:
+        decididos = json.loads(tri.read_text()) if tri.exists() else []
+    except json.JSONDecodeError:
+        decididos = []
+
+    def resolvido(h: dict) -> bool:
+        ng = str(h.get("ngrama", "")).strip().lower()
+        t = float(h.get("versao_A", {}).get("t", -1))
+        for d in decididos:
+            if str(d.get("ngrama", "")).strip().lower() != ng:
+                continue
+            # tempo por PROXIMIDADE: o relógio do corte muda a cada re-render,
+            # e a decisão é sobre a frase, não sobre o instante
+            if d.get("t") is None or abs(float(d["t"]) - t) <= 2.0:
+                return True
+        return False
+
+    faltam = [h for h in pendentes if not resolvido(h)]
+    if not faltam:
+        return []
+    return [{
+        "check": "triagem", "t": float(h["versao_A"]["t"]),
+        "problema": f"repetição sem decisão: \"{h['ngrama']}\" "
+                    f"(Δ{h.get('delta', 0)}s) — "
+                    f"\"{h['versao_A']['texto'][:44]}\" × "
+                    f"\"{h['versao_B']['texto'][:44]}\"",
+        "conserto": "ouça, decida (ou pergunte ao usuário) e registre em triagem.json",
+    } for h in faltam[:10]]
+
+
 def checar_render(edit: Path, render: str | None) -> list[dict]:
+
+
     """verify_cut: a única checagem que olha o vídeo, não o plano.
 
     CHECK-DEADAIR não distingue ar morto de verdade de uma pausa retórica que
@@ -378,27 +586,46 @@ def checar_mapa_de_defeitos(edit: Path) -> list[dict]:
     return faltas
 
 
-def mapa_cobre_fontes(edit: Path) -> bool:
-    """`defeitos_audio.json` tem uma entrada para TODA fonte que o EDL usa?
+def pode_pular_a_escuta(edit: Path) -> bool:
+    """Dá para NÃO ouvir o render? Só quando não existe emenda para ouvir.
 
-    Não confunda com `checar_mapa_de_defeitos` estar limpo: um EDL cuja fonte
-    NUNCA foi varrida também não acusa nada ali, porque não há mapa para
-    consultar — silêncio por falta de dado, não por dado limpo. Esta função
-    é o que diferencia os dois casos, e é o que autoriza pular a varredura
-    cara do render (ver `main`): só quando toda fonte usada já foi ouvida
-    E o cruzamento contra o EDL não achou nada.
+    A versão anterior desta função perguntava outra coisa — "o mapa da fonte
+    cobre todas as fontes e está limpo?" — e usava a resposta para pular a
+    escuta do corte. O raciocínio tinha um buraco que só aparece escrito:
+
+      o mapa da fonte prova que o EDL DESVIOU das repetições que existiam no
+      material bruto. Ele não sabe nada sobre as que a MONTAGEM cria.
+
+    Duas ocorrências distantes na fonte não são repetição nenhuma lá; emendadas
+    lado a lado por um corte, viram. É o caso das várias tomadas da mesma CTA
+    gravadas em sequência: cada uma sozinha é limpa, e escolher duas por engano
+    produz um eco que nenhum mapa de fonte previu. A escuta do render é a ÚNICA
+    checagem que enxerga a emenda, então ela não pode ser pulada por um
+    argumento que fala da fonte.
+
+    O que autoriza pular, e só isto: **não haver emenda**. Um EDL de trecho
+    único não tem junção onde uma duplicação possa nascer, e aí a escuta do
+    render responderia exatamente o que a varredura da fonte já respondeu.
     """
-    mapa_p = edit / "defeitos_audio.json"
     edl_p = edit / "edl.json"
-    if not mapa_p.exists() or not edl_p.exists():
+    if not edl_p.exists():
         return False
     try:
-        mapa = json.loads(mapa_p.read_text())
         edl = json.loads(edl_p.read_text())
     except json.JSONDecodeError:
         return False
-    fontes_no_edl = {Path(v).stem for v in (edl.get("sources") or {}).values()}
-    return fontes_no_edl.issubset(mapa.keys())
+    if len(edl.get("ranges", [])) > 1:
+        return False        # tem emenda → tem o que ouvir
+    # sem emenda, ainda exige que a fonte tenha sido ouvida alguma vez
+    mapa_p = edit / "defeitos_audio.json"
+    if not mapa_p.exists():
+        return False
+    try:
+        mapa = json.loads(mapa_p.read_text())
+    except json.JSONDecodeError:
+        return False
+    fontes = {Path(v).stem for v in (edl.get("sources") or {}).values()}
+    return fontes.issubset(mapa.keys())
 
 
 def checar_audio_do_corte(edit: Path, render: str | None) -> list[dict]:
@@ -409,6 +636,25 @@ def checar_audio_do_corte(edit: Path, render: str | None) -> list[dict]:
     segunda passada do TEXTO sem apagá-la do ÁUDIO. Quatro repetições chegaram ao
     usuário num corte que passou por todas as outras checagens.
     """
+    # A DECISÃO DO USUÁRIO TEM DE SOBREVIVER AO PRÓXIMO RENDER.
+    #
+    # Hard Rule 18 manda PERGUNTAR quando o detector acusa repetição: anáfora e
+    # gaguejo são a mesma string e só quem falou sabe a diferença. Mas perguntar
+    # uma vez e esquecer é pior que não perguntar — o portão reprova o mesmo
+    # "um incêndio ×2" em toda rodada, o usuário responde "é a definição" toda
+    # vez, e na terceira ele aprende a clicar em "Aprovar mesmo assim" sem ler.
+    # Aí o portão perdeu o poder de barrar a repetição que É defeito.
+    #
+    # `repeticao_aceita` no EDL é a memória: n-gramas que o dono da voz já ouviu
+    # e declarou deliberados. Casa por TEXTO e não por tempo, porque o tempo de
+    # output muda a cada re-render e a decisão é sobre a frase, não sobre o
+    # relógio. Mesma ideia do `aceito` em checar_mapa_de_defeitos.
+    try:
+        aceitas = {str(x).strip().lower()
+                   for x in (json.loads((edit / "edl.json").read_text())
+                             .get("repeticao_aceita") or [])}
+    except (OSError, json.JSONDecodeError):
+        aceitas = set()
     cmd = [str(HELPERS / "verify_takes.py"), str(edit), "--json"]
     if render:
         cmd += ["--video", render]
@@ -428,16 +674,69 @@ def checar_audio_do_corte(edit: Path, render: str | None) -> list[dict]:
                     + (" (pode ser laço do modelo — ouça)" if a["suspeita_de_laco"] else ""),
         "conserto": "ouça no editor e escolha qual passada fica",
         "aviso": bool(a["suspeita_de_laco"]) or not a.get("confirmado", True),
-    } for a in achados]
+    } for a in achados if str(a["ngrama"]).strip().lower() not in aceitas]
+
+
+def _impressao(edit: Path, render: str | None) -> dict | None:
+    """O que o veredito DESCREVE: este render + este EDL, por tamanho e mtime.
+
+    Sem isto o portão é honesto e insuportável. Ele leva ~4 min (a escuta do
+    render transcreve ~170 janelas curtas), e roda duas vezes seguidas pelo
+    caminho normal: uma quando eu confiro antes de mostrar, outra quando o
+    usuário clica em "Aprovar corte". A segunda responde exatamente a mesma
+    pergunta sobre exatamente os mesmos bytes — e o usuário fica 4 min olhando
+    uma barra por uma resposta que já estava no disco.
+
+    A chave é o par (render, EDL): o render porque é o que se ouve, e o EDL
+    porque é onde moram as ACEITAÇÕES (`ar_morto_aceito`, `repeticao_aceita`)
+    — registrar uma decisão tem de invalidar o veredito na hora, senão o
+    portão continuaria reprovando o que o usuário acabou de dispensar.
+    """
+    alvos = [render] if render else ["preview_proxy.mp4", "preview.mp4"]
+    vid = next((edit / a for a in alvos if (edit / a).exists()), None)
+    edl = edit / "edl.json"
+    if vid is None or not edl.exists():
+        return None
+    def fp(q: Path) -> list:
+        st = q.stat()
+        return [q.name, st.st_size, round(st.st_mtime, 3)]
+    return {"render": fp(vid), "edl": fp(edl)}
+
+
+def _veredito_cacheado(edit: Path, imp: dict | None) -> dict | None:
+    if not imp:
+        return None
+    p = edit / ".preview_cache" / "portao.json"
+    try:
+        d = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return d if d.get("impressao") == imp else None
+
+
+def _gravar_veredito(edit: Path, imp: dict | None, ok: bool, faltas: list) -> None:
+    if not imp:
+        return
+    p = edit / ".preview_cache" / "portao.json"
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"impressao": imp, "ok": ok, "faltas": faltas},
+                                ensure_ascii=False))
+    except OSError:
+        pass          # cache nunca derruba o portão que ele acelera
 
 
 def main() -> None:
+
+
     ap = argparse.ArgumentParser(description="Portão de saída da Fase 1")
     ap.add_argument("edit", type=Path)
     ap.add_argument("--render", default=None, help="nome do render dentro do <edit>")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--pular-render", action="store_true",
                     help="só as checagens de plano (útil antes de renderizar)")
+    ap.add_argument("--forcar", action="store_true",
+                    help="ignora o veredito em cache e reconfere do zero")
     ap.add_argument("--sempre-ouvir", action="store_true",
                     help="roda `checar_audio_do_corte` mesmo quando o mapa da "
                          "fonte já prova o EDL limpo (rede de segurança extra, "
@@ -448,29 +747,52 @@ def main() -> None:
     if not (edit / "transcripts").is_dir():
         sys.exit(f"sem transcripts/ em {edit}")
 
+    # VEREDITO FRESCO SE REUSA. Só o caminho COMPLETO (com render) entra no
+    # cache: o `--pular-render` responde outra pergunta (só o plano), e servir
+    # um ao outro diria "conferido" sobre um render que ninguém ouviu.
+    imp = None if args.pular_render else _impressao(edit, args.render)
+    if not args.forcar:
+        pronto = _veredito_cacheado(edit, imp)
+        if pronto is not None:
+            faltas = pronto.get("faltas", [])
+            bloqueiam = [f for f in faltas if not f.get("aviso")]
+            if args.json:
+                print(json.dumps({"ok": not bloqueiam, "faltas": faltas,
+                                  "cache": True}, ensure_ascii=False, indent=2))
+            elif not bloqueiam:
+                print("PORTÃO OK — o corte pode ir para aprovação. (veredito em cache: "
+                      "nem o render nem o EDL mudaram desde a última conferência)")
+            else:
+                print(f"PORTÃO FECHADO — {len(bloqueiam)} defeito(s) bloqueando "
+                      "(veredito em cache)\n")
+                for f in faltas:
+                    t = f.get("t")
+                    onde = f"  {t:7.2f}s " if isinstance(t, (int, float)) else "          "
+                    print(f"{'aviso  ' if f.get('aviso') else 'FALHA  '}[{f['check']}]{onde}{f['problema']}")
+            sys.exit(1 if bloqueiam else 0)
+
     faltas: list[dict] = []
     faltas += checar_spacing(edit)
     # Sem pausa medida o resto não tem o que ver — reprova aqui e diz o conserto,
     # em vez de despejar defeitos derivados que somem sozinhos depois do reparo.
     if not faltas:
         faltas += checar_reinicios(edit)
+        faltas += checar_triagem(edit)
+        faltas += checar_transcricao(edit)
         faltas += checar_quotes(edit)
         faltas_mapa = checar_mapa_de_defeitos(edit)
         faltas += faltas_mapa
         if not args.pular_render:
             faltas += checar_render(edit, args.render)
-            # A VARREDURA DO RENDER (`checar_audio_do_corte`) OUVE o corte com
-            # o mesmo motor caro de `verify_takes --fonte` — só que de novo,
-            # em cima de um áudio que já passou pela varredura da FONTE. Ela é
-            # a ÚNICA rede de segurança contra o que o mapa não podia saber
-            # (repetição introduzida pela própria montagem/J-cut), então só
-            # pula quando o mapa PROVOU o EDL limpo — não quando ele está
-            # simplesmente vazio (fonte nunca varrida): `mapa_cobre_fontes`
-            # é o que distingue as duas coisas (ver o docstring dela).
-            if args.sempre_ouvir or faltas_mapa or not mapa_cobre_fontes(edit):
+            # A VARREDURA DO RENDER (`checar_audio_do_corte`) é a ÚNICA
+            # checagem que ouve a EMENDA — ver `pode_pular_a_escuta`, que
+            # explica por que o mapa da fonte não pode autorizar o pulo. Ela é
+            # cara (minutos) e é o preço de não entregar um eco.
+            if args.sempre_ouvir or faltas_mapa or not pode_pular_a_escuta(edit):
                 faltas += checar_audio_do_corte(edit, args.render)
 
     bloqueiam = [f for f in faltas if not f.get("aviso")]
+    _gravar_veredito(edit, imp, not bloqueiam, faltas)
 
     if args.json:
         print(json.dumps({"ok": not bloqueiam, "faltas": faltas},

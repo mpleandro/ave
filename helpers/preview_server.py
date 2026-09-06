@@ -770,6 +770,12 @@ class Handler(BaseHTTPRequestHandler):
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2))
         tmp.replace(out)
+        # UMA CORREÇÃO INVALIDA O PARECER DO PORTÃO: ele descreve um render que
+        # está prestes a deixar de existir. Mantido, a tela mostraria defeitos
+        # de um corte já refeito — e o pior tipo de defeito é o que o usuário
+        # não consegue mais encontrar no vídeo que está vendo.
+        if name == "preview_edits.json":
+            self._patch_state(gate=None)
         started = self._maybe_auto_apply(name)
         self._json({"ok": True, "file": str(out), "applying": started})
 
@@ -816,8 +822,7 @@ class Handler(BaseHTTPRequestHandler):
         # existem, e rodá-la aqui gastaria tokens num estilo presumido — foi
         # exatamente o erro que originou este encadeamento.
         if name == "preview_approval.json":
-            self._open_style_tab()
-            return self._encode_full_res()
+            return self._gate_then_approve()
         script = "apply_edits.py" if name == "preview_edits.json" else "phase2.py"
         return self._spawn_helper(script)
 
@@ -932,6 +937,80 @@ class Handler(BaseHTTPRequestHandler):
         tmp = p.with_suffix(".tmp")
         tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2))
         tmp.replace(p)
+
+    def _gate_then_approve(self) -> bool:
+        """O PORTÃO roda ANTES das consequências da aprovação.
+
+        Ele existia e NINGUÉM o chamava — nem helper, nem servidor. Aprovar
+        disparava direto o encode pleno e a aba Estilo, e tudo o que o
+        `portao_fase1.py` sabe conferir dependia de uma sessão da IA lembrar de
+        rodá-lo à mão. É exatamente a doença que o próprio docstring dele
+        descreve: "recomendação que se pode pular é recomendação que se pula".
+        A diferença entre recomendação e portão é o exit code — e o exit code
+        só vale se alguém o LER.
+
+        Reprovado, a aprovação não acontece: sem encode, sem aba Estilo. Os
+        defeitos vão para `state.gate`, com timestamp, e o botão vira "Aprovar
+        mesmo assim" — porque a palavra final é de quem gravou (Hard Rule 18) e
+        um portão sem porta é uma parede.
+
+        Roda em segundo plano: a escuta do corte leva minutos, e a resposta do
+        POST não pode esperar por ela. O andamento sai pelo `progress.json`,
+        que a interface já consulta.
+        """
+        forcado = False
+        try:
+            forcado = bool(json.loads(
+                (self.root / "preview_approval.json").read_text()).get("force"))
+        except (OSError, json.JSONDecodeError):
+            pass
+        if forcado:
+            # O usuário JÁ viu os defeitos e decidiu mesmo assim. Registrar o
+            # `forced` importa: o corte entregue passou por cima do portão, e
+            # isso tem de ficar no estado, não só na memória de quem clicou.
+            self._patch_state(gate={"ok": True, "forced": True})
+            self._open_style_tab()
+            return self._encode_full_res()
+
+        root = self.root
+        gate = Path(__file__).resolve().parent / "portao_fase1.py"
+
+        def run() -> None:
+            progress.begin(root, "portao",
+                           "Conferindo o corte antes de liberar", ai=False)
+            try:
+                r = subprocess.run([helper_python(), str(gate), str(root), "--json"],
+                                   capture_output=True, text=True, timeout=2400)
+                saida = (r.stdout or "").strip()
+                rel = json.loads(saida[saida.index("{"):saida.rindex("}") + 1])
+            except (OSError, ValueError, json.JSONDecodeError,
+                    subprocess.TimeoutExpired) as exc:
+                # PORTÃO QUEBRADO NÃO É PORTÃO FECHADO. Não conseguir CONFERIR é
+                # diferente de reprovar: o usuário viu o corte e disse que está
+                # bom, e travá-lo por uma falha nossa seria transformar um bug
+                # de ferramenta em veto ao trabalho dele. Solta, e DIZ que não
+                # conferiu — em vez de deixar passar calado por "ok".
+                self._patch_state(gate={"ok": True, "erro": str(exc)[:200]})
+                progress.done(root, "não consegui conferir — aprovado assim mesmo")
+                self._open_style_tab()
+                self._encode_full_res()
+                return
+            if rel.get("ok"):
+                self._patch_state(gate={"ok": True})
+                progress.done(root, "Corte conferido — sem defeitos")
+                self._open_style_tab()
+                self._encode_full_res()
+                return
+            faltas = rel.get("faltas", [])
+            bloqueiam = [f for f in faltas if not f.get("aviso")]
+            self._patch_state(
+                gate={"ok": False, "faltas": faltas},
+                message=f"{len(bloqueiam)} defeito(s) no corte — confira e decida")
+            progress.fail(root, f"{len(bloqueiam)} defeito(s) bloqueando a aprovação "
+                                f"— veja a lista na barra de ação")
+
+        threading.Thread(target=run, daemon=True).start()
+        return True
 
     def _open_style_tab(self) -> None:
         """Aprovou → a aba Estilo passa a pedir as escolhas, na hora.
@@ -1502,10 +1581,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"words": [], "error": "sem edl.json"}, 200)
             return
         out = self.root / ".preview_cache" / "words.json"
+        # DUAS chaves, não uma. Corrigir uma palavra não toca no `edl.json` — o
+        # corte é o mesmo, só o texto muda — então a chave só-do-EDL servia o
+        # painel velho para sempre, e o usuário via a palavra errada continuar
+        # na tela depois de consertá-la.
+        fix = self.root / "transcripts" / "corrections.json"
+        fix_mtime = fix.stat().st_mtime if fix.exists() else 0.0
         stale = True
         if out.exists():
             try:
-                stale = json.loads(out.read_text()).get("edlMtime") != edl.stat().st_mtime
+                cached = json.loads(out.read_text())
+                stale = (cached.get("edlMtime") != edl.stat().st_mtime
+                         or cached.get("fixMtime", 0.0) != fix_mtime)
             except json.JSONDecodeError:
                 pass
         if stale:

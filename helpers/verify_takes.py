@@ -52,7 +52,16 @@ MODELO = "mlx-community/whisper-large-v3-turbo"
 # Três larguras, do específico ao contextual. Ver o cabeçalho: a repetição curta
 # só cabe na janela pequena, a longa só cabe na grande.
 LARGURAS = ((2.4, 1.2), (4.0, 2.0), (6.0, 3.0))
-NGRAMAS = (4, 3, 2)
+NGRAMAS = (4, 3, 2, 1)
+# REDUPLICAÇÃO LEGÍTIMA. Em português a palavra dobrada é construção normal e
+# significa intensidade ou iminência — "já já", "muito muito", "devagar
+# devagar", "quase quase". Acusá-las faria o detector de palavra única errar na
+# maioria das vezes logo no primeiro vídeo, e um detector que erra na maioria
+# vira ruído que se ignora — inclusive quando acerta.
+REDUPLICACAO_OK = {
+    "ja", "muito", "bem", "quase", "devagar", "pouco", "so", "todo", "cada",
+    "la", "ca", "assim", "agora", "sim", "nao", "vai", "ai", "ó", "o",
+}
 SR = 16000  # mlx_whisper.audio.load_audio já entrega mono 16kHz — é o que o modelo espera
 
 
@@ -63,10 +72,21 @@ def norm(t: str) -> list[str]:
 
 
 def repeticao(ws: list[str]) -> tuple[str, int] | None:
-    """O maior n-grama que aparece DUAS VEZES SEGUIDAS, e quantas vezes seguidas."""
+    """O maior n-grama que aparece DUAS VEZES SEGUIDAS, e quantas vezes seguidas.
+
+    `n=1` (palavra única dobrada) entra por último e é a razão de este detector
+    ter deixado passar "Acabam, acabam surgindo do imprevisto" num corte
+    entregue: com NGRAMAS=(4,3,2) a gaguejo de UMA palavra era invisível por
+    construção — testado, `repeticao("acabam acabam surgindo")` devolvia None.
+    Entra por último de propósito: quando existe um n-grama maior, ele descreve
+    melhor o defeito. E passa pelo filtro de reduplicação legítima, porque em
+    português a palavra dobrada muitas vezes é a frase certa.
+    """
     for n in NGRAMAS:
         for i in range(len(ws) - 2 * n + 1):
             if ws[i:i + n] != ws[i + n:i + 2 * n]:
+                continue
+            if n == 1 and ws[i] in REDUPLICACAO_OK:
                 continue
             vezes = 2
             j = i + 2 * n
@@ -126,6 +146,10 @@ def varrer(video: Path, modelo: str = MODELO) -> list[dict]:
                 if ng not in achados or larg < achados[ng]["janela"]:
                     achados[ng] = {"ngrama": ng, "t": round(t, 2), "janela": larg,
                                    "vezes": vezes, "texto": txt, "vistas": 0,
+                                   # palavra ÚNICA dobrada nunca remove sozinha:
+                                   # a fronteira entre gaguejo e ênfase é
+                                   # significado, e quem sabe é quem falou
+                                   "palavra_unica": len(ng.split()) == 1,
                                    "suspeita_de_laco": vezes >= 3 and larg <= 2.4}
                 achados[ng]["vistas"] = achados[ng].get("vistas", 0) + 1
             t += passo

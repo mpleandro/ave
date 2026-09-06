@@ -1439,6 +1439,12 @@ let S = {
   view: 'tl',       // 'tl' linha do tempo · 'tx' transcrição
   words: [],        // transcrito do corte (/gen/words.json)
   cutWords: new Set(), // índices riscados = PEDIDO de corte, não corte feito
+  /* CORREÇÃO DE TEXTO ≠ CORTE, e as duas moram no mesmo painel de propósito:
+     é lendo que se percebe as duas coisas. Riscar uma palavra pede um CORTE no
+     vídeo; corrigi-la conserta o que o Whisper ESCREVEU, sem tocar em imagem
+     nem em som. Mapa índice→texto novo; o texto original vem de S.words[i]. */
+  fixWords: new Map(),
+  fixTodas: new Set(),  // índices marcados como "em todas as ocorrências"
   cutBreaths: new Set(), // respiros marcados: índice da palavra que vem ANTES
   approved: false,  // aprovação enviada nesta sessão (some a barra na hora)
   selWords: new Set(),
@@ -1649,6 +1655,13 @@ function renderedToDraft(t) {
 // ---------- dirty tracking ----------
 const wordsDirty = () => S.cutWords.size > 0 || S.cutBreaths.size > 0;
 
+/* SEPARADO de `wordsDirty()` por duas razões que a interface já modela:
+   (a) uma correção se aplica sozinha — não é "marcação para alguém ler", que é
+       o que `wordsDirty()` significa nos avisos;
+   (b) ela não é CARA: não refaz o corte, então não pode entrar no `caro` que
+       dispara o aviso de "minutos de render e tokens". */
+const fixDirty = () => S.fixWords.size > 0;
+
 const jcutDirty = () => S.draft.some((r) => r.leadF != null || r.tailF != null);
 
 function edlDirty() {
@@ -1661,6 +1674,7 @@ function dirtyCount() {
   let n = S.draft.filter((r) => r.removed || r.start !== r.orig.start || r.end !== r.orig.end).length;
   n += S.insertsDraft.filter((c) => c.start !== c.orig.start || c.end !== c.orig.end).length;
   n += S.notes.length; // each correction marker is an unsaved adjustment too
+  n += S.fixWords.size;
   return n;
 }
 function refreshHeader() {
@@ -1725,6 +1739,25 @@ const styleDirty = () => styleState() !== '';
 /* A BARRA DE AÇÃO nomeia a CONSEQUÊNCIA, não o verbo. "Enviar" não distingue
  * mandar duas marcações de disparar um render de minutos, e essas duas coisas
  * não podem custar o mesmo clique sem aviso. */
+/* O defeito em UMA linha, e com o TEMPO na frente. O portão devolve `t` em
+   segundos do corte quando sabe onde é (a maioria dos casos); sem `t` o defeito
+   é do plano, não do render, e não tem onde ser ouvido. */
+function gateQuando(f) {
+  const t = f && f.t;
+  if (typeof t !== 'number') return '        ';
+  return `${fmt(t)} `;
+}
+/* O resumo da barra: quantos, de que tipo. A lista inteira vive no `title` —
+   uma barra de ação com seis linhas de defeito empurra a timeline para fora da
+   tela, que é o oposto de ajudar a encontrá-los. */
+function gateResumo(bloq) {
+  if (!bloq.length) return 'só avisos — confira antes de aprovar';
+  const tipos = [...new Set(bloq.map((f) => f.check).filter(Boolean))];
+  const onde = bloq.map(gateQuando).map((x) => x.trim()).filter(Boolean).slice(0, 3);
+  return `${tipos.join(', ')}${onde.length ? ` · em ${onde.join(', ')}` : ''}`
+       + ' — passe o mouse para a lista';
+}
+
 function refreshActionBar() {
   const bar = $('actionBar');
   if (!bar) return;
@@ -1732,7 +1765,14 @@ function refreshActionBar() {
   const ins = insertsDirty();
   const notes = S.notes.length + (wordsDirty() ? 1 : 0);
   const style = styleDirty();
-  const has = cuts || ins || notes || style;
+  /* CORREÇÃO DE TEXTO É TERMO PRÓPRIO em `has`, não parte de `notes`.
+     Dobrada em `notes`, a barra diria "ler as suas marcações" — e ninguém
+     precisa LER uma correção: ela se aplica sozinha, mecanicamente, como
+     arrastar uma borda. Sem estar em `has`, o botão fica desabilitado e
+     corrigir texto é impossível pela interface (encontrado dirigindo o
+     navegador: `dirtyCount()` dava 2 e o botão continuava apagado). */
+  const fix = fixDirty();
+  const has = cuts || ins || notes || style || fix;
   /* O PEDIDO EM TEXTO é um canal, não um apêndice das alterações.
    *
    * A barra inteira sumia quando não havia nada marcado — e levava a caixa de
@@ -1780,13 +1820,34 @@ function refreshActionBar() {
   go.dataset.mode = podeAprovar ? 'approve' : '';
   go.classList.toggle('aprovar', podeAprovar);
   if (podeAprovar) {
-    $('actionCount').textContent = 'Fase 1 pronta para aprovação';
+    /* O PARECER DO PORTÃO, quando ele reprovou. A aprovação não aconteceu —
+       nem encode, nem aba Estilo — e o usuário precisa de duas coisas aqui: o
+       QUE está errado (com o tempo, para ir ouvir) e a porta de saída. A porta
+       existe porque a palavra final é de quem gravou: o detector confunde
+       anáfora com repetição, e nenhum instrumento sabe a intenção de quem
+       falou. Portão sem porta é parede. */
+    const g = S.state.gate;
+    const reprovou = !!(g && g.ok === false);
+    const bloq = reprovou ? (g.faltas || []).filter((f) => !f.aviso) : [];
+    go.classList.toggle('forcar', reprovou);
     go.disabled = false;
+    if (reprovou) {
+      $('actionCount').textContent = bloq.length === 1
+        ? '1 defeito no corte' : `${bloq.length} defeitos no corte`;
+      $('actionWhat').textContent = gateResumo(bloq);
+      go.innerHTML = 'Aprovar mesmo assim';
+      go.title = 'O corte não passou na conferência — aprove só depois de ouvir os '
+               + 'trechos apontados:\n\n'
+               + (g.faltas || []).map((f) => `${gateQuando(f)} ${f.problema}`).join('\n');
+      return;
+    }
+    $('actionCount').textContent = 'Fase 1 pronta para aprovação';
     go.innerHTML = 'Aprovar corte';
-    go.title = 'Libera o corte final e as camadas do render — mudou algo, o botão vira Enviar';
+    go.title = 'Confere o corte e, passando, libera o final e as camadas do render';
     $('actionWhat').textContent = '';
     return;
   }
+  go.classList.remove('forcar');
   if (!temAlgo) {
     $('actionCount').textContent = 'Nada a enviar';
 
@@ -1823,6 +1884,10 @@ function refreshActionBar() {
   if (cuts) vai.push('refazer o corte');
   if (style || ins) vai.push(S.state.finalVideo ? 'refazer a finalização' : 'montar a finalização');
   if (notes) vai.push(wordsDirty() ? 'ler o que foi riscado no texto e as marcações' : 'ler as suas marcações');
+  // "sem refazer o corte" é a metade que importa: a pessoa acabou de mexer em
+  // texto num painel onde o gesto vizinho refaz o vídeo, e o preço tem de ser
+  // dito no momento da decisão.
+  if (fix) vai.push('corrigir o texto da legenda (sem refazer o corte)');
   if (pedido) vai.push('ler o seu pedido');
   /* A CONSEQUÊNCIA saiu da barra e virou o `title` do botão.
    * A frase longa competia com o número — que é a informação que se lê de
@@ -1830,11 +1895,20 @@ function refreshActionBar() {
   $('actionWhat').textContent = '';
 
   const caro = style || ins || cuts;
-  $('setupGo').innerHTML = `<span class="btn-ai">${ICON.ai}</span>`
-    + (caro ? 'Enviar e renderizar' : 'Enviar marcações');
-  $('setupGo').title = caro
-    ? 'Vai para a IA e renderiza de novo — leva alguns minutos'
-    : 'Manda as marcações para a IA ler; não renderiza nada';
+  /* SÓ CORREÇÃO tem rótulo próprio, e sem o ícone de IA: nada vai para a IA
+     aqui, nada renderiza, e o `apply_edits` aplica direto. Chamar isso de
+     "Enviar marcações" prometeria uma leitura que não acontece — e o ícone de
+     IA num gesto que não gasta token é a mesma mentira em desenho. */
+  const soFix = fix && !caro && !notes && !pedido;
+  $('setupGo').innerHTML = soFix
+    ? 'Aplicar correções'
+    : `<span class="btn-ai">${ICON.ai}</span>`
+      + (caro ? 'Enviar e renderizar' : 'Enviar marcações');
+  $('setupGo').title = soFix
+    ? 'Grava as correções de texto e regera a legenda — não renderiza o vídeo'
+    : caro
+      ? 'Vai para a IA e renderiza de novo — leva alguns minutos'
+      : 'Manda as marcações para a IA ler; não renderiza nada';
 }
 
 // ---------- data loading ----------
@@ -3727,12 +3801,13 @@ $('btnApprove').addEventListener('click', async () => {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'approve-cut',
                              note: ($('approveNote').value || '').trim(),
+                             force: !!(S.state.gate && S.state.gate.ok === false),
                              video: S.state.video || null }),
     });
     if (!(await r.json()).ok) throw new Error('save');
     S.approved = true;
     refreshActionBar();
-    toast('Corte aprovado — renderizando o final e liberando a Fase 2', 4000);
+    toast('Conferindo o corte — se passar, o final é renderizado em seguida', 4500);
   } catch (e) {
     btn.disabled = false;
     toast('não consegui salvar a aprovação — tente de novo', 3000);
@@ -3889,6 +3964,20 @@ async function sendTimeline() {
                gapBefore: w.gapBefore, gapAfter: w.gapAfter };
     });
   }
+  if (fixDirty()) {
+    /* Sai no formato FINAL do `corrections.json` — sem tradução do outro lado.
+       Os tempos são da FONTE (`srcStart`), não da saída: é o que faz a correção
+       sobreviver a uma mudança de corte, porque remover um trecho não desloca
+       o tempo da palavra dentro da gravação original.
+       `from` é obrigatório e é o que impede a correção de pintar a palavra
+       vizinha — com fala corrida cabem três dentro da tolerância de ±0,15s. */
+    payload.corrections = [...S.fixWords].map(([i, text]) => {
+      const w = S.words[i];
+      const c = { source: w.source, from: w.text, text };
+      if (!S.fixTodas.has(i)) c.srcStart = w.srcStart;
+      return c;
+    });
+  }
   if (breathsDirty()) {
     /* Também PEDIDO, e com uma diferença que precisa chegar do lado de lá: o
        respiro não é apagado, é ENCURTADO. `keep` é o piso e `trim` é quanto sai.
@@ -3939,6 +4028,8 @@ async function sendTimeline() {
   S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
   S.cutWords.clear();
   S.cutBreaths.clear();
+  S.fixWords.clear();
+  S.fixTodas.clear();
   renderTx();
   return true;
 }
@@ -3957,15 +4048,24 @@ $('setupGo').addEventListener('click', async () => {
     try {
       const r = await fetch('/api/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
+        /* `force` é o "aprovar mesmo assim": só existe depois de o portão ter
+           reprovado E o usuário ter lido a lista. O servidor registra em
+           `state.gate.forced` — um corte que passou por cima da conferência
+           não pode ficar indistinguível de um que passou nela. */
         body: JSON.stringify({ type: 'approve-cut',
                                note: ($('setupNote').value || '').trim(),
+                               force: !!(S.state.gate && S.state.gate.ok === false),
                                video: S.state.video || null }),
       });
       if (!(await r.json()).ok) throw new Error('save');
       S.approved = true;
       $('setupNote').value = '';
       refreshActionBar();
-      toast('Corte aprovado — renderizando o final e liberando a Fase 2', 4000);
+      /* O TOAST NÃO PODE PROMETER O QUE AINDA NÃO ACONTECEU. Daqui o portão
+         ainda vai rodar (minutos), e ele pode reprovar — anunciar "renderizando
+         o final" antes disso é a mesma mentira do "✓ Enviado" que não enviava
+         nada. Quem confirma é o `state.gate`, no poll. */
+      toast('Conferindo o corte — se passar, o final é renderizado em seguida', 4500);
     } catch (e) {
       btn.disabled = false;
       toast('não consegui salvar a aprovação — tente de novo', 3000);
@@ -4001,7 +4101,11 @@ $('setupGo').addEventListener('click', async () => {
     style: styleDirty(),
     // `pedidoTxt` entra aqui: sem ele, um pedido só de texto saía com os dois
     // canais falsos, NADA era gravado, e o toast ainda dizia "✓ Enviado".
-    tl: edlDirty() || insertsDirty() || S.notes.length > 0 || wordsDirty() || !!pedidoTxt,
+    // `fixDirty()` entra aqui e NÃO no `caro` abaixo: sem isto, corrigir só o
+    // texto saía com os dois canais falsos, nada era gravado, e o toast ainda
+    // dizia "✓ Enviado" — o mesmo defeito que o `pedidoTxt` já teve.
+    tl: edlDirty() || insertsDirty() || S.notes.length > 0 || wordsDirty()
+        || fixDirty() || !!pedidoTxt,
   };
   const caro = quer.style || edlDirty() || insertsDirty();
   let ok = true;
@@ -4224,11 +4328,23 @@ function renderTx() {
       const w = S.words[i];
       const sp = el('span', 'tw', txt);
       sp.dataset.i = i;
-      sp.textContent = w.text;
+      // A palavra CORRIGIDA mostra o texto novo, não o do transcrito: o painel
+      // tem de ser o que vai para o vídeo, senão editar aqui não é editar nada.
+      const corr = S.fixWords.get(i);
+      sp.textContent = corr === undefined ? w.text : corr;
       if (w.gapBefore === 0 && w.gapAfter === 0) sp.classList.add('tight');
       if (S.cutWords.has(i)) sp.classList.add('cut');
       if (S.selWords.has(i)) sp.classList.add('sel');
-      sp.title = `${fmt(w.outStart)} · folga ${w.gapBefore.toFixed(2)}s / ${w.gapAfter.toFixed(2)}s`;
+      if (corr !== undefined) {
+        sp.classList.add('fixed');
+        if (S.fixTodas.has(i)) sp.classList.add('fixed-all');
+      }
+      sp.title = corr === undefined
+        ? `${fmt(w.outStart)} · folga ${w.gapBefore.toFixed(2)}s / ${w.gapAfter.toFixed(2)}s`
+             + '\n2 cliques para corrigir o texto'
+        : `corrigido: "${w.text}" → "${corr}"`
+             + (S.fixTodas.has(i) ? ' (todas as ocorrências)' : '')
+             + '\n2 cliques para editar · campo vazio desfaz';
       // o respiro entra COMO CHIP no lugar do espaço: ele ocupa tempo no vídeo,
       // então ocupa espaço no texto. Um respiro invisível não se remove.
       const br = breathAt(i);
@@ -4249,12 +4365,18 @@ function renderTx() {
   const n = S.cutWords.size;
   const b = S.cutBreaths.size;
   const partes = [];
+  // A correção vem PRIMEIRO e com verbo próprio: ela não é "para remoção", e
+  // juntar as duas contagens na mesma frase diria que o texto vai ser cortado.
   if (n) partes.push(`${n} palavra${n === 1 ? '' : 's'}`);
   if (b) {
     const ganho = [...S.cutBreaths].reduce((s, i) => s + (breathAt(i)?.trim || 0), 0);
     partes.push(`${b} respiro${b === 1 ? '' : 's'} (−${ganho.toFixed(1)}s)`);
   }
-  $('txCount').textContent = partes.length ? `${partes.join(' · ')} para remoção` : '';
+  const remocao = partes.length ? `${partes.join(' · ')} para remoção` : '';
+  const fix = S.fixWords.size
+    ? `${S.fixWords.size} texto${S.fixWords.size === 1 ? '' : 's'} corrigido${S.fixWords.size === 1 ? '' : 's'}`
+    : '';
+  $('txCount').textContent = [fix, remocao].filter(Boolean).join('  ·  ');
   renderCutMarks();   // a marca segue o texto, mesmo com a timeline recolhida
   markNowWord();
 }
@@ -4318,7 +4440,26 @@ $('txBody').addEventListener('pointerdown', (e) => {
   }
   const sp = e.target.closest('.tw');
   if (!sp) return;
+  if (sp.querySelector('input')) return;   // já está sendo editada
   const i = +sp.dataset.i;
+
+  /* O DUPLO CLIQUE É DETECTADO AQUI, e não com um listener de `dblclick`.
+     Este handler termina em `preventDefault()` para o arraste não selecionar
+     texto da página — e pela spec de Pointer Events, `preventDefault()` num
+     `pointerdown` suprime os eventos de mouse de compatibilidade, `dblclick`
+     incluído. Medido: com o listener de `dblclick` o campo nunca abria, sem
+     nenhum erro no console. Contar o intervalo à mão é o que sobra, e de
+     quebra funciona igual no toque. */
+  const agora = Date.now();
+  if (txClique.i === i && agora - txClique.t < 420) {
+    txClique = { i: null, t: 0 };
+    S.selWords.clear();   // corrigir e "selecionada para corte" se contradizem
+    abrirEdicao(sp);
+    e.preventDefault();
+    return;
+  }
+  txClique = { i, t: agora };
+
   if (e.shiftKey && S.selWords.size) { txPaint(Math.min(...S.selWords), i); return; }
   if (e.metaKey || e.ctrlKey) {
     S.selWords.has(i) ? S.selWords.delete(i) : S.selWords.add(i);
@@ -4330,6 +4471,75 @@ $('txBody').addEventListener('pointerdown', (e) => {
   try { $('txBody').setPointerCapture(e.pointerId); } catch (err) { /* toque */ }
   e.preventDefault();
 });
+
+/* CORRIGIR O TEXTO — duplo clique na palavra.
+   O gesto é duplo clique porque UM clique já é a seleção por arraste que existe
+   para riscar, e as duas coisas convivem no mesmo painel: é lendo que se
+   percebe tanto "essa parte sai" quanto "essa palavra está escrita errada".
+   O campo nasce COM o texto atual e selecionado, então digitar substitui e
+   Enter confirma — o caminho de uma correção é um duplo clique, digitar, Enter. */
+let txClique = { i: null, t: 0 };
+
+function abrirEdicao(sp) {
+  if (sp.querySelector('input')) return;
+  const i = +sp.dataset.i;
+  const w = S.words[i];
+  const atual = S.fixWords.has(i) ? S.fixWords.get(i) : w.text;
+
+  const inp = document.createElement('input');
+  inp.className = 'tw-edit';
+  inp.value = atual;
+  // A largura acompanha o conteúdo: um campo de tamanho fixo empurraria a linha
+  // inteira e a pessoa perderia de vista a frase que está consertando.
+  inp.size = Math.max(4, atual.length + 2);
+  inp.addEventListener('input', () => { inp.size = Math.max(4, inp.value.length + 2); });
+
+  const todas = document.createElement('button');
+  todas.type = 'button';
+  todas.className = 'tw-all' + (S.fixTodas.has(i) ? ' on' : '');
+  todas.textContent = 'todas';
+  // NOME PRÓPRIO, MARCA, JARGÃO — é o caso mais comum, e sem isto "Avelim" →
+  // "Avelin" custaria uma correção por ocorrência. A correção sem `srcStart`
+  // vale para toda ocorrência da palavra naquela fonte.
+  todas.title = `aplicar em todas as vezes que "${w.text}" aparece nesta fonte`;
+  todas.addEventListener('pointerdown', (ev) => {
+    ev.preventDefault(); ev.stopPropagation();
+    todas.classList.toggle('on');
+    inp.focus();
+  });
+
+  const fechar = (confirmar) => {
+    if (!sp.isConnected) return;
+    if (confirmar) {
+      const novo = inp.value.trim();
+      // VAZIO DESFAZ, e não "apaga a palavra da legenda": o gesto de tirar
+      // palavra do vídeo já existe (riscar), e dar dois significados a um campo
+      // vazio faria a pessoa apagar texto achando que estava cancelando.
+      if (!novo || novo === w.text) {
+        S.fixWords.delete(i);
+        S.fixTodas.delete(i);
+      } else {
+        S.fixWords.set(i, novo);
+        todas.classList.contains('on') ? S.fixTodas.add(i) : S.fixTodas.delete(i);
+      }
+    }
+    renderTx();
+    refreshHeader();
+  };
+
+  inp.addEventListener('keydown', (ev) => {
+    ev.stopPropagation();   // senão Backspace no campo risca a palavra selecionada
+    if (ev.key === 'Enter') { ev.preventDefault(); fechar(true); }
+    if (ev.key === 'Escape') { ev.preventDefault(); fechar(false); }
+  });
+  inp.addEventListener('blur', () => fechar(true));
+  inp.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+
+  sp.textContent = '';
+  sp.append(inp, todas);
+  inp.focus();
+  inp.select();
+}
 
 $('txBody').addEventListener('pointermove', (e) => {
   if (!txDrag) return;

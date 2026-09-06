@@ -61,12 +61,55 @@ def corrections(edit: Path) -> list[dict]:
     resultado mora aqui — nunca editando o cache da API, que é a resposta do
     provedor e tem de continuar sendo.
 
-        [{"source": "0012", "srcStart": 43.82, "from": "trabalhar", "text": "avaliar"}]
+        [{"source": "0012", "srcStart": 43.82, "from": "trabalhar", "text": "avaliar"},
+         {"source": "0012",                     "from": "Avelim",    "text": "Avelin"}]
 
-    `srcStart` casa por proximidade (±0.15s), então não precisa ser exato.
+    `srcStart` casa por proximidade (±TOL_FIX), então não precisa ser exato — e
+    OMITIDO quer dizer toda ocorrência da palavra nesta fonte. Ver `fix_for`.
     """
     p = edit / "transcripts" / "corrections.json"
     return json.loads(p.read_text()) if p.exists() else []
+
+
+# ±0,15s. Uma constante com nome porque ela é a RÉGUA da correção, e uma régua
+# escrita em dois arquivos vira duas réguas — o defeito que este repositório já
+# pagou com "três limiares diferentes medindo o mesmo silêncio".
+TOL_FIX = 0.15
+
+
+def _norm(s: str) -> str:
+    return s.lower().strip(" .,;:!?")
+
+
+def fix_for(fixes: list[dict], source: str, start: float, text: str) -> str | None:
+    """A correção que casa ESTA palavra, ou None se nenhuma casa.
+
+    Uma função só, importada por quem monta a LEGENDA (`build`, aqui) e por quem
+    monta o PAINEL que o usuário lê (`cut_words.py`). Enquanto as duas coisas
+    tinham leitores diferentes, o painel mostrava o texto cru do Whisper e o
+    vídeo queimava o corrigido — e a premissa declarada na Regra 14 do SKILL.md
+    ("o que o usuário lê é LITERALMENTE o que entra no vídeo") era falsa no
+    instante em que existisse uma correção. Invisível enquanto correções eram
+    raras e escritas à mão; garantido de aparecer no primeiro uso de um campo de
+    edição na interface.
+
+    `from` é OBRIGATÓRIO e é o que torna isto uma correção e não uma pincelada:
+    com fala corrida cabem três palavras dentro de TOL_FIX, e a primeira versão
+    disto pintou o `a` vizinho de "avaliar" junto.
+
+    `srcStart` é OPCIONAL, e a ausência dele quer dizer TODA ocorrência desta
+    palavra nesta fonte. É o caso mais comum de todos — nome próprio, marca,
+    jargão — e sem isto "Avelim" → "Avelin" custa uma correção por ocorrência.
+    Continua seguro porque `from` ainda tem de casar exatamente.
+    """
+    want = _norm(text)
+    for f in fixes:
+        if f.get("source") != source or _norm(f.get("from", "")) != want:
+            continue
+        st = f.get("srcStart")
+        if st is None or abs(float(st) - start) <= TOL_FIX:
+            return f["text"]
+    return None
 
 
 def build(edit: Path) -> dict:
@@ -104,17 +147,11 @@ def build(edit: Path) -> dict:
             s, e = float(w["start"]), float(w["end"])
             if not (a <= s < b):
                 continue
-            text = w["text"]
-            for f in fixes:
-                # o TEMPO sozinho não identifica uma palavra: com fala corrida
-                # cabem três dentro de 0,15s, e a primeira versão disto pintou
-                # o `a` vizinho de "avaliar" junto. `from` é obrigatório e é o
-                # que torna a correção uma correção, e não uma pincelada.
-                if (f.get("source") == r["source"]
-                        and abs(float(f["srcStart"]) - s) <= 0.15
-                        and f["from"].lower().strip(" .,;:!?") == w["text"].lower().strip(" .,;:!?")):
-                    text = f["text"]
-                    break
+            # `is None`, não `or`: corrigir para "" é apagar a palavra da
+            # legenda sem cortar o áudio, e um `or` leria isso como "nenhuma
+            # correção" e devolveria a palavra errada.
+            fixed = fix_for(fixes, r["source"], s, w["text"])
+            text = w["text"] if fixed is None else fixed
             out.append({
                 "type": "word",
                 "text": text,

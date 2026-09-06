@@ -92,10 +92,24 @@ def rms_db(path: Path, start: float, dur: float) -> float:
 
 
 def audio_scan(path: Path, min_silence: float) -> tuple[list[tuple[float, float]], float, float]:
-    """One decode pass: silences [(start,end)...], overall peak dB, flat factor."""
+    """One decode pass: silences [(start,end)...], overall peak dB, flat factor.
+
+    O limiar é CALIBRADO no próprio render, não os −35 dB fixos de antes. Com o
+    fixo, o "ar morto" que este relatório acusa era medido com uma régua
+    diferente da que o `propose_breaths` usou para decidir o que encurtar — e as
+    duas discordavam em silêncio (o trocadilho é involuntário): numa gravação
+    baixa o −35 chama voz de silêncio e o relatório inventa uma pausa longa que
+    ninguém ouve.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from cut_words import noise_floor_for  # noqa: PLC0415
+        noise = f"{noise_floor_for(path):.0f}dB"
+    except Exception:
+        noise = "-35dB"
     r = subprocess.run(
         ["ffmpeg", "-v", "info", "-i", str(path), "-vn",
-         "-af", f"silencedetect=noise=-35dB:d={min_silence},astats=measure_perchannel=none",
+         "-af", f"silencedetect=noise={noise}:d={min_silence},astats=measure_perchannel=none",
          "-f", "null", "-"],
         capture_output=True, text=True,
     )

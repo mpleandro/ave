@@ -74,10 +74,18 @@ _PALAVRA_COMUM = FUNCIONAIS | {
 }
 
 EDGE = 0.02          # tolerância ao casar borda de região com borda de trecho
-# Quanto o pico dentro do vão pode chegar perto da mediana da VOZ antes de o vão
-# deixar de ser silêncio. 8 dB é a distância entre "room tone" e "alguém falando
-# baixo" no material desta série — abaixo disso, é fala e não se toca.
-VOZ_MARGEM_DB = 8.0
+# Quanto a MÉDIA do vão pode chegar perto da mediana da VOZ antes de o vão
+# deixar de ser silêncio.
+#
+# FRAÇÃO DA FAIXA, não decibéis fixos. Os 8 dB fixos de antes pressupunham uma
+# gravação com bastante distância entre sala e voz; nesta série há 14,1 dB no
+# total (OBS, sala tratada de menos), e 8 dB comiam 43% do alcance útil — a
+# janela que ainda contava como silêncio ficava com 6,1 dB. Metade da faixa é a
+# mesma decisão em qualquer gravação: numa de 40 dB dá 20 dB de margem, numa de
+# 14 dB dá 7.
+VOZ_MARGEM_FRACAO = 0.5
+VOZ_MARGEM_DB = 8.0        # piso e teto da fração, para material extremo
+VOZ_MARGEM_MIN_DB = 5.0
 # Sem transcrito, todo vão entra como RESPIRAÇÃO: é o meio-termo dos três, e
 # errar para o meio é o único erro que não estraga nem o ritmo nem a fala.
 CLASSE_PADRAO = "respiracao"
@@ -139,15 +147,30 @@ def speech_regions(video: Path, start: float, end: float, noise_db: float) -> li
     return out
 
 
-def peak_db(video: Path, a: float, b: float) -> float:
-    """Pico dentro da janela, em dBFS. −99 quando não há nada."""
+def niveis_db(video: Path, a: float, b: float) -> tuple[float, float]:
+    """(pico, média) dentro da janela, em dBFS. (−99, −99) quando não há nada.
+
+    A MÉDIA é a que decide se há fala aqui dentro, e o pico virou só contexto
+    para o relato. A razão está medida: no vão 8,42–10,20 desta série o pico é
+    −37,3 dB e a média é −59,5 dB — 25 dB abaixo da fala normal (−34,5). O pico
+    vem de QUATRO amostras em 170.880 (0,002%), um estalo de boca. Julgando por
+    pico, um clique de 4 amostras faz 1,8s de silêncio passar por fala; julgando
+    por média, a diferença entre sala e voz é inequívoca.
+    """
     r = subprocess.run(
         ["ffmpeg", "-v", "info", "-ss", f"{a:.3f}", "-t", f"{max(0.01, b - a):.3f}",
          "-i", str(video), "-vn", "-af", "volumedetect", "-f", "null", "-"],
         capture_output=True, text=True,
     )
-    m = re.search(r"max_volume:\s*(-?[\d.]+) dB", r.stderr)
-    return float(m.group(1)) if m else -99.0
+    mp = re.search(r"max_volume:\s*(-?[\d.]+) dB", r.stderr)
+    mm = re.search(r"mean_volume:\s*(-?[\d.]+) dB", r.stderr)
+    return (float(mp.group(1)) if mp else -99.0,
+            float(mm.group(1)) if mm else -99.0)
+
+
+def peak_db(video: Path, a: float, b: float) -> float:
+    """Compatibilidade: só o pico. Quem decide usa `niveis_db`."""
+    return niveis_db(video, a, b)[0]
 
 
 def gaps_inside(regions: list[tuple[float, float]], a: float, b: float,
@@ -325,11 +348,18 @@ def avaliar(edit: Path, edl: dict, ritmo: str, verbose: bool = True) -> tuple[li
                 continue
             if dur - keep <= 0.02:
                 continue
-            pico = peak_db(path, at, to)
-            if mediana and pico >= mediana - VOZ_MARGEM_DB:
-                # segunda opinião: tem fala aqui dentro, o detector é que errou
+            pico, media = niveis_db(path, at, to)
+            # a margem é fração da faixa MEDIDA (piso→voz), presa entre um
+            # mínimo e um máximo — ver VOZ_MARGEM_FRACAO
+            faixa = (mediana - piso) if (mediana and piso and piso < mediana) else 16.0
+            margem = max(VOZ_MARGEM_MIN_DB, min(VOZ_MARGEM_DB, faixa * VOZ_MARGEM_FRACAO))
+            if mediana and media >= mediana - margem:
+                # segunda opinião: tem fala aqui dentro, o detector é que errou.
+                # Quem responde é a MÉDIA — o pico entra só no relato, porque um
+                # estalo de 4 amostras tem pico de fala e energia de silêncio.
                 linhas.append((at, dur, classe, palavra,
-                               f"preservado — pico {pico:.0f} dBFS (voz ~{mediana:.0f})"))
+                               f"preservado — média {media:.0f} dBFS "
+                               f"(voz ~{mediana:.0f}, margem {margem:.0f})"))
                 continue
             # TERCEIRA OPINIÃO, só para hesitação: a régua até aqui só mediu o
             # VÃO — nunca ouviu se a frase continua igual depois dele. Uma
