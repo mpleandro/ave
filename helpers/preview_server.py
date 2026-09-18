@@ -775,7 +775,7 @@ class Handler(BaseHTTPRequestHandler):
         # de um corte já refeito — e o pior tipo de defeito é o que o usuário
         # não consegue mais encontrar no vídeo que está vendo.
         if name == "preview_edits.json":
-            self._patch_state(gate=None)
+            self._patch_state()
         started = self._maybe_auto_apply(name)
         self._json({"ok": True, "file": str(out), "applying": started})
 
@@ -939,45 +939,38 @@ class Handler(BaseHTTPRequestHandler):
         tmp.replace(p)
 
     def _gate_then_approve(self) -> bool:
-        """O PORTÃO roda ANTES das consequências da aprovação.
+        """A CONFERÊNCIA roda, mas NUNCA aparece para o usuário nem o trava.
 
-        Ele existia e NINGUÉM o chamava — nem helper, nem servidor. Aprovar
-        disparava direto o encode pleno e a aba Estilo, e tudo o que o
-        `portao_fase1.py` sabe conferir dependia de uma sessão da IA lembrar de
-        rodá-lo à mão. É exatamente a doença que o próprio docstring dele
-        descreve: "recomendação que se pode pular é recomendação que se pula".
-        A diferença entre recomendação e portão é o exit code — e o exit code
-        só vale se alguém o LER.
+        Decisão do usuário (2026-09-18), e ela nasceu de uma aprovação travada
+        por três achados que a IA já tinha medido e descartado um a um: duas
+        pausas retóricas que o corte existia para preservar e um "e" de emenda
+        cuja transcrição isolada saiu limpa. A tela dizia "3 defeitos no corte",
+        o encode não rodava, e o usuário ficou sem conseguir ver o próprio
+        trabalho — *"tem uma mensagem de erro na tela que me impede de ver o
+        resultado"*.
 
-        Reprovado, a aprovação não acontece: sem encode, sem aba Estilo. Os
-        defeitos vão para `state.gate`, com timestamp, e o botão vira "Aprovar
-        mesmo assim" — porque a palavra final é de quem gravou (Hard Rule 18) e
-        um portão sem porta é uma parede.
+        O erro de desenho não era o portão: era PUBLICAR o parecer dele. Um
+        detector acústico fala em probabilidade, e traduzir isso para a palavra
+        "defeito", na barra de ação de quem só quer ver o vídeo, transforma
+        ruído de instrumento em veto ao trabalho. Quem sabe ler o parecer é a
+        IA — ela roda os mesmos auditores ANTES de mostrar o corte (Fase 1,
+        passo 6b) e leva ao usuário, em português e no chat, só o que sobrou de
+        verdade.
 
-        Roda em segundo plano: a escuta do corte leva minutos, e a resposta do
-        POST não pode esperar por ela. O andamento sai pelo `progress.json`,
-        que a interface já consulta.
+        Então: aprovar SEMPRE aprova. O encode e a aba Estilo saem na hora, sem
+        esperar a conferência. O relatório é gravado em `gate_report.json` para
+        a IA ler, e `state.gate` nunca mais é escrito — é o campo que a
+        interface renderizava.
         """
-        forcado = False
-        try:
-            forcado = bool(json.loads(
-                (self.root / "preview_approval.json").read_text()).get("force"))
-        except (OSError, json.JSONDecodeError):
-            pass
-        if forcado:
-            # O usuário JÁ viu os defeitos e decidiu mesmo assim. Registrar o
-            # `forced` importa: o corte entregue passou por cima do portão, e
-            # isso tem de ficar no estado, não só na memória de quem clicou.
-            self._patch_state(gate={"ok": True, "forced": True})
-            self._open_style_tab()
-            return self._encode_full_res()
+        self._open_style_tab()
+        ok = self._encode_full_res()
 
         root = self.root
         gate = Path(__file__).resolve().parent / "portao_fase1.py"
 
         def run() -> None:
-            progress.begin(root, "portao",
-                           "Conferindo o corte antes de liberar", ai=False)
+            """Confere em segundo plano, para o RELATÓRIO — nunca para a tela."""
+            rel: dict
             try:
                 r = subprocess.run([helper_python(), str(gate), str(root), "--json"],
                                    capture_output=True, text=True, timeout=2400)
@@ -985,32 +978,16 @@ class Handler(BaseHTTPRequestHandler):
                 rel = json.loads(saida[saida.index("{"):saida.rindex("}") + 1])
             except (OSError, ValueError, json.JSONDecodeError,
                     subprocess.TimeoutExpired) as exc:
-                # PORTÃO QUEBRADO NÃO É PORTÃO FECHADO. Não conseguir CONFERIR é
-                # diferente de reprovar: o usuário viu o corte e disse que está
-                # bom, e travá-lo por uma falha nossa seria transformar um bug
-                # de ferramenta em veto ao trabalho dele. Solta, e DIZ que não
-                # conferiu — em vez de deixar passar calado por "ok".
-                self._patch_state(gate={"ok": True, "erro": str(exc)[:200]})
-                progress.done(root, "não consegui conferir — aprovado assim mesmo")
-                self._open_style_tab()
-                self._encode_full_res()
-                return
-            if rel.get("ok"):
-                self._patch_state(gate={"ok": True})
-                progress.done(root, "Corte conferido — sem defeitos")
-                self._open_style_tab()
-                self._encode_full_res()
-                return
-            faltas = rel.get("faltas", [])
-            bloqueiam = [f for f in faltas if not f.get("aviso")]
-            self._patch_state(
-                gate={"ok": False, "faltas": faltas},
-                message=f"{len(bloqueiam)} defeito(s) no corte — confira e decida")
-            progress.fail(root, f"{len(bloqueiam)} defeito(s) bloqueando a aprovação "
-                                f"— veja a lista na barra de ação")
+                rel = {"ok": None, "erro": str(exc)[:200]}
+            rel["at"] = time.time()
+            try:
+                (root / "gate_report.json").write_text(
+                    json.dumps(rel, ensure_ascii=False, indent=1))
+            except OSError:
+                pass
 
         threading.Thread(target=run, daemon=True).start()
-        return True
+        return ok
 
     def _open_style_tab(self) -> None:
         """Aprovou → a aba Estilo passa a pedir as escolhas, na hora.

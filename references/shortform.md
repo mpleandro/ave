@@ -539,6 +539,41 @@ Protocolo (decidido pelo usuário em 2026-08-18):
 4. Confira no render: energia subindo nas janelas anteriores à virada
    (`volumedetect` em janelas de 0,3s) e pico dentro de ±2 frames dela.
 
+## Zoom in/out — o ritmo é da FALA, não da emenda
+
+`zoomCuts`/`zoomAuto` animam a escala do `#a-roll` por SEGMENTO, e o segmento
+saía das junções do corte (`jcut_timeline`). Isso é o mínimo garantido e quase
+sempre é pouco: um corte de 3 trechos dá **2 trocas de plano em 41s**, que lê
+como câmera parada — exatamente o que o `camera_parts` existe para evitar. O
+ritmo da câmera é o do RACIOCÍNIO: uma tomada única pode ter cinco mudanças de
+contexto e nenhuma emenda.
+
+**`segments[]` no `edit-data.json` vence as junções do EDL.** Monte-o das pausas
+REAIS do corte (`captions.json`, que já está no relógio do corte):
+
+1. Nova fronteira onde a folga entre palavras é **≥ 0,42s** — é a respiração
+   entre grupos de frase, e é onde o espectador aceita a troca de plano.
+2. **Piso de 2,0s** por plano: abaixo disso a troca pisca e lê como falha.
+3. Plano acima de **~5,2s** é quebrado na MAIOR pausa interna dele, repetindo
+   até caber. Sem este passo sobram planos de 8s no meio de um corte já rápido.
+4. Bordas encostadas: o primeiro começa em 0, cada um termina onde o próximo
+   começa, o último fecha na duração.
+
+Medido no projeto Carrossel: 3 junções de corte → **12 planos**, um a cada
+~3,5s, num vídeo de 41,5s.
+
+**A supressão da tela dividida é por JANELA, nunca global.** A câmera e a tela
+dividida brigam pelo mesmo transform, então os planos que caem DENTRO de uma
+janela de split saem. O código desligava a câmera no vídeo inteiro só por
+existir um `splitInserts`: uma janela de 8s deixava **33 segundos parados**, e o
+custo só aparecia assistindo.
+
+**Toda virada de plano leva som**, senão o zoom lê como instabilidade e não como
+corte. Uma deixa em `sfxCues` por fronteira: `kind: "camera"` (vol ~0,17) na
+virada comum, e o acento forte reservado para a virada de estrutura — a saída da
+tela dividida, a entrada do gancho. Dentro do split, onde a câmera está parada,
+o som cai para um toque (`element`, ~0,10) ou sai.
+
 ## Motor de transições (`transitions[].tipo`)
 
 `flash` deixou de ser a única opção. Cada entrada de `transitions[]` aceita um

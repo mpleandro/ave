@@ -127,7 +127,7 @@ const CARTELAS = [
   ['adesivo', 'Adesivo'],
   // 'noticia' NÃO mora aqui: virou elemento independente em STYLE_CATALOG.elements
   // (ela e a Caixinha disputavam a mesma zona alta da tela sem nenhuma arbitragem —
-  // ver elLocked() e a trava cruzada elemento↔headline).
+  // ver limpaConflitoZonaAlta(), que hoje resolve por substituição).
   ['capa', 'Capa sólida'], ['capa_blur', 'Capa desfocada'], ['cortina', 'Cortina'],
   ['meia_tela', 'Meia-tela'], ['moldura', 'Moldura'], ['contagem', 'Contagem'],
   ['knockout', 'Knockout'], ['poster', 'Pôster tipográfico'], ['aspas', 'Aspas'],
@@ -136,8 +136,8 @@ const CARTELAS = [
 const CT_IDS = new Set(CARTELAS.map((c) => c[0]));
 // As dez cartelas "banda" (cheia:false, entram SOBRE o vídeo) — disputam a
 // mesma zona alta que a Caixinha e a Notícia. Lista explícita, não um slice
-// da ordem do array: a trava não pode quebrar em silêncio se alguém reordenar
-// CARTELAS por outro motivo.
+// da ordem do array: a substituição não pode quebrar em silêncio se alguém
+// reordenar CARTELAS por outro motivo.
 const CARTELA_BANDA_IDS = new Set(['fita', 'jornal', 'terminal', 'alerta', 'placar',
                                     'sombra_longa', 'neon', 'balao', 'filete', 'adesivo']);
 
@@ -329,12 +329,6 @@ const STYLE_CATALOG = {
       icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="3.4" width="6" height="9.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9.6" y="1.9" width="5.2" height="12.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8.4 8h.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
     },
     {
-      id: 'flashCut',
-      name: 'Flash na transição',
-      def: false,
-      icon: '<svg viewBox="0 0 16 16"><path d="M3 13.2L13 3.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/><path d="M6.6 14L9.4 11.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/><path d="M6.6 4.8L3.8 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/></svg>',
-    },
-    {
       id: 'sfx',
       /* Efeitos LOCAIS, da biblioteca em assets/sfx/. Vem antes da geração por
        * IA de propósito: é o caminho que não custa token nem espera, e a
@@ -419,8 +413,8 @@ const STYLE_CATALOG = {
     {
       /* NOTÍCIA — cartela banda (motor `cartela`) que virou elemento por
        * disputar a mesma zona alta que a Caixinha, sem nenhuma arbitragem
-       * antes disto. A trava contra Headline (qualquer cartela banda, `cheia:
-       * false`) mora em elLocked(). */
+       * antes disto. Ligá-la zera o Headline (e vice-versa) em
+       * limpaConflitoZonaAlta(): as duas usam o MESMO `hook.style`. */
       id: 'noticia',
       name: 'Notícia',
       def: false,
@@ -1467,8 +1461,6 @@ let S = {
  * A resposta vem do servidor (`keys`), não de um campo fixo no catálogo:
  * assim a trava some sozinha quando a chave entra, sem ninguém ter de lembrar
  * de destravar nada. */
-const ZONA_ALTA_MSG = 'a caixinha e o headline disputam a mesma zona da tela — desligue um dos dois';
-
 function elLocked(e) {
   if (e.needsKey) {
     const keys = S.keys || {};
@@ -1476,29 +1468,37 @@ function elLocked(e) {
     // dado travaria a opção no primeiro segundo de cada carregamento.
     if (e.needsKey in keys && !keys[e.needsKey]) return e.keyMsg || 'Falta a chave de API para isto.';
   }
-  /* ZONA ALTA: Caixinha, Notícia e qualquer cartela "banda" ocupam o mesmo
-   * canto superior da tela por padrão (top:300, janela do gancho) — e por
-   * decisão do usuário a saída é TRAVAR a combinação, não reposicionar por
-   * conta própria. Ver CARTELA_BANDA_IDS.
+  /* ZONA ALTA: a trava virou SUBSTITUIÇÃO (decisão do usuário, 2026-09-15).
    *
-   * Caixinha × Notícia saiu daqui: as duas viraram opções do MESMO radio de
-   * formato (ver EDIT_ELEMENTS), e escolher uma já desliga a outra. Mantida,
-   * a trava responderia sobre o estado ANTERIOR ao clique — travando um
-   * formato porque o formato que ele está prestes a substituir está ligado.
-   * O que sobra é o conflito com o outro GRUPO, o headline, que é real. */
-  if (e.id === 'caixinha' && CARTELA_BANDA_IDS.has(S.style.headline)) {
-    return ZONA_ALTA_MSG;
-  }
-  if (e.id === 'noticia') {
-    /* Notícia É uma cartela banda que só mudou de endereço na interface — ela
-     * ocupa o MESMO hook/trilha que qualquer headline do radio (mesmo motor
-     * `cartela`, ver o branch `elif "noticia" in pecas` em
-     * compose_shortform.py). As duas nunca coexistem tecnicamente, então
-     * escolher um headline real desliga a porta da Notícia até ele voltar a
-     * "Nenhum". */
-    if (S.style.headline) return 'desligue o headline escolhido em Headline para ligar a Notícia';
-  }
+   * Caixinha, Notícia e as cartelas "banda" continuam disputando o mesmo canto
+   * superior (top:300, janela do gancho) — isso é física do render e não mudou.
+   * O que mudou é a resposta da interface: em vez de DESABILITAR a opção em
+   * conflito, escolher uma desliga a outra (ver `limpaConflitoZonaAlta`).
+   *
+   * O motivo é que a trava não tinha saída visível. "Nenhum" é a última opção
+   * de uma lista de 31 headlines, e até chegar nela o usuário via Notícia
+   * permanentemente apagada — com uma dica que pedia justamente o passo que ele
+   * não encontrava. Desabilitar explica o conflito depois que a pessoa já
+   * desistiu; substituir resolve no próprio clique. */
   return '';
+}
+
+/* Escolher na zona alta DESLIGA o que colide, em vez de impedir o clique.
+ *
+ * Só desliga o que colide de verdade: a Notícia é tecnicamente uma cartela
+ * banda (mesmo `hook.style`, mesma trilha), então ela e QUALQUER headline
+ * nunca coexistem; a Caixinha é um elemento próprio e só briga com as cartelas
+ * BANDA — com uma cartela de tela cheia ou com os onze estilos clássicos ela
+ * convive, e essa combinação continua alcançável. */
+function limpaConflitoZonaAlta(origem) {
+  const els = S.style.elements;
+  if (origem === 'headline') {
+    if (S.style.headline) els.noticia = false;
+    if (CARTELA_BANDA_IDS.has(S.style.headline)) els.caixinha = false;
+  } else {
+    if (els.noticia) S.style.headline = '';
+    if (els.caixinha && CARTELA_BANDA_IDS.has(S.style.headline)) S.style.headline = '';
+  }
 }
 
 function defaultStyle() {
@@ -1739,25 +1739,6 @@ const styleDirty = () => styleState() !== '';
 /* A BARRA DE AÇÃO nomeia a CONSEQUÊNCIA, não o verbo. "Enviar" não distingue
  * mandar duas marcações de disparar um render de minutos, e essas duas coisas
  * não podem custar o mesmo clique sem aviso. */
-/* O defeito em UMA linha, e com o TEMPO na frente. O portão devolve `t` em
-   segundos do corte quando sabe onde é (a maioria dos casos); sem `t` o defeito
-   é do plano, não do render, e não tem onde ser ouvido. */
-function gateQuando(f) {
-  const t = f && f.t;
-  if (typeof t !== 'number') return '        ';
-  return `${fmt(t)} `;
-}
-/* O resumo da barra: quantos, de que tipo. A lista inteira vive no `title` —
-   uma barra de ação com seis linhas de defeito empurra a timeline para fora da
-   tela, que é o oposto de ajudar a encontrá-los. */
-function gateResumo(bloq) {
-  if (!bloq.length) return 'só avisos — confira antes de aprovar';
-  const tipos = [...new Set(bloq.map((f) => f.check).filter(Boolean))];
-  const onde = bloq.map(gateQuando).map((x) => x.trim()).filter(Boolean).slice(0, 3);
-  return `${tipos.join(', ')}${onde.length ? ` · em ${onde.join(', ')}` : ''}`
-       + ' — passe o mouse para a lista';
-}
-
 function refreshActionBar() {
   const bar = $('actionBar');
   if (!bar) return;
@@ -1820,27 +1801,22 @@ function refreshActionBar() {
   go.dataset.mode = podeAprovar ? 'approve' : '';
   go.classList.toggle('aprovar', podeAprovar);
   if (podeAprovar) {
-    /* O PARECER DO PORTÃO, quando ele reprovou. A aprovação não aconteceu —
-       nem encode, nem aba Estilo — e o usuário precisa de duas coisas aqui: o
-       QUE está errado (com o tempo, para ir ouvir) e a porta de saída. A porta
-       existe porque a palavra final é de quem gravou: o detector confunde
-       anáfora com repetição, e nenhum instrumento sabe a intenção de quem
-       falou. Portão sem porta é parede. */
-    const g = S.state.gate;
-    const reprovou = !!(g && g.ok === false);
-    const bloq = reprovou ? (g.faltas || []).filter((f) => !f.aviso) : [];
-    go.classList.toggle('forcar', reprovou);
+    /* APROVAR SEMPRE APROVA. A conferência automática continua rodando, mas
+       para o RELATÓRIO da IA (`gate_report.json`), nunca para esta barra.
+
+       Decisão do usuário (2026-09-18), e ela nasceu de uma aprovação travada
+       por três achados que a IA já tinha medido e descartado: duas pausas
+       retóricas que o corte existia para preservar e um "e" de emenda cuja
+       transcrição isolada saiu limpa. A tela dizia "3 defeitos no corte", o
+       encode não rodava, e ele ficou sem conseguir ver o próprio trabalho.
+
+       O erro não era conferir — era PUBLICAR o parecer. Um detector acústico
+       fala em probabilidade, e imprimir isso como "defeito" na barra de quem
+       só quer ver o vídeo transforma ruído de instrumento em veto ao trabalho.
+       Quem sabe ler o parecer é a IA: ela roda os mesmos auditores antes de
+       mostrar o corte e traz, em português e no chat, só o que sobrou. */
+    go.classList.remove('forcar');
     go.disabled = false;
-    if (reprovou) {
-      $('actionCount').textContent = bloq.length === 1
-        ? '1 defeito no corte' : `${bloq.length} defeitos no corte`;
-      $('actionWhat').textContent = gateResumo(bloq);
-      go.innerHTML = 'Aprovar mesmo assim';
-      go.title = 'O corte não passou na conferência — aprove só depois de ouvir os '
-               + 'trechos apontados:\n\n'
-               + (g.faltas || []).map((f) => `${gateQuando(f)} ${f.problema}`).join('\n');
-      return;
-    }
     $('actionCount').textContent = 'Fase 1 pronta para aprovação';
     go.innerHTML = 'Aprovar corte';
     go.title = 'Confere o corte e, passando, libera o final e as camadas do render';
@@ -1933,7 +1909,7 @@ async function poll() {
     // de deixar o usuário descobrir por 404 em cada botão novo
     if (data.serverStale && !S.staleWarned) {
       S.staleWarned = true;
-      toast('O servidor de preview está desatualizado em relação ao editor — reinicie-o para liberar o que é novo', 9000);
+      toast('O editor foi atualizado — feche e abra o Avelin para usar o que é novo', 9000);
     }
     checkProcessing();
     if (sig !== S.lastSig) {
@@ -1942,7 +1918,7 @@ async function poll() {
         S.lastSig = sig;
         await applyState(data);
       } else {
-        toast('Novo estado disponível — salve ou descarte seus ajustes para atualizar', 4000);
+        toast('O vídeo mudou — salve ou descarte seus ajustes para ver a versão nova', 4000);
       }
     }
   } catch (e) { /* server restarting; keep polling */ }
@@ -2529,8 +2505,6 @@ const LAYERS = [
     ico: 'captions', groups: ['captions'] },
   { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
     ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
-  { id: 'transicoes', name: 'Transições', sub: 'Cortes, fades e transições entre clipes',
-    ico: 'notes', elements: ['flashCut'] },
   { id: 'trilha', name: 'Trilha & mixagem', sub: 'Áudio, níveis, ducking e mixagem final',
     ico: 'music', elements: ['sfx', 'musicAI'] },
 ];
@@ -2648,23 +2622,10 @@ function renderSetup() {
       // hora de renderizar.
       let off = PORTED[group] && !PORTED[group].has(o.id);
       let offMsg = 'ainda não disponível';
-      /* ZONA ALTA (ver elLocked()): "Nenhum" (id vazio) fica sempre disponível
-       * — é a porta de saída de quem quer desligar um headline para ligar a
-       * Notícia ou a Caixinha. */
-      if (group === 'headlines' && o.id) {
-        if (S.style.elements.noticia) {
-          off = true;
-          offMsg = 'desligue a Notícia em Formato para escolher um headline';
-        } else if (CARTELA_BANDA_IDS.has(o.id) && S.style.elements.caixinha) {
-          off = true;
-          offMsg = ZONA_ALTA_MSG;
-        }
-      }
-      /* No radio de formato, um dos três de `elements` ainda pode estar
-         travado por CONFLITO COM O HEADLINE (a Notícia e a Caixinha disputam a
-         zona alta com uma cartela banda) — o que `elLocked` já sabe responder.
-         O que ele NÃO precisa mais arbitrar é caixinha × notícia entre si: o
-         radio torna essa combinação impossível de construir. */
+      /* ZONA ALTA: nada aqui desabilita mais por conflito — escolher desliga o
+         que colide (ver limpaConflitoZonaAlta). O único `off` que sobra é o de
+         estilo não portado, que é sobre o RENDER não existir, não sobre a
+         combinação ser proibida. */
       if (group === 'edits' && EDIT_ELEMENTS.includes(o.id)) {
         const trava = elLocked(o);
         if (trava) { off = true; offMsg = trava.split('\n')[0]; }
@@ -2719,7 +2680,7 @@ function renderSetup() {
       if (!e) continue;
       const trava = elLocked(e);
       const on = !!S.style.elements[e.id] && !trava;
-      /* Os que sobraram aqui (tracking, zoom, flash, sfx, trilha) são
+      /* Os que sobraram aqui (tracking, zoom, sfx, trilha) são
          liga/desliga INDEPENDENTE de verdade, e continuam a fileira de chips.
          Os três que tinham prévia viraram opções do radio de formato — quem
          desenha o `mock` deles agora é `radios()`. */
@@ -2874,6 +2835,7 @@ $('layersPanel').addEventListener('click', (e) => {
       // quadro cheio. Deixar um `split` anterior de pé mandaria os dois ao
       // render — a combinação que o radio existe para negar.
       S.style.edit = EDIT_ELEMENTS.includes(id) ? 'limpa' : id;
+      limpaConflitoZonaAlta('formato');
       LIVE.hookKey = null;
       renderSetup();
       return;
@@ -2881,6 +2843,7 @@ $('layersPanel').addEventListener('click', (e) => {
     const key = {headlines: 'headline', captions: 'captions'}[opt.dataset.group];
     S.style[key] = opt.dataset.id;
     const doHeadline = opt.dataset.group === 'headlines';
+    if (doHeadline) limpaConflitoZonaAlta('headline');
     /* ESCOLHER TEM DE MOSTRAR. O gancho vive nos primeiros segundos do corte;
        com o ponteiro em 00:40 o usuário clicaria num layout e o vídeo não
        mudaria nada — escolher sem ver a escolha é o mesmo que não ter
@@ -3801,16 +3764,15 @@ $('btnApprove').addEventListener('click', async () => {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'approve-cut',
                              note: ($('approveNote').value || '').trim(),
-                             force: !!(S.state.gate && S.state.gate.ok === false),
                              video: S.state.video || null }),
     });
     if (!(await r.json()).ok) throw new Error('save');
     S.approved = true;
     refreshActionBar();
-    toast('Conferindo o corte — se passar, o final é renderizado em seguida', 4500);
+    toast('Corte aprovado — renderizando o final', 4500);
   } catch (e) {
     btn.disabled = false;
-    toast('não consegui salvar a aprovação — tente de novo', 3000);
+    toast('Não consegui registrar a aprovação — tente de novo', 3000);
   }
 });
 
@@ -4048,27 +4010,22 @@ $('setupGo').addEventListener('click', async () => {
     try {
       const r = await fetch('/api/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        /* `force` é o "aprovar mesmo assim": só existe depois de o portão ter
-           reprovado E o usuário ter lido a lista. O servidor registra em
-           `state.gate.forced` — um corte que passou por cima da conferência
-           não pode ficar indistinguível de um que passou nela. */
+        /* Sem `force`: aprovar aprova. A conferência roda em segundo plano
+           para o relatório da IA e nunca recusa a aprovação do usuário. */
         body: JSON.stringify({ type: 'approve-cut',
                                note: ($('setupNote').value || '').trim(),
-                               force: !!(S.state.gate && S.state.gate.ok === false),
                                video: S.state.video || null }),
       });
       if (!(await r.json()).ok) throw new Error('save');
       S.approved = true;
       $('setupNote').value = '';
       refreshActionBar();
-      /* O TOAST NÃO PODE PROMETER O QUE AINDA NÃO ACONTECEU. Daqui o portão
-         ainda vai rodar (minutos), e ele pode reprovar — anunciar "renderizando
-         o final" antes disso é a mesma mentira do "✓ Enviado" que não enviava
-         nada. Quem confirma é o `state.gate`, no poll. */
-      toast('Conferindo o corte — se passar, o final é renderizado em seguida', 4500);
+      /* Agora o encode começa JUNTO com a aprovação, então o toast pode
+         prometê-lo: nada mais pode recusar o que o usuário acabou de aprovar. */
+      toast('Corte aprovado — renderizando o final', 4500);
     } catch (e) {
       btn.disabled = false;
-      toast('não consegui salvar a aprovação — tente de novo', 3000);
+      toast('Não consegui registrar a aprovação — tente de novo', 3000);
     }
     return;
   }
@@ -4122,7 +4079,7 @@ $('setupGo').addEventListener('click', async () => {
     S.style.note = '';
   }
   refreshActionBar();
-  toast(!ok ? 'Erro ao enviar — o servidor está de pé?'
+  toast(!ok ? 'Não consegui enviar agora — recarregue a página (F5) e tente de novo'
     : S.lastApplying ? '✓ Enviado — trabalhando, acompanhe na barra de progresso'
     : 'Pedido salvo — aguardando uma sessão da IA executar', 5000);
 });
@@ -4850,7 +4807,7 @@ async function doExport() {
     const rede = e && (e.name === 'TypeError' || /fetch/i.test(e.message || ''));
     toast(rede
       ? 'O servidor reiniciou — recarregue a página (F5) e exporte de novo'
-      : `Não consegui exportar: ${e.message}`, 6000);
+      : 'Não consegui exportar o vídeo — tente de novo', 6000);
   } finally {
     b.classList.remove('busy');
     lab.textContent = textoOriginal;
@@ -4988,14 +4945,14 @@ async function openProject(path, create) {
       if (d.canCreate && confirm(`Criar um projeto novo em ${path}?`)) {
         return openProject(path, true);
       }
-      toast(d.error || 'não consegui abrir', 5000);
+      toast(d.error || 'Não consegui abrir essa pasta', 5000);
       return false;
     }
     closeBrowser();
     await refreshNow();
     return true;
   } catch (e) {
-    toast(`não consegui abrir: ${e.message}`, 5000);
+    toast('Não consegui abrir essa pasta — confira se o caminho existe', 5000);
     return false;
   }
 }
@@ -5023,8 +4980,8 @@ async function handleFile(file) {
       body: JSON.stringify({ name: file.name, size: file.size }),
     });
     d = await res.json();
-    if (!res.ok && !d.needUpload) { dzBusy(false); dzMsg(d.error || 'não deu', true); return; }
-  } catch (e) { dzBusy(false); dzMsg(e.message, true); return; }
+    if (!res.ok && !d.needUpload) { dzBusy(false); dzMsg(d.error || 'Não consegui abrir esse vídeo', true); return; }
+  } catch (e) { dzBusy(false); dzMsg('Não consegui abrir esse vídeo — tente de novo', true); return; }
 
   if (d.needUpload) {
     // Não achou no disco: agora sim os bytes sobem. XHR e não fetch porque só
@@ -5045,7 +5002,7 @@ async function handleFile(file) {
         x.onerror = () => fail(new Error('a transferência falhou'));
         x.send(file);
       });
-    } catch (e) { dzBusy(false); dzMsg(e.message, true); return; }
+    } catch (e) { dzBusy(false); dzMsg('Não consegui carregar esse arquivo — tente de novo', true); return; }
   }
   dzBusy(false);
   dzMsg('');
@@ -5071,12 +5028,12 @@ async function handleDirEntry(entry) {
     const d = await res.json();
     dzBusy(false);
     if (!res.ok) {
-      dzMsg(`${d.error || 'não achei'} — use “selecione uma pasta”`, true);
+      dzMsg('Não achei esse arquivo no disco — use “selecione uma pasta”', true);
       return;
     }
     dzMsg('');
     await refreshNow();
-  } catch (e) { dzBusy(false); dzMsg(e.message, true); }
+  } catch (e) { dzBusy(false); dzMsg('Não consegui abrir isso — tente de novo', true); }
 }
 
 function wireDropzone() {
@@ -5146,7 +5103,7 @@ async function browseTo(path) {
   let d;
   try {
     d = await (await fetch(`/api/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`)).json();
-  } catch (e) { toast(`não consegui listar: ${e.message}`, 4000); return; }
+  } catch (e) { toast('Não consegui ler essa pasta', 4000); return; }
   if (d.error) { toast(d.error, 4000); return; }
   brPath = d.path;
   // Encurta pelo MEIO: num caminho longo quem identifica onde você está é o
