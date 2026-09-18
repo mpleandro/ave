@@ -481,7 +481,7 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   centre-anchored cousin).
 - **Elementos da edição** — checkboxes, e agora só o que é liga/desliga de
   verdade: `tracking` (movimento de tracking), `zoomAuto` (automação de zoom
-  in), `zoomCuts` (zoom in/out nos cortes), `flashCut` (flash na transição),
+  in), `zoomCuts` (zoom in/out nos cortes),
   `sfx` (efeitos sonoros), `musicAI` (trilha sonora com IA), mais o campo de
   observação livre. Caixinha, Broll Overlay e Notícia **não estão mais aqui** —
   viraram opções do radio de Formato acima; continuam gravadas em `elements`

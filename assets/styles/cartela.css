@@ -350,15 +350,22 @@
    (branco, a não ser que o destaque seja claro demais para segurá-lo) — os
    layouts antigos que pintam sobre o accent seguem no `--hl-sobre` fixo de
    propósito: medi-los agora trocaria o desenho de quem já entregou vídeo. */
-.ave-cartela.ct-noticia .ct-bloco { left: 0; right: 0; text-align: left; }
-/* DE BORDA A BORDA, e sem canto arredondado: é o que separa "captura de tela"
-   de "cartão bonito". Um cartão flutuante com margem lê como peça de design;
-   a captura que encosta nas duas bordas lê como algo que estava na tela de
-   alguém — e é essa segunda leitura que faz a manchete parecer notícia. Para
-   trazer o cartão de volta bastam dois números: `left/right` no bloco e o
-   `border-radius` aqui. */
+.ave-cartela.ct-noticia .ct-bloco {
+  left: var(--nt-inset, 0px);
+  right: var(--nt-inset, 0px);
+  text-align: left;
+}
+/* DE BORDA A BORDA POR PADRÃO, e sem canto arredondado: é o que separa
+   "captura de tela" de "cartão bonito". Um cartão flutuante com margem lê como
+   peça de design; a captura que encosta nas duas bordas lê como algo que estava
+   na tela de alguém — e é essa segunda leitura que faz a manchete parecer
+   notícia.
+   Os dois números que trazem o cartão de volta agora são DADO, não edição de
+   folha: `hook.inset` (margem lateral) e `hook.radius`. Zerados, o desenho é o
+   de sempre — nenhum vídeo já entregue muda. Quem estreitar o card precisa
+   estreitar `hook.safeW` junto, senão a manchete transborda. */
 .ave-cartela.ct-noticia .ct-app {
-  border-radius: 0;
+  border-radius: var(--nt-radius, 0px);
   overflow: hidden;
   box-shadow: 0 calc(22px * var(--hl-scale)) calc(58px * var(--hl-scale)) rgb(0 0 0 / 0.5);
 }

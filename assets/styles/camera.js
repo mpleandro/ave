@@ -1,4 +1,4 @@
-/* Câmera dinâmica e flash na transição — compartilhado com a prévia do editor.
+/* Câmera dinâmica — compartilhada com a prévia do editor.
  *
  * Três partes independentes, cada uma um item da aba Estilo:
  *   zoomCuts  — zoom duro que MUDA a cada corte (~1.10–1.22, ciclando)
@@ -39,18 +39,5 @@
     return tl;
   }
 
-  /* O feixe ANTECIPA o corte em 2 quadros. Começando no quadro do corte, o olho
-     vê a imagem mudar e só depois a luz — lê como flash atrasado. Antecipando,
-     a luz parece a causa. */
-  var FLASH_LEAD_FRAMES = 2;
-
-  function flashStart(at, fps) {
-    return Math.max(0, at - FLASH_LEAD_FRAMES / (fps || 30));
-  }
-
-  root.AVE_CAMERA = {
-    buildCamera: buildCamera,
-    flashStart: flashStart,
-    FLASH_LEAD_FRAMES: FLASH_LEAD_FRAMES,
-  };
+  root.AVE_CAMERA = { buildCamera: buildCamera };
 })(typeof window !== 'undefined' ? window : this);

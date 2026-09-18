@@ -54,8 +54,7 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
-| `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" and "Motor de transições" for the other 8 `tipo`s |
-| `elements.sfx` | **"Aplicar efeitos sonoros"** — os efeitos LOCAIS de `assets/sfx/`, disparados pelos eventos da composição (entrada de cartão, flash, deixa em destaque). Ligado por padrão. OFF → nenhum efeito entra, mesmo havendo evento. Não custa token nem espera: é o caminho barato, e vem antes da geração por IA na lista por isso |
+| `elements.sfx` | **"Aplicar efeitos sonoros"** — os efeitos LOCAIS de `assets/sfx/`, disparados pelos eventos da composição (entrada de cartão, transição, deixa em destaque). Ligado por padrão. OFF → nenhum efeito entra, mesmo havendo evento. Não custa token nem espera: é o caminho barato, e vem antes da geração por IA na lista por isso |
 | `elements.musicAI` | **"Gerar com IA"** — Phase 3 via `treblo_music.py`; OFF → deliver with voice only. Custa token e minutos |
 | `note` | free text — read it, it overrides the defaults above |
 
@@ -540,41 +539,6 @@ Protocolo (decidido pelo usuário em 2026-08-18):
 4. Confira no render: energia subindo nas janelas anteriores à virada
    (`volumedetect` em janelas de 0,3s) e pico dentro de ±2 frames dela.
 
-## Flash na transição (`elements.flashCut`)
-
-A light beam whips across the frame with a bloom and a dry click. Data-driven:
-one entry per cut in `transitions[]`, `at` being the cut time **exactly as
-segments.json states it** — `VIDEO_LAG` lines it up with the frame the picture
-changes on, same as the split windows. Never index it off its own clock.
-
-```json
-"transitions": [{"at": 11.7}]
-```
-
-Default placement when the element is ON: **one per split-insert entry, not per
-cut.** The video has ~27 cuts; a flash on each one stops reading as an accent and
-starts reading as a strobe. Put it where the layout changes, which is where the
-transition means something. Optional per entry: `intensity` (default 1), `sfx`,
-`volume`.
-
-- **The beam LEADS the cut by 2 frames.** Starting it on the cut frame reads as a
-  flash after the fact — the eye sees the picture change, then the light. Leading
-  it makes the light look like the cause.
-- **Blur is what separates a beam from a wash.** At 26px it read as a general
-  brightening; 16px reads as a beam. Raise opacity and lower blur together.
-- **CHECK THE SFX FILE BEFORE TRUSTING IT.** The pack's `click2.mp3` peaks at
-  −25 dB — it is inaudible under speech at any sane volume, and the mix looks
-  fine while nothing is heard. `ffmpeg -i <sfx> -af volumedetect -f null -` is
-  the check. `cut-click.mp3` (−2 dB, 57ms) is the one that reads.
-- **And check WHERE the transient sits inside the file.** The source this click
-  came from had 180ms of silence before the hit; delayed to the cut it would have
-  landed 180ms late — after a 230ms effect had already finished. Trim the lead-in
-  so the transient is at t=0, then delay by the cut time.
-- **O clique vive na composição, e é entregue de lá.** No motor antigo ele
-  tinha de ser remixado no ffmpeg, porque a cura do drift jogava fora o áudio do
-  render. Sem drift, o efeito fica onde foi autorado e chega inteiro na entrega —
-  `sfx_blocks()` já compensa o silêncio inicial MEDIDO de cada arquivo.
-
 ## Motor de transições (`transitions[].tipo`)
 
 `flash` deixou de ser a única opção. Cada entrada de `transitions[]` aceita um
@@ -600,10 +564,12 @@ na direção de `direcao`: `cima|baixo|esquerda|direita`), `cortina` (chapa no
 accent sobe cobrindo e some, um sentido só), `iris` (mesma mecânica, recorte
 circular, fecha e abre no MESMO ponto), `falha` (RGB split, três tiras).
 
-Regra do lote: **use `flash`/`chama`/`tranco`/`estouro` livremente onde a
-`flashCut` já mandava** (uma por troca de layout); as médias/pesadas são para
-o que raramente acontece no vídeo — mudar de capítulo, entrar um insert grande
-— nunca uma por corte, ou viram estroboscópio como o próprio flash já avisa.
+Regra do lote: **use `chama`/`tranco`/`estouro` livremente, uma por troca de
+layout**; as médias/pesadas são para o que raramente acontece no vídeo — mudar
+de capítulo, entrar um insert grande — nunca uma por corte, ou viram
+estroboscópio. (O `flash` — feixe varrendo o quadro — foi removido do produto em
+2026-09-16 a pedido do usuário: `tipo` ausente ou desconhecido avisa pelo nome e
+não desenha nada, em vez de cair numa transição parecida.)
 
 **Duas famílias de implementação, e isso importa para calibrar expectativa:**
 
