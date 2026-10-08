@@ -467,12 +467,12 @@ each other in `elLocked()` (app.js). If either is on, skip this whole section;
 don't ask for headline text that will never render.
 
 **There is no text field on the Estilo screen for this** — the tab only picks
-`hook.style` (the layout). The first 1–2 seconds decide the swipe. Write
-`hook.lines` like a social-media/copywriting/virality specialist, not a
-summarizer: read the cut transcript, find the core promise/tension, and craft
-a scroll-stopper. Levers: **curiosity gap · high stakes/bold claim ·
-specificity/number · urgency · pattern interrupt**. Match the video's
-language; never clickbait it can't pay off.
+`hook.style` (the layout). The first 1–2 seconds decide the swipe. **Write
+`hook.lines` with the method in `references/hooks.md`** — the gancho falado,
+o objetivo e a tese já foram decididos na Fase 1 (passo 3b); aqui sai o TEXTO
+que complementa o falado: lote de 4, regra 3-2-1, no máximo 6 palavras, uma
+anatomia diferente por candidato e nenhuma repetida dos 2 últimos vídeos do
+`historico`. Match the video's language; never clickbait it can't pay off.
 
 **Two locked styles via `hook.style`** (both user-approved, encoded in the
 template):
@@ -491,9 +491,12 @@ template):
 Both are static hold, fade+rise at the edges, soft whoosh.
 
 Example (Claude Fable video): "A IA MAIS / PERIGOSA DO MUNDO / ACABOU DE SER
-LIBERADA". Draft 2–3 copy candidates and ask with `AskUserQuestion` (options =
-the candidates, text — no renders; Other lets the user dictate their own),
-then render ONE still for design approval before the full render.
+LIBERADA". Ask with `AskUserQuestion`: 4 options, the TEXT as `label` and the
+full hook card (anatomia, gatilho, frame zero, som, CTA, por quê) in `preview`
+— no renders; Other lets the user dictate their own. The anatomia-6 candidate
+maps to a full-screen `cartela` style, so picking it can change `hook.style`
+too. Then render ONE still for design approval before the full render, and
+append the pick to `~/.avelin/hook_perfil.json → historico`.
 
 **De-conflict:** the hook owns the upper zone for its window — push any insert
 that wants the same zone to after `hook.endSec` (e.g. move a 2.5s cutaway to
@@ -514,7 +517,10 @@ Protocolo (decidido pelo usuário em 2026-08-18):
    `"sempre"` → aplica sem perguntar. Ausente → **pergunte** (AskUserQuestion)
    com as opções **sim / não / sempre**; resposta "sempre" grava a chave (edite
    o JSON preservando o resto) e aplica.
-2. A **virada** é onde o riser crava o pico. Candidatos, do mais sutil ao mais
+2. A **virada** é onde o riser crava o pico. **A anatomia do gancho escolhido
+   já diz qual é** (tabela "Som do gancho" em `references/hooks.md`: anatomia 6
+   → saída da cartela + `impact`; loop aberto → fim da frase, sem impacto).
+   Sem anatomia decidida, candidatos do mais sutil ao mais
    forte: primeiro corte de take dentro do hook · saída da headline
    (`hook.endSec`) · primeiro acento pós-hook (flash/split/gráfico). Se houver
    mais de um candidato plausível, pergunte junto. (Este usuário escolheu o
@@ -990,8 +996,10 @@ Trilha que veio do usuário: ofereça guardá-la depois da entrega
 `--usar` quando a que entrou veio do acervo.
 
 **Writing the Treblo prompt — derive it from the video's context, and ask for
-MUSIC, not a texture.** Read the cut transcript: what's the topic, energy and
-emotional arc? Then describe a real **composed instrumental piece** — name a
+MUSIC, not a texture.** Start from the **objetivo and the hook's emotion**
+captured in Fase 1 (`references/hooks.md` → "Som do gancho e trilha": tabela
+por objetivo/funil; anatomia 6 = trilha entra NA virada, não no frame 0). Then
+read the cut transcript: what's the topic, energy and emotional arc? Then describe a real **composed instrumental piece** — name a
 **genre + key instruments + tempo/BPM + mood**, and (optionally) a reference
 artist/style. Match the content: a hype tech/AI reel wants upbeat modern
 electronic with a catchy synth melody; a calm tutorial wants warm lo-fi keys; a
