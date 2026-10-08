@@ -26,6 +26,7 @@ que vai ser descartada é o que fazia a iteração doer.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -304,6 +305,140 @@ def longform_target_fps(videos: list[Path]) -> str:
 # -------- Per-segment extraction (Rule 2 + Rule 3) --------------------------
 
 
+# -------- Encoder de vídeo -------------------------------------------------
+
+# HARDWARE SÓ NOS TIERS DESCARTÁVEIS, e a razão é medida, não cautela genérica.
+#
+# Medido nesta máquina (Apple Silicon, 8 núcleos/4 de performance), 8 segmentos
+# de 30s de 1080p60 → 720p com grade, que é a condição real da pipeline:
+#
+#   x264 veryfast, 2 paralelos (o padrão) ....... 39s
+#   x264 veryfast, 4 paralelos .................. 37s   ← paralelismo não compra nada
+#   h264_videotoolbox, 2 paralelos .............. 34s   ← 13%
+#   h264_videotoolbox, 4 ou 6 paralelos ......... 34s   ← nem aqui
+#
+# Duas conclusões que valem mais que os 13%:
+#
+# 1. **O gargalo do proxy NÃO é o encode.** Decompondo um segmento de 30s:
+#    decode 1,13s + escala e grade 1,5–1,7s + encode 1,88s. O docstring de
+#    `extract_segment` diz "encoding is 93% of the time", e isso é verdade no
+#    tier FINAL (1080p, sem redução) — no proxy o filtro pesa mais que o encode.
+#    `-sws_flags fast_bilinear` foi testado e não muda nada: o custo é o grade,
+#    não a escala.
+# 2. **Subir `--jobs` é inútil nos dois encoders.** Confirma a medição que já
+#    estava no docstring, e explica por quê: o que sobra depois do encode
+#    (decode + filtro) já é multithread e satura os núcleos sozinho.
+#
+# No tier final o videotoolbox mede 32% (12,56s → 8,56s num segmento de 30s),
+# mas entrega arquivo 24% maior e qualidade-por-bit pior que o x264 — e aquele
+# arquivo é o que o usuário aprova e sobre o qual a Fase 2 compõe. Decisão de
+# qualidade, não de velocidade: fica com x264 até alguém pedir o contrário.
+_VT_CACHE: bool | None = None
+
+
+def videotoolbox_disponivel() -> bool:
+    """Uma sonda, cacheada. Perguntar por segmento custaria um spawn por trecho."""
+    global _VT_CACHE
+    if _VT_CACHE is None:
+        if sys.platform != "darwin":
+            _VT_CACHE = False
+        else:
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-encoders"],
+                               capture_output=True, text=True)
+            _VT_CACHE = "h264_videotoolbox" in r.stdout
+    return _VT_CACHE
+
+
+def video_encoder_args(proxy: bool, draft: bool) -> list[str]:
+    """Os argumentos de codec de vídeo, com hardware só onde é descartável.
+
+    O QUADRO-CHAVE A CADA SEGUNDO SOBREVIVE À TROCA, e isto foi conferido em
+    arquivo, não deduzido: `-g 30` no videotoolbox rendeu 60 quadros-chave em
+    1800, idêntico ao x264. Era o risco real da mudança — sob J-cut os segmentos
+    são concatenados com `-c copy`, então o corte herda os quadros-chave de cada
+    segmento, e um segmento com um quadro-chave só faz a imagem CONGELAR em
+    trechos, com o render terminando limpo e sem acusar nada. Medido em
+    2026-08-19: intervalos de 6,43s num corte de 24s.
+
+    `-allow_sw 1` porque o media engine pode estar ocupado; sem isto o ffmpeg
+    falha em vez de cair no software, e uma falha aqui derruba o render inteiro.
+    """
+    if draft:
+        preset, crf, q = "ultrafast", "28", "40"
+    elif proxy:
+        preset, crf, q = "veryfast", "23", "50"
+    else:
+        preset, crf, q = "fast", "20", None
+
+    if q is not None and videotoolbox_disponivel():
+        # `-sc_threshold` fica de fora: é regulagem do x264 e não significa
+        # nada aqui. O par `-g`/`-keyint_min` é o que importa e é honrado.
+        return ["-c:v", "h264_videotoolbox", "-q:v", q, "-allow_sw", "1",
+                "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30"]
+    return ["-c:v", "libx264", "-preset", preset, "-crf", crf,
+            "-pix_fmt", "yuv420p", "-g", "30", "-keyint_min", "30",
+            "-sc_threshold", "0"]
+
+
+def extrair_atomico(source: Path, t_in: float, dur: float, grade_filter, out_path: Path,
+                    **kw) -> None:
+    """Extrai para um nome provisório e renomeia no fim.
+
+    O REUSO DEPENDE DISTO. Um render interrompido — Ctrl+C, falta de disco, dois
+    renders no mesmo projeto disputando a pasta (medido: exit 254 no seg_02) —
+    deixava um mp4 truncado com o nome definitivo. Enquanto a pasta era apagada
+    a cada render isso não importava; passando a reusar, um arquivo truncado
+    viraria segmento permanente do corte, e o defeito apareceria no vídeo sem
+    nenhum erro. Com o `.part`, existir com o nome final significa completo.
+    """
+    # `.part` ANTES da extensão, não depois: o ffmpeg escolhe o container pela
+    # extensão, e um `seg_00_v.mp4.part` fez ele sair com status 234 sem
+    # conseguir adivinhar o formato. O pid entra porque dois renders no mesmo
+    # projeto escreveriam o mesmo provisório e um truncaria o do outro — o
+    # `watch_edits` já documenta essa disputa (exit 254 no seg_02). A poda por
+    # nome remove qualquer `.part` órfão, porque ele nunca está nos esperados.
+    parcial = out_path.with_name(
+        f"{out_path.stem}.part{os.getpid()}{out_path.suffix}")
+    parcial.unlink(missing_ok=True)
+    extract_segment(source, t_in, dur, grade_filter, parcial, **kw)
+    parcial.replace(out_path)
+
+
+# A VERSÃO DO PRODUTOR DE SEGMENTOS. Mexer na escada de qualidade, no intervalo
+# de quadro-chave, nas tags de cor ou no encoder muda o ARQUIVO sem mudar nada
+# que a chave veja — e sem esta constante os segmentos de ontem sobreviveriam à
+# mudança de hoje. Suba ao alterar `extract_segment` ou `video_encoder_args`.
+# É constante de módulo, e não literal enterrado na função, para ser achável por
+# quem faz essa alteração (e testável).
+SEG_VERSAO = "v1"
+
+
+def chave_segmento(source: Path, t_in: float, t_out: float, grade_declarado,
+                   gain_db: float, tier: str, streams: str,
+                   keep_resolution: bool, target_fps) -> str:
+    """A identidade de um segmento: se ela não muda, o arquivo não precisa mudar.
+
+    O GRADE ENTRA DECLARADO, não resolvido, e é o detalhe que faz isto valer a
+    pena. Resolver `"auto"` custa uma análise de ffmpeg no trecho
+    (`auto_grade_for_clip`), então uma chave que dependesse do filtro FINAL
+    obrigaria a pagar a análise só para descobrir que o arquivo já existe. Com o
+    valor declarado a chave é barata, e continua correta porque o auto é
+    determinístico sobre (fonte, entrada, saída) — que já estão na chave.
+    """
+    from derivado import impressao  # noqa: PLC0415
+    h = hashlib.sha256()
+    h.update("|".join([
+        impressao(source),
+        f"{t_in:.6f}", f"{t_out:.6f}",
+        json.dumps(grade_declarado, sort_keys=True, ensure_ascii=False),
+        f"{gain_db:.3f}", tier, streams,
+        "1" if keep_resolution else "0",
+        str(target_fps),
+        SEG_VERSAO,
+    ]).encode())
+    return h.hexdigest()[:12]
+
+
 def extract_segment(
     source: Path,
     seg_start: float,
@@ -399,14 +534,6 @@ def extract_segment(
     af_parts.append(f"afade=t=out:st={fade_out_start:.3f}:d=0.03")
     af = ",".join(af_parts)
 
-    if draft:
-        preset, crf = "ultrafast", "28"
-    elif proxy:
-        preset, crf = "veryfast", "23"
-    elif preview:
-        preset, crf = "medium", "22"
-    else:
-        preset, crf = "fast", "20"
 
     cmd = [
         "ffmpeg", "-y",
@@ -417,16 +544,15 @@ def extract_segment(
     if streams != "a":
         if vf:
             cmd += ["-vf", vf]
-        cmd += ["-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
-        # QUADRO-CHAVE A CADA SEGUNDO, e é AQUI que precisa estar: sob J-cut
-        # (o padrão) os segmentos são concatenados com `-c copy`, então o corte
-        # final herda EXATAMENTE os quadros-chave que cada segmento trouxer.
-        # Sem isto, um trecho de 15s sai com um quadro-chave só e o motor da
-        # Fase 2 — que renderiza saltando para quadros avulsos — recebe o
-        # quadro-chave anterior no lugar do pedido: a imagem CONGELA por
-        # trechos e o render termina limpo, sem acusar nada. Medido em
-        # 2026-08-19: intervalos de 6,43s num corte de 24s.
-        cmd += ["-g", "30", "-keyint_min", "30", "-sc_threshold", "0"]
+        # `preview` caiu daqui: o tier é mais LENTO e de pior qualidade que o
+        # final (ver a escada no docstring), então ele já não tinha por que
+        # existir, e mantê-lo no seletor obrigava a carregar um quarto ramo.
+        # Chamadas com `preview=True` agora recebem o tier final, que é melhor
+        # nos dois eixos — nenhuma delas fica pior.
+        cmd += video_encoder_args(proxy, draft)
+        # O quadro-chave a cada segundo vem de `video_encoder_args`, junto com o
+        # codec — ver lá por que ele não é opcional em nenhum dos dois encoders.
+
         # Every path above lands on Rec.709 (tonemap for HDR, wide_gamut_chain for
         # BT.2020 SDR, passthrough for the rest), so tag it explicitly. Without this
         # the segments can inherit the source's tags and downstream decoders
@@ -788,17 +914,45 @@ def jcut_settings(edl: dict, fps: int) -> dict | None:
     }
 
 
+# O LIMIAR DE SILÊNCIO É O MESMO DO RESTO DO PIPELINE, e é medido por fonte.
+# Era −35 fixo aqui enquanto `propose_breaths`, `transcript_audit` e `cut_words`
+# calibravam no material — três réguas diferentes medindo o mesmo silêncio, e a
+# discordância invisível: numa gravação a −41 dBFS o −35 fixo enxerga silêncio
+# onde a régua calibrada enxerga fala, e o J-cut passa a gastar um orçamento que
+# não existe. Uma medição por FONTE, cacheada: `trailing_silence` roda uma vez
+# por trecho e a calibração custa uma passada de ffmpeg.
+_PISO_CACHE: dict[str, float] = {}
+
+
+def piso_da_fonte(source: Path) -> float:
+    chave = str(source)
+    if chave not in _PISO_CACHE:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from cut_words import noise_floor_for  # noqa: PLC0415
+            _PISO_CACHE[chave] = float(noise_floor_for(source))
+        except Exception:
+            _PISO_CACHE[chave] = -35.0   # socorro: o comportamento antigo
+    return _PISO_CACHE[chave]
+
+
 def trailing_silence(source: Path, start: float, end: float,
-                     noise_db: int = -35) -> float:
+                     noise_db: float | None = None) -> float:
     """Seconds of silence at the END of a source range. 0.0 if it ends in speech.
 
     This is what bounds the tail trim: we only ever remove what is already silent.
+
+    `noise_db=None` usa o limiar CALIBRADO da fonte — o mesmo que o resto do
+    pipeline usa, para que o orçamento do J-cut e o mapa de respiros não
+    discordem sobre onde há silêncio.
     """
+    if noise_db is None:
+        noise_db = piso_da_fonte(source)
     dur = end - start
     r = subprocess.run(
         ["ffmpeg", "-hide_banner", "-nostats", "-ss", f"{start:.6f}",
          "-t", f"{dur:.6f}", "-i", str(source), "-vn",
-         "-af", f"silencedetect=noise={noise_db}dB:d=0.02", "-f", "null", "-"],
+         "-af", f"silencedetect=noise={noise_db:.0f}dB:d=0.02", "-f", "null", "-"],
         capture_output=True, text=True)
     starts: list[float] = []
     ends: list[float] = []
@@ -970,19 +1124,7 @@ def extract_and_assemble_jcut(
         else ("clips_preview" if preview else "clips_graded")))
     clips_dir.mkdir(parents=True, exist_ok=True)
 
-    # Clear EVERY old segment, not just the other mode's. Two ways this folder goes
-    # stale and both are invisible downstream, because segments.json is built by
-    # globbing it: the butt-join mode writes seg_NN_*.mp4 next to the J-cut's
-    # seg_NN_*_v.mp4 (a bare glob sums both), and a re-render with FEWER ranges
-    # leaves the higher-numbered segments of the previous cut behind. Measured: a
-    # 3-range EDL over a stale 4th segment gave segments.json 9.23s for a 7.57s
-    # video — it renders without error and every overlay lands wrong.
-    for stale in list(clips_dir.glob("seg_*.mp4")) + list(clips_dir.glob("seg_*.wav")):
-        stale.unlink(missing_ok=True)
-
     plan = plan_jcut(edl, edit_dir, cfg)
-    if jobs <= 0:
-        jobs = max(1, min(4, (os.cpu_count() or 4) // 3))
 
     # One CFR for every segment. Only longform needs it resolved here — the
     # short-form path already forces its own rate inside extract_segment.
@@ -993,6 +1135,61 @@ def extract_and_assemble_jcut(
         if len({source_fps(s) for s in srcs}) > 1:
             print(f"  fontes com fps diferentes → travando tudo em {fps_lock} fps")
 
+    # NOME POR CONTEÚDO, e é o que substitui o "apague tudo" que estava aqui.
+    #
+    # O apagar-tudo existia porque `segments.json` era montado por GLOB da pasta,
+    # e um segmento velho entrava na soma: medido, um EDL de 3 trechos sobre um 4º
+    # segmento antigo deu 9,23s para um vídeo de 7,57s, renderizando sem erro e
+    # com todo overlay fora de lugar. Esse arquivo não existe mais neste fluxo —
+    # o compose lê o `jcut_timeline` do `edl.json`, e a montagem aqui usa os
+    # caminhos EXPLÍCITOS do plano, nunca um glob. Então o perigo do glob morreu
+    # com o consumidor, e o custo dele — reextrair 10 trechos porque um mudou —
+    # não precisava sobreviver.
+    #
+    # A chave no nome resolve os dois lados: um trecho inalterado acha o seu
+    # arquivo, e um trecho alterado não pode achar o de ninguém.
+    tier = "draft" if draft else ("proxy" if proxy else ("preview" if preview else "final"))
+    esperados: set[str] = set()
+    for p_ in plan:
+        r_ = p_["range"]
+        g_ = r_["grade"] if "grade" in r_ else edl.get("grade")
+        gain_ = float(r_.get("gain_db", 0.0) or 0.0)
+        kv = chave_segmento(p_["src"], p_["v_in"], p_["v_out"], g_, 0.0, tier, "v",
+                            keep_resolution, fps_lock)
+        ka = chave_segmento(p_["src"], p_["a_in"], p_["a_out"], None, gain_, tier, "a",
+                            keep_resolution, None)
+        # SEM O ÍNDICE NO NOME, e isto foi medido. Com `seg_{i:02d}_` no nome,
+        # remover um trecho desloca o índice de todos os seguintes e eles perdem
+        # o próprio arquivo: num EDL de 5, apagar o 2º reaproveitava 1 de 4 — na
+        # edição mais comum que existe. A ordem NÃO precisa do nome: este caminho
+        # monta pelos caminhos explícitos do plano. (O caminho de encosto,
+        # `extract_all_segments`, ainda ordena por nome e mantém o `seg_NN` dele —
+        # e ainda limpa a pasta inteira, então alternar entre os dois reextrai,
+        # que é seguro e raro.)
+        p_["video_path"] = clips_dir / f"seg_{r_['source']}_{kv}_v.mp4"
+        p_["audio_path"] = clips_dir / f"seg_{r_['source']}_{ka}_a.wav"
+        esperados.add(p_["video_path"].name)
+        esperados.add(p_["audio_path"].name)
+
+    if os.environ.get("AVELIN_SEM_CACHE", "").strip() not in ("", "0", "false"):
+        # A MESMA saída de emergência do resto da skill: uma suspeita de dado
+        # velho se resolve com um comando, não com uma investigação.
+        for f in list(clips_dir.glob("seg_*")):
+            f.unlink(missing_ok=True)
+        print("  AVELIN_SEM_CACHE: segmentos apagados, reextraindo tudo")
+
+    # Lixo: qualquer `seg_*` que não pertence a ESTE corte. Sem a poda a pasta
+    # cresceria sem limite, e um `.part` órfão de um render morto ficaria para
+    # sempre. A poda é por nome, não por data — data não sabe o que é lixo.
+    podados = 0
+    for f in list(clips_dir.glob("seg_*")):
+        if f.name not in esperados:
+            f.unlink(missing_ok=True)
+            podados += 1
+
+    if jobs <= 0:
+        jobs = max(1, min(4, (os.cpu_count() or 4) // 3))
+
     # O lead virou variável — quem não tem respiro encosta. Dizer só o teto
     # esconderia justamente a informação nova, então o resumo conta as emendas
     # que de fato sobrepuseram e as que não.
@@ -1000,8 +1197,19 @@ def extract_and_assemble_jcut(
     seams = [p for p in plan[1:]]
     jcut_n = sum(1 for p in seams if p["lead_frames"] > 0)
     butt_n = len(seams) - jcut_n
+    prontos = sum(1 for x in plan
+                  if x["video_path"].exists() and x["audio_path"].exists())
     print(f"J-cut: até {cfg['lead_frames']}f ({lead_ms}ms) de antecipação do áudio"
           f"  ({len(plan)} takes, {jobs} paralelos)")
+    # DIZER O REUSO. Um render que termina em 3s onde antes levava 40 parece
+    # defeito, não melhoria — e sem a linha ninguém sabe se o corte novo entrou.
+    if prontos or podados:
+        partes = []
+        if prontos:
+            partes.append(f"{prontos} de {len(plan)} trecho(s) reaproveitado(s)")
+        if podados:
+            partes.append(f"{podados} arquivo(s) obsoleto(s) podado(s)")
+        print("  " + " · ".join(partes))
     if seams:
         resumo = f"  emendas: {jcut_n} com J-cut"
         if butt_n:
@@ -1010,33 +1218,40 @@ def extract_and_assemble_jcut(
 
     def work(p: dict) -> dict:
         i, r = p["i"], p["range"]
-        # a per-range grade wins over the EDL-level one (multicam B-camera match).
-        # This mirrors extract_all_segments(); the J-cut is the DEFAULT path, so a
-        # per-range grade honoured only there would never actually run.
-        if "grade" in r:
-            seg_filter = resolve_grade_filter(r.get("grade"))
-            if seg_filter == "__AUTO__":
+        # O RESOLVE DO GRADE SÓ ACONTECE SE FOR EXTRAIR. `"auto"` custa uma
+        # análise de ffmpeg por trecho (`auto_grade_for_clip`), e pagá-la para
+        # depois descobrir que o segmento já existia era o desperdício mais caro
+        # do reuso. A chave usa o grade DECLARADO justamente para isto.
+        seg_filter = None
+        if not (p["video_path"].exists() and p["audio_path"].exists()):
+            # a per-range grade wins over the EDL-level one (multicam B-camera
+            # match). This mirrors extract_all_segments(); the J-cut is the
+            # DEFAULT path, so a per-range grade honoured only there would never
+            # actually run.
+            if "grade" in r:
+                seg_filter = resolve_grade_filter(r.get("grade"))
+                if seg_filter == "__AUTO__":
+                    seg_filter = auto_grade_for_clip(p["src"], start=p["v_in"],
+                                                     duration=p["v_out"] - p["v_in"],
+                                                     verbose=False)[0]
+            elif is_auto:
                 seg_filter = auto_grade_for_clip(p["src"], start=p["v_in"],
                                                  duration=p["v_out"] - p["v_in"],
                                                  verbose=False)[0]
-        elif is_auto:
-            seg_filter = auto_grade_for_clip(p["src"], start=p["v_in"],
-                                             duration=p["v_out"] - p["v_in"],
-                                             verbose=False)[0]
-        else:
-            seg_filter = resolved
+            else:
+                seg_filter = resolved
         gain_db = float(r.get("gain_db", 0.0) or 0.0)
-        vpath = clips_dir / f"seg_{i:02d}_{r['source']}_v.mp4"
-        apath = clips_dir / f"seg_{i:02d}_{r['source']}_a.wav"
-        extract_segment(p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter,
-                        vpath, preview=preview, draft=draft, proxy=proxy,
-                        keep_resolution=keep_resolution, streams="v",
-                        target_fps=fps_lock)
-        extract_segment(p["src"], p["a_in"], p["a_out"] - p["a_in"], "",
-                        apath, preview=preview, draft=draft, proxy=proxy,
-                        keep_resolution=keep_resolution, gain_db=gain_db,
-                        streams="a")
-        p["video_path"], p["audio_path"] = vpath, apath
+        vpath, apath = p["video_path"], p["audio_path"]
+        reusou = vpath.exists() and apath.exists()
+        if not reusou:
+            extrair_atomico(
+                p["src"], p["v_in"], p["v_out"] - p["v_in"], seg_filter, vpath,
+                preview=preview, draft=draft, proxy=proxy,
+                keep_resolution=keep_resolution, streams="v", target_fps=fps_lock)
+            extrair_atomico(
+                p["src"], p["a_in"], p["a_out"] - p["a_in"], "", apath,
+                preview=preview, draft=draft, proxy=proxy,
+                keep_resolution=keep_resolution, gain_db=gain_db, streams="a")
 
         tail_note = ""
         if p["tail_frames"]:
@@ -1173,7 +1388,17 @@ def build_master_srt(edl: dict, edit_dir: Path, out_path: Path) -> None:
 # Social-media standard: -14 LUFS integrated, -1 dBTP peak, LRA 11 LU.
 # Matches YouTube / Instagram / TikTok / X / LinkedIn normalization targets.
 LOUDNORM_I = -14.0
-LOUDNORM_TP = -1.0
+# -1.5 e não -1.0: o alvo do PADRÃO é -1 dBTP, mas quem mede o resultado mede o
+# AAC DECODIFICADO, e o codec devolve pico acima do PCM que entrou nele. Medido
+# aqui: uma fonte a -27,2 LUFS precisa de +13,2 dB para chegar a -14, o
+# `linear=true` aplica esse ganho fixo (linear NÃO limita), e o arquivo saiu com
+# true peak +1,1 dBFS — clipando, com o filtro configurado para -1.
+# Meio decibel de folga cobre o overshoot do codec e o `verify_cut` para de
+# acusar CHECK-CLIPPING em todo render. Isso importa menos pelo 1,1 dB — são 2
+# amostras em 6,6 milhões, inaudíveis — e mais porque um alarme que toca sempre
+# é um alarme que se aprende a ignorar, e este é o mesmo que pegaria um clipping
+# de verdade.
+LOUDNORM_TP = -1.5
 LOUDNORM_LRA = 11.0
 
 
@@ -1302,6 +1527,14 @@ def apply_loudnorm_two_pass(
         f":measured_thresh={measurement['input_thresh']}"
         f":offset={measurement['target_offset']}"
         f":linear=true"
+        # LINEAR NÃO LIMITA. `linear=true` faz o que o nome diz — escala o sinal
+        # por um ganho fixo — e o alvo de TP é ignorado: medido aqui, uma fonte
+        # a -27,2 LUFS saiu em -14,1 LUFS (alvo batido) com true peak +1,1 dBFS
+        # (alvo de -1 furado em 2,1 dB). O `alimiter` é o teto de verdade;
+        # 0.84 linear = -1,51 dBFS, que com a folga do codec AAC cai abaixo de 0.
+        # `level=disabled` porque o auto-level do alimiter reganharia o sinal e
+        # desfaria a normalização que acabou de ser feita.
+        f",alimiter=limit=0.84:level=disabled"
     )
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-nostats",
@@ -1617,7 +1850,16 @@ def main() -> None:
             temps = [t for t in temps if t != norm_input]
         else:
             print("loudness normalization → social-ready (-14 LUFS / -1 dBTP / LRA 11)")
-            apply_loudnorm_two_pass(norm_input, out_path, preview=args.draft)
+            # O PROXY ENTRA NA APROXIMAÇÃO DE UMA PASSADA, junto com o draft.
+            #
+            # Ele pagava as duas: uma passada de medição sobre o timeline inteiro
+            # num arquivo que ninguém entrega, a cada iteração do corte. A
+            # aproximação erra por fração de dB, e o que se julga no proxy é o
+            # CORTE — o alvo de verdade é reaferido no final, que continua
+            # fazendo as duas passadas, e outra vez na entrega da Fase 2, onde a
+            # mistura ganhou trilha e efeitos e é outra.
+            apply_loudnorm_two_pass(norm_input, out_path,
+                                    preview=args.draft or args.proxy)
 
         for t in temps:
             t.unlink(missing_ok=True)

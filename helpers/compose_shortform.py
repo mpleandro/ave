@@ -61,7 +61,7 @@ TRACK = {
     "caption": 6,
     "wordaccent": 7,
     "hook": 8,       # acima da legenda: os dois disputam a costura
-    "flash": 9,      # por cima de tudo que é imagem
+    "transicao": 9,  # por cima de tudo que é imagem
     "soundtrack": 10,
     "sfx": 11,
     # CAIXINHA, em track PRÓPRIA — não mais "overlay". Caixinha e Broll
@@ -362,13 +362,26 @@ def split_windows(data: dict, H: int, duration: float) -> list[dict]:
             continue
         band = lay["band"]
         is_top = layout == "top"
+        # FAIXA DA LEGENDA — uma tarja lisa ENTRE a arte e o vídeo, com a
+        # legenda dentro dela. Existe porque a legenda do split pousa sobre o
+        # rodapé da arte, e isso só funciona quando a arte é uma FOTO: sobre um
+        # card com manchete no rodapé as duas se sobrepõem e nenhuma se lê.
+        # Dando à legenda um espaço próprio, o card fica inteiro legível e a
+        # legenda ganha o maior contraste que existe. `0` mantém o desenho
+        # antigo, que continua certo para arte fotográfica.
+        strip = max(0.0, float(it.get("captionBand", 0) or 0))
+        vid_top = (band + strip) if is_top else 0.0
         out.append({
             "start": start, "end": end, "layout": layout,
             "src": it.get("src") or it.get("ref"), "band": band,
-            # a arte ocupa a faixa; o vídeo fica com o resto do quadro
+            "strip": strip,
+            # a tarja encosta na arte: no `top` logo abaixo dela, no `bottom`
+            # logo acima — sempre entre a arte e o vídeo
+            "stripTop": band if is_top else (H - band - strip),
+            # a arte ocupa a faixa; o vídeo fica com o que sobra
             "artTop": 0 if is_top else H - band,
-            "vidTop": band if is_top else 0,
-            "vidHeight": H - band,
+            "vidTop": vid_top,
+            "vidHeight": H - band - strip,
             # Override POR JANELA. Num corte multi-take a cabeça se move —
             # medido, ~170px entre tomadas — e um valor único para o vídeo
             # inteiro corta as tomadas altas e deixa um vão sob a costura nas
@@ -380,9 +393,25 @@ def split_windows(data: dict, H: int, duration: float) -> list[dict]:
             # dois lados sem que houvesse como pedir o contrário. `cover`
             # continua o padrão — só deixou de ser a única resposta.
             "fit": (it.get("fit") or "cover"),
-            "captionBottom": lay["captionBottom"],
+            # A legenda desvia para cá enquanto a janela está no ar (ver o
+            # `dodge` em markup/palavra_markup). Com FAIXA, o destino deixa de
+            # ser a costura e passa a ser a tarja: a base do bloco pousa um
+            # respiro acima do fim dela, de modo que uma deixa de duas linhas
+            # ainda caiba dentro. Sem faixa, segue o valor do layout.
+            "captionBottom": (
+                round(H - (band + strip) + 30) if (is_top and strip)
+                else (round(band + strip + 30) if (not is_top and strip)
+                      else lay["captionBottom"])),
             "seam": lay["seam"],
             "centre": (lay.get("centreOffset") or {}),
+            # DESLOCAMENTO DA LEGENDA, POR JANELA. O do layout assume que a arte
+            # é uma FOTO: a legenda pousa sobre o rodapé dela, e o degradê da
+            # costura a torna legível. Quando a arte é um CARD — manchete, marca,
+            # crédito no rodapé — as duas colidem e nenhuma das duas se lê.
+            # Medido num card 1088×1344: o -0.167 do `top` põe o bloco em y=640,
+            # em cima da manchete do card. Quem sabe o que a arte tem é quem a
+            # escolheu, então a janela pode dizer para onde a legenda vai.
+            "centreOver": it.get("centreOffset"),
         })
     return out
 
@@ -565,7 +594,7 @@ def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
     (opacidade <1 cria contexto de empilhamento e mata blend; medido). `pos`:
     full/top/bottom, com o bottom acabando antes da faixa de legenda.
 
-    Ordem no DOM: depois do split, antes do flash e das legendas — o scrim
+    Ordem no DOM: depois do split, antes das transições e das legendas — o scrim
     escurece o a-roll e as legendas continuam legíveis por cima. Janelas nunca
     durante o hook (o check acusaria texto sob elemento opaco) e nunca
     sobrepostas entre si (a mídia divide track com o split). Cada janela emite
@@ -622,7 +651,8 @@ def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
                 [max(range(len(palavras)), key=lambda k: len(palavras[k]))]
                 if palavras else []))
             spans = "".join(
-                f'<span class="bo-w{" acc" if k in acc else ""}">{esc(p)}</span>'
+                f'<span class="bo-lw"><span class="bo-w{" acc" if k in acc else ""}">'
+                f'{esc(p)}</span></span>'
                 for k, p in enumerate(palavras))
             inner = f'<div class="ave-bo-words">{spans}</div>'
         elif kind == "stat":
@@ -714,16 +744,21 @@ def split_markup(wins: list[dict], style_id: str = "") -> str:
     for i, w in enumerate(wins):
         art, art_irmao = split_art(i, w)
         # o degradê cobre a parte de baixo da arte, que é onde a legenda encosta
+        # Com faixa própria a legenda não encosta mais na arte, então o degradê
+        # da costura perde a função — e sobre um card ele só suja o rodapé.
         seam = (f'<div class="ave-split-seam" '
                 f'style="top:{w["artTop"] + w["band"] - 220}px; height:280px"></div>'
-                if w["seam"] else "")
+                if w["seam"] and not w.get("strip") else "")
+        faixa = (f'<div class="ave-split-strip" '
+                 f'style="top:{w["stripTop"]}px; height:{w["strip"]}px"></div>'
+                 if w.get("strip") else "")
         blocks.append(
             f'<div id="split{i}" class="ave-split-win clip" data-start="{w["start"]:.3f}" '
             f'data-duration="{w["end"] - w["start"]:.3f}" data-track-index="{TRACK['split']}" '
             f'data-zoom="{w["zoom"]}" data-focus="{w["focusY"]}" '
             f'data-vid-top="{w["vidTop"]}" data-vid-height="{w["vidHeight"]}"'
             f'{w.get("centreAttr", "")}>'
-            f'{art}{seam}</div>')
+            f'{art}{faixa}{seam}</div>')
         # O VÍDEO SAI DE DENTRO DA JANELA, e não é organização: é requisito do
         # renderer. O linter do HyperFrames reprova com todas as letras —
         # "video_nested_in_timed_element: the framework cannot manage playback
@@ -1427,13 +1462,23 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
     deep = data.get("deep") or "#0D2137"
     mo = json.dumps(h.get("motion") or {}, separators=(",", ":"))
     cheia = " cheia" if h.get("cheia") else ""
+    # `--hl-sobre` (o texto POR CIMA do papel/accent nos layouts antigos —
+    # fita, balão, adesivo, cortina) nasce fixo em cartela.css (#10202e): é
+    # desenho deliberado, não uma cor esquecida. Mas `hook.sobre` no
+    # edit-data é o escape por-projeto, mesma razão do `hook.top` — um fundo
+    # escolhido na aba Estilo pode pedir texto claro em vez do escuro padrão.
+    # Omitido, a regra da folha continua mandando (nada é escrito por cima).
+    sobre = f'--hl-sobre:{hook["sobre"]}; ' if hook.get("sobre") else ""
+    # CARD FLUTUANTE em vez de captura de borda a borda — os dois números que
+    # cartela.css aponta. Ausentes, nada muda (a folha tem 0 nos dois).
+    nt = "".join(f'--nt-{k}:{hook[k]}px; ' for k in ("inset", "radius") if k in hook)
     bloco = (f'  <div id="hook" class="ave-cartela ct-{style_id}{cheia} clip" '
              f'data-start="0" data-duration="{end:.3f}" '
              f'data-track-index="{TRACK["hook"]}" '
              f'style="--hl-scale:1; --hl-size:{size:.2f}; --hl-lh:{h["lh"]}; '
              f'--hl-top:{top}; --hl-main:{main_color}; --hl-accent:{accent}; '
              f'--hl-accent-rgb:{rgb_trio(accent)}; --hl-deep:{deep}; '
-             f'--hl-sobre-accent:{sobre_accent(accent)}; '
+             f'--hl-sobre-accent:{sobre_accent(accent)}; {sobre}{nt}'
              f'--hl-stroke:{h.get("stroke", 0)}; '
              f'--hl-font:{hl_css_family(fonts["main"])}; '
              f'--hl-font-accent:{hl_css_family(fonts["accent"])}"'
@@ -1482,6 +1527,10 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
         raise SystemExit(f"estilo de headline '{style_id}' não existe. "
                          f"Prontos: {', '.join(VARIANTS['headlines'])}")
 
+    # AJUSTE POR PROJETO da medida da cartela: `cap` (teto do corpo) e `safeW`
+    # (largura útil do texto). O catálogo dá o default; um vídeo que estreita o
+    # card precisa estreitar o texto junto, senão a manchete transborda.
+    h = {**h, **{k: hook[k] for k in ("cap", "safeW") if k in hook}}
     fonts = {
         "main": hook.get("fontMain") or VARIANTS["headlineFamily"],
         "accent": hook.get("fontAccent") or VARIANTS["headlineAccentFamily"],
@@ -1508,7 +1557,11 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
     # põe DEBAIXO da arte (o linter acusa "texto escondido sob elemento
     # opaco"). Cada layout tem a sua — 738 no `top`, onde o texto senta na
     # costura sob a arte; ~920 no `bottom`, no vão entre o queixo e a costura.
-    top = h["top"]
+    # `hook.top` no edit-data é o escape por-projeto: o catálogo dá um
+    # default genérico, mas o enquadramento de CADA fonte é diferente — uma
+    # gravação que já chega dividida em duas pessoas (OBS/Zoom) pode ter um
+    # rosto exatamente onde o default cairia. Vazio, usa o do catálogo.
+    top = hook.get("top", h["top"])
     for w in (splits or []):
         if w["start"] < end and w["end"] > 0:
             top = VARIANTS["split"][w["layout"]]["hookTop"]
@@ -1761,8 +1814,19 @@ def camera_parts(data, duration):
         at = float(tr.get("at", 0))
         if at >= duration:
             continue
-        tipo = tr.get("tipo", "flash")
-        builder = _TRANSICAO_BUILDERS.get(tipo, _transicao_flash)
+        # SEM PADRÃO E SEM SUBSTITUIÇÃO CALADA. O default era `flash`, que foi
+        # removido do produto (decisão do usuário, 2026-09-16). Um `tipo`
+        # ausente ou desconhecido não vira outra transição parecida: avisa pelo
+        # NOME e não desenha nada — a mesma regra que vale para estilo não
+        # portado. Trocar por conta própria entregaria um efeito que ninguém
+        # escolheu, e o autor só descobriria assistindo.
+        tipo = tr.get("tipo")
+        builder = _TRANSICAO_BUILDERS.get(tipo)
+        if builder is None:
+            print(f"  aviso: transição em {at:.2f}s com tipo {tipo!r} não existe "
+                  f"— nada desenhado ali. Tipos: {', '.join(sorted(_TRANSICAO_BUILDERS))}",
+                  file=sys.stderr)
+            continue
         blk, tj = builder(k, tr, at, duration, fps, W, accent)
         if blk:
             blocks.append(blk)
@@ -1770,45 +1834,9 @@ def camera_parts(data, duration):
     return js, style, blocks
 
 
-def _transicao_flash(k, tr, at, duration, fps, W, accent):
-    """A transição de hoje: um feixe varrendo o quadro. Mantida byte a byte —
-    é o que já roda em todo edit-data salvo sem `tipo`."""
-    fl = VARIANTS["flash"]
-    start = max(0.0, at - fl["durationFrames"] / fps)
-    dur = min((fl["durationFrames"] * 2) / fps, duration - start)
-    blk = (
-        f'  <div id="flash{k}" class="ave-flash clip" data-start="{start:.3f}" '
-        f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
-        f'style="--flash-intensity:{tr.get("intensity", fl["intensity"])}; '
-        f'--flash-blur:{fl["blur"]}"></div>'
-    )
-    # A varredura em PIXELS da composição, não em `xPercent`: o percentual
-    # é da largura do elemento (150px) e nunca daria a travessia. Sai de
-    # fora da borda esquerda e termina fora da direita, com folga para o
-    # desfoque não entregar a borda dura do retângulo.
-    folga = 220
-    js = (f"\n  tl.fromTo('#flash{k}', {{x:{-folga}}}, "
-          f"{{x:{W + folga}, duration:{dur:.3f}, ease:'power1.inOut'}}, "
-          f"{start:.3f});")
-    # O brilho SOBE e DESCE. Antes ia de 0 a 1 ao longo de toda a
-    # travessia: o feixe ficava mais forte justamente ao sair de cena e
-    # então era cortado no pico, quando o clipe acabava — o contrário de
-    # um flash, que estoura no meio e se apaga.
-    js += (f"\n  tl.to('#flash{k}', {{opacity:1, duration:{dur / 2:.3f}, "
-           f"ease:'power2.out'}}, {start:.3f});")
-    js += (f"\n  tl.to('#flash{k}', {{opacity:0, duration:{dur / 2:.3f}, "
-           f"ease:'power2.in'}}, {start + dur / 2:.3f});")
-    # Trava dura no fim. O render não toca a linha do tempo, ele BUSCA
-    # quadro a quadro — e uma busca que caia depois do fade pode não ter
-    # passado por ele, deixando o feixe aceso preso na tela. O `check`
-    # barra por isso quando a saída termina em borda de clipe, que é
-    # exatamente onde um flash de transição sempre termina.
-    js += (f"\n  tl.set('#flash{k}', {{opacity:0}}, {start + dur:.3f});")
-    return blk, js
-
-
 def _transicao_chama(k, tr, at, duration, fps, W, accent):
-    """Flash de cor sólida no accent — mais barato que o flash (sem feixe/blur)."""
+    """Estouro de cor sólida no accent, dois quadros — a transição mais barata
+    do conjunto: sem feixe, sem blur, sem painel."""
     cfg = VARIANTS["transicoes"]["chama"]
     pre = cfg["attackFrames"] / fps
     hold = cfg["holdFrames"] / fps
@@ -1818,7 +1846,7 @@ def _transicao_chama(k, tr, at, duration, fps, W, accent):
     peak = tr.get("intensity", cfg["intensity"])
     cor = tr.get("cor") or accent
     blk = (f'  <div id="chama{k}" class="ave-trans-chama clip" data-start="{start:.3f}" '
-           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["transicao"]}" '
            f'style="background:{cor}"></div>')
     js = (f"\n  tl.fromTo('#chama{k}', {{opacity:0}}, "
           f"{{opacity:{peak}, duration:{pre:.3f}, ease:'power1.in'}}, {start:.3f});")
@@ -1889,7 +1917,7 @@ def _transicao_deslize(k, tr, at, duration, fps, W, accent):
     sai_para = {"direita": -W, "esquerda": W, "cima": W, "baixo": -W}[direcao]
     cor = tr.get("cor") or cfg["cor"]
     blk = (f'  <div id="deslize{k}" class="ave-trans-deslize clip" data-start="{start:.3f}" '
-           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["transicao"]}" '
            f'style="background:{cor}"></div>')
     js = (f"\n  tl.fromTo('#deslize{k}', {{{eixo}:{entra_de}}}, "
           f"{{{eixo}:0, duration:{inn:.3f}, ease:'power1.in'}}, {start:.3f});")
@@ -1907,7 +1935,7 @@ def _transicao_cortina(k, tr, at, duration, fps, W, accent):
     dur = min(inn + hold + outt, duration - start)
     cor = tr.get("cor") or accent
     blk = (f'  <div id="cortina{k}" class="ave-trans-cortina clip" data-start="{start:.3f}" '
-           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["transicao"]}" '
            f'style="background:{cor}"></div>')
     js = (f"\n  tl.fromTo('#cortina{k}', {{clipPath:'inset(100% 0 0 0)'}}, "
           f"{{clipPath:'inset(0% 0 0 0)', duration:{inn:.3f}, ease:'power1.in'}}, {start:.3f});")
@@ -1926,7 +1954,7 @@ def _transicao_iris(k, tr, at, duration, fps, W, accent):
     raio, cx, cy = cfg["raio"], cfg["centroX"], cfg["centroY"]
     cor = tr.get("cor") or accent
     blk = (f'  <div id="iris{k}" class="ave-trans-iris clip" data-start="{start:.3f}" '
-           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}" '
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["transicao"]}" '
            f'style="background:{cor}"></div>')
     js = (f"\n  tl.fromTo('#iris{k}', {{clipPath:'circle(0% at {cx}% {cy}%)'}}, "
           f"{{clipPath:'circle({raio}% at {cx}% {cy}%)', duration:{inn:.3f}, ease:'power1.in'}}, "
@@ -1963,13 +1991,12 @@ def _transicao_falha(k, tr, at, duration, fps, W, accent):
             js += f"\n  tl.to('#{eid}', {{x:{x}, opacity:1, duration:0.02, ease:'none'}}, {t:.3f});"
         js += f"\n  tl.to('#{eid}', {{opacity:0, x:0, duration:0.02, ease:'none'}}, {start + dur:.3f});"
     blk = (f'  <div id="falha{k}" class="ave-trans-falha clip" data-start="{start:.3f}" '
-           f'data-duration="{dur:.3f}" data-track-index="{TRACK["flash"]}">\n'
+           f'data-duration="{dur:.3f}" data-track-index="{TRACK["transicao"]}">\n'
            + "\n".join(blk_parts) + "\n  </div>")
     return blk, js
 
 
 _TRANSICAO_BUILDERS = {
-    "flash": _transicao_flash,
     "chama": _transicao_chama,
     "tranco": _transicao_tranco,
     "estouro": _transicao_estouro,
@@ -1984,8 +2011,7 @@ _TRANSICAO_BUILDERS = {
 # catálogo sem uso (`transition`/`transitionSoft`/`impact`/`element`/`camera`),
 # preparados exatamente para este motor.
 TRANSICAO_SFX = {
-    "flash": "flash",
-    "chama": "flash",
+    "chama": "transitionCut",
     "tranco": "impact",
     "estouro": "impact",
     "zoomBlur": "impact",
@@ -2003,6 +2029,14 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     # CSS: o usuario podia escolher o destaque e nao a fonte, o que e metade
     # de um controle de cor. `captions.color` fecha o par.
     cap_color = (data.get("captions") or {}).get("color") or "#FFFFFF"
+    # O DESTAQUE da legenda pode divergir do da composição — `captions.accent`.
+    # O padrão continua sendo um só por vídeo (dois destaques diferentes leem
+    # como erro, não como escolha), e é por isso que este campo não tem controle
+    # na aba Estilo: ele existe para o caso em que os dois elementos vivem sobre
+    # fundos diferentes, o mesmo argumento que já separa `captions.color` de
+    # `textColor`. Pedido concreto que o criou: barra da Notícia no vermelho da
+    # marca, palavras realçadas da legenda em amarelo.
+    cap_accent = (data.get("captions") or {}).get("accent") or accent
     W, H = data.get("width", 1080), data.get("height", 1920)
     cfg = data.get("captions", {})
     bottom = cfg.get("paddingBottom", VARIANTS["bottom"])
@@ -2017,8 +2051,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
             continue
         if tr.get("sfx"):
             events.append((at, {"file": tr["sfx"], "volume": tr.get("volume", 0.3)}))
-        else:
-            events.append((at, TRANSICAO_SFX.get(tr.get("tipo", "flash"), "flash")))
+        elif tr.get("tipo") in TRANSICAO_SFX:
+            events.append((at, TRANSICAO_SFX[tr["tipo"]]))
+        # tipo desconhecido não desenha (ver camera_parts) e por isso também
+        # não soa: um som sem nada na tela é o pior dos dois mundos — o
+        # espectador ouve um corte que não existe.
     for c in (data.get("_soloCues") or []):
         events.append(c)
     # Deixas escritas à mão — o único canal para um som que NÃO nasce de um
@@ -2037,7 +2074,18 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         if c.get("file"):
             events.append((at, {"file": c["file"], "volume": c.get("volume", 0.3)}))
         elif c.get("kind"):
-            events.append((at, c["kind"]))
+            # VOLUME POR DEIXA. O catálogo traz um volume por `kind`, e ele é o
+            # certo na maioria dos casos; mas o mesmo som serve de acento forte
+            # e de toque discreto conforme o que já está tocando junto — o
+            # `camera` numa virada de plano quer menos do que o `intro` numa
+            # virada de gancho. Sem isto a única saída era repetir o arquivo em
+            # `file`, o que perde o nome do papel.
+            vol = c.get("volume")
+            spec = VARIANTS["sfx"].get(c["kind"]) if vol is not None else None
+            if spec:
+                events.append((at, {"file": spec["file"], "volume": float(vol)}))
+            else:
+                events.append((at, c["kind"]))
 
     # Perseguição do olhar: quando ligada, ela ABSORVE o zoom — o caminho já
     # traz a escala de cada instante. Deixar a câmera também animando `scale`
@@ -2062,19 +2110,45 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     # A cartela de TELA CHEIA não mede o vídeo: o fundo dela é a chapa da marca,
     # de cor conhecida, e o contraste ali é por construção. Medir a luminância
     # do vídeo atrás de uma chapa opaca escolheria a cor pelo que ninguém vê.
+    #
+    # O MESMO vale para a banda cujo accent É a chapa, e o `paint` diz quando:
+    # um valor que começa com `sobre` (`sobre`, `sobreAccent`) significa "isto é
+    # pintado POR CIMA do accent" — ou seja, o accent virou fundo de um texto
+    # próprio, e quem precisa de contraste é esse texto, não o vídeo atrás.
+    # Hoje pega `fita`, `adesivo` e `noticia`. Medido no 0083: com a parede
+    # clara atrás da barra, o #ff3b30 escolhido pelo usuário era reprovado por
+    # contraste e saía #FFAD7A — salmão numa barra que ele pediu vermelha.
     _hkv = VARIANTS["headlines"].get(hk.get("style", "card"), {})
-    if hk.get("enabled") and _hkv.get("usesAccent") and not _hkv.get("cheia"):
+    _accent_e_chapa = any(str(v).startswith("sobre")
+                          for v in (_hkv.get("paint") or {}).values())
+    if (hk.get("enabled") and _hkv.get("usesAccent")
+            and not _hkv.get("cheia") and not _accent_e_chapa):
         hv = Path(data.get("_proj", ".")) / data.get("_video", "preview.mp4")
-        htop = VARIANTS["headlines"][hk["style"]]["top"] / H
+        # O MESMO `top` que `cartela_markup` vai desenhar, não o do catálogo:
+        # `hook.top` é o escape por-projeto, e medir a luminância na altura
+        # padrão enquanto a cartela aparece em outra escolhe a cor pelo fundo
+        # de um lugar onde ela não está. Medido: com `hook.top:1300` a banda
+        # lida continuava sendo a de 300px.
+        htop = float(hk.get("top", VARIANTS["headlines"][hk["style"]]["top"])) / H
         hook_accent = adaptive_accent(hv, accent, max(0.0, htop - 0.01), 0.14,
                                       [(0.0, float(hk.get("endSec", 4.0)))])[0]
     hook_block, hook_css = hook_markup(data, hook_accent, splits)
-    # A câmera é DESLIGADA enquanto a tela dividida está no ar: ela move o
-    # quadro, e o efeito da tela dividida é justamente o rosto ficar parado
-    # numa região fixa. As duas juntas brigam pelo mesmo transform.
+    # A câmera é desligada ENQUANTO a tela dividida está no ar — ela move o
+    # quadro, e o efeito da tela dividida é o rosto ficar parado numa região
+    # fixa; as duas brigam pelo mesmo transform do `#a-roll`.
+    #
+    # Antes isso desligava a câmera no VÍDEO INTEIRO, e o custo só aparecia
+    # assistindo: uma janela de 8s num corte de 41s deixava 33 segundos de
+    # câmera parada, que é exatamente o "vídeo é uma câmera parada por um
+    # minuto" que o docstring do `camera_parts` diz existir para evitar. O
+    # conflito é por JANELA, então a supressão também é: os planos que caem
+    # dentro de uma tela dividida saem, os de fora animam.
     if splits:
-        data = {**data, "_camOff": True}
-    cam_js, cam_style, flash_blocks = camera_parts(data, duration)
+        spans = [(w["start"], w["end"]) for w in splits]
+        vivos = [g for g in (data.get("_segments") or [])
+                 if not any(a < (g["start"] + g["end"]) / 2 < b for a, b in spans)]
+        data = {**data, "_segments": vivos, "_camOff": not vivos}
+    cam_js, cam_style, trans_blocks = camera_parts(data, duration)
 
     # A FAMÍLIA ESCOLHIDA NA ABA ESTILO, com o padrão sendo a do próprio
     # estilo. Vazio aqui não é "sem fonte": é "a de fábrica", e por isso a
@@ -2145,7 +2219,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         # os números do movimento viajam no dado (variants.styles.editorial.motion)
         mo_attr = json.dumps(st.get("motion") or {}, separators=(",", ":"))
         container = (f'<div class="ave-edt" style="--cap-scale:1;{fam_var}'
-                     f' --cap-accent:{accent or "#ff3b30"}; --cap-size:{st["size"]}px;'
+                     f' --cap-accent:{cap_accent or "#ff3b30"}; --cap-size:{st["size"]}px;'
                      f' --edt-top:{cfg.get("offsetY", st.get("offsetY", 0.5)) * 100:.1f}%;'
                      f' --edt-left:{st.get("safeLeftPx", 90)}px;'
                      f' --edt-lh:{st.get("lineHeight", 1.0)};'
@@ -2157,7 +2231,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         # os números do movimento viajam no dado (variants.styles.dinamico.motion)
         mo_attr = json.dumps(st.get("motion") or {}, separators=(",", ":"))
         container = (f'<div class="ave-din" style="--cap-scale:1;{fam_var}'
-                     f' --cap-accent:{accent or "#ff3b30"}; --cap-size:{st["size"]}px;'
+                     f' --cap-accent:{cap_accent or "#ff3b30"}; --cap-size:{st["size"]}px;'
                      f' --din-top:{cfg.get("offsetY", st.get("offsetY", 0.47)) * 100:.1f}%;'
                      f' --din-lh:{st.get("lineHeight", 1.0)};'
                      f' --din-dim:{st.get("dimColor", "#8F8F8F")};'
@@ -2189,8 +2263,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         container = (f'<div class="ave-pal pal-{style_id}" style="--cap-scale:1;'
                      f' --cap-family:{st["cssFamily"]};{fam_var}'
                      f' --cap-color:{cap_color}; --cap-color-rgb:{rgb_trio(cap_color)};'
-                     f' --cap-accent:{accent or "#ff6b1a"};'
-                     f' --cap-accent-rgb:{rgb_trio(accent or "#ff6b1a")};'
+                     f' --cap-accent:{cap_accent or "#ff6b1a"};'
+                     f' --cap-accent-rgb:{rgb_trio(cap_accent or "#ff6b1a")};'
                      f' --cap-size:{st["size"]}; --cap-bottom:{pal_bottom};'
                      f' --cap-weight:{st.get("weight", 600)};'
                      f' --cap-track:{st.get("tracking", 0)};'
@@ -2204,13 +2278,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
                    '<script src="styles/pop.js"></script>')
         container = (f'<div class="ave-pop grupo-{st.get("grupo", "palavra")}"'
                      f' style="--cap-scale:1;{fam_var} --cap-color:{cap_color};'
-                     f' --cap-accent:{accent or "#ff3b30"};'
+                     f' --cap-accent:{cap_accent or "#ff3b30"};'
                      f' --cap-size:{size}; --cap-bottom:{bottom}">')
     elif st.get("css") == "revelar":
         cap_css = ('<link rel="stylesheet" href="styles/revelar.css">\n'
                    '<script src="styles/revelar.js"></script>')
         container = (f'<div class="ave-rev" style="--cap-scale:1;{fam_var}'
-                     f' --cap-color:{cap_color}; --cap-accent:{accent or "#ff3b30"};'
+                     f' --cap-color:{cap_color}; --cap-accent:{cap_accent or "#ff3b30"};'
                      f' --cap-size:{size}; --cap-bottom:{bottom}">')
     elif st["animated"]:
         cap_css = ('<link rel="stylesheet" href="styles/karaoke.css">\n'
@@ -2228,7 +2302,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
                      f' --cap-sx:{st.get("sx", 1)}; --cap-sy:{st.get("sy", 1)}">')
 
     # A timeline é necessária se QUALQUER coisa se move — legenda animada,
-    # câmera ou flash. Sem nada em movimento, `data-no-timeline` evita 45s
+    # câmera ou transição. Sem nada em movimento, `data-no-timeline` evita 45s
     # perdidos por render esperando um registro que nunca vem.
     parts = []
     if style_id == "stacked":
@@ -2450,7 +2524,9 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         needs_tl = True
 
     for w in splits:
-        off = w["centre"].get(style_id)
+        # o valor da janela vence o do layout (ver `centreOver` em split_windows)
+        ov = w.get("centreOver")
+        off = ov if ov is not None else w["centre"].get(style_id)
         w["centreAttr"] = f' data-centre-offset="{off}"' if off is not None else ""
     split_block = split_markup(splits, style_id) if splits else ""
     split_css = '<link rel="stylesheet" href="styles/split.css">' if splits else ""
@@ -2471,9 +2547,9 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         needs_tl = True
 
     extra_css = ""
-    if cam_js and flash_blocks:
+    if cam_js and trans_blocks:
         extra_css = '<link rel="stylesheet" href="styles/camera.css">'
-    elif flash_blocks:
+    elif trans_blocks:
         extra_css = '<link rel="stylesheet" href="styles/camera.css">'
     cam_tag = '<script src="styles/camera.js"></script>' if cam_js else ""
     gsap_tag = ('<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>'
@@ -2536,7 +2612,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 {cx_html}
 {split_block}
 {bo_html}
-{chr(10).join(flash_blocks)}
+{chr(10).join(trans_blocks)}
 {insert_html}
 {wa_html}
 {bg_html}
@@ -2664,6 +2740,18 @@ def main() -> None:
             s1 = (tl[k + 1].get("video_start_in_output")
                   if k + 1 < len(tl) else duration)
             segs.append({"start": round(s0, 3), "end": round(min(s1, duration), 3)})
+
+    # FRONTEIRAS DO AUTOR VENCEM AS DO CORTE. As junções do EDL são o mínimo
+    # garantido — um corte de 3 trechos dá 2 trocas de plano em 41s, e isso lê
+    # como câmera parada. O ritmo da câmera é do RACIOCÍNIO, não da emenda: uma
+    # tomada única pode conter cinco mudanças de contexto e nenhuma junção.
+    # `segments` no edit-data deixa quem monta dizer onde elas estão.
+    autor = [s for s in (data.get("segments") or [])
+             if float(s.get("start", 0)) < duration]
+    if autor:
+        segs = [{"start": round(float(s["start"]), 3),
+                 "end": round(min(float(s.get("end", duration)), duration), 3)}
+                for s in autor]
     data["_segments"] = segs
 
     # DURANTE UM BROLL OVERLAY A LEGENDA SAI DE CENA (pedido do usuário,
@@ -2685,6 +2773,19 @@ def main() -> None:
     if _qb.get("pergunta") and _qb.get("muteCaptions", True) and float(_qb.get("top", 300)) > 900:
         bo_spans.append((float(_qb.get("start", 0.0)),
                          float(_qb.get("end") or duration)))
+    # O GANCHO DESCIDO cala a legenda pela MESMA razão da caixinha: os dois
+    # passam a ocupar a mesma faixa e viram texto sobre texto. O limiar é o
+    # mesmo 900, e ele só dispara por escolha explícita — nenhum layout do
+    # catálogo nasce abaixo dele (o `top` deles vai de 0 a 360), então mexer
+    # aqui exige ter movido o gancho para a faixa da legenda de propósito.
+    _hk = data.get("hook") or {}
+    # Cartela de TELA CHEIA tapa a legenda inteira: ela é opaca e cobre o
+    # quadro, então a legenda por baixo não é disputa de espaço — é texto
+    # invisível, e o `check` acusa "texto escondido sob elemento opaco".
+    _hk_cheia = bool(VARIANTS["headlines"].get(_hk.get("style"), {}).get("cheia"))
+    if (_hk.get("enabled") and _hk.get("lines") and _hk.get("muteCaptions", True)
+            and (_hk_cheia or float(_hk.get("top") or 0) > 900)):
+        bo_spans.append((0.0, float(_hk.get("endSec", 4.0))))
 
     def fora_broll(ms_a: float, ms_b: float) -> bool:
         mid = (ms_a + ms_b) / 2000.0
@@ -2707,7 +2808,8 @@ def main() -> None:
         # o MESMO accent que o resto da composição usa — o círculo do solo era
         # verde fixo e atravessava qualquer paleta escolhida na aba Estilo
         mk, stretched = stacked_markup(cues, st, duration,
-                                       data.get("accent") or "#FF6B1A")
+                                       (data.get("captions") or {}).get("accent")
+                                       or data.get("accent") or "#FF6B1A")
         data["_stackedMarkup"] = mk
         data["_soloCues"] = [
             (c["startMs"] / 1000,

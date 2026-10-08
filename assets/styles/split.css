@@ -69,3 +69,38 @@
   background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.55) 100%);
   display: none;
 }
+
+/* A FAIXA DA LEGENDA — tarja lisa entre a arte e o vídeo, com a legenda
+   dentro. Nasce escondida como a arte, e o split.js a acende junto: as duas
+   pertencem à mesma janela e aparecer em tempos diferentes leria como falha.
+
+   Preta e opaca de propósito. A legenda do split pousava sobre o rodapé da
+   arte, o que só funciona quando a arte é uma FOTO — sobre um card com
+   manchete no rodapé as duas se sobrepõem e nenhuma das duas se lê. */
+.ave-split-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #000;
+  display: none;
+}
+
+/* A legenda LINEAR que mora na faixa. Uma linha, centrada na tarja, sem
+   animação de entrada: quem controla a visibilidade é o relógio do renderer
+   pelos `data-start`/`data-duration` de cada deixa. */
+.ave-strip-cue {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 56px;
+  box-sizing: border-box;
+  font-family: var(--strip-font, 'Poppins', sans-serif);
+  font-weight: 600;
+  color: var(--strip-color, #fff);
+  line-height: 1.16;
+  pointer-events: none;
+}

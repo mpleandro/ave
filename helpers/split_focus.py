@@ -191,8 +191,16 @@ def resolver(edit: Path, margem: float, verbose: bool = True) -> list[dict]:
                                   "fica o padrão do variants.json"})
             continue
         cabelo, altura = med
+        # TETO DE ZOOM DO AUTOR. `lay["zoom"]` é o padrão do layout e também o
+        # TETO da medição (`zoom = min(zoom_base, ...)`), então um enquadramento
+        # mais fechado do que o padrão era impossível de pedir: o helper só sabe
+        # baixar. `zoomBase` na janela levanta esse teto — mesmo princípio do
+        # `jcut_lead_frames` no render.py, onde um valor digitado à mão vence a
+        # medição. O foco continua MEDIDO: quem escolhe o quanto fecha é o
+        # autor, quem põe a cabeça no lugar é a medição.
+        zoom_base = float(it.get("zoomBase", lay["zoom"]))
         zoom, focus, nota = enquadrar(cabelo, altura, src_w, src_h, src_w, win_h,
-                                      float(lay["zoom"]), margem)
+                                      zoom_base, margem)
         out.append({"start": t0, "end": t1, "ok": True,
                     "cabelo": round(cabelo, 1), "rosto_h": round(altura, 1),
                     "zoom": zoom, "focusY": focus,

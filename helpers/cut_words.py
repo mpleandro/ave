@@ -29,12 +29,50 @@ from pathlib import Path
 
 HELPERS = Path(__file__).resolve().parent
 
+# O MESMO leitor e a MESMA régua de correção que a legenda usa. Importado, não
+# recopiado: este arquivo alimenta o painel que o usuário LÊ, o `cut_transcript`
+# alimenta a legenda que o vídeo QUEIMA, e a Regra 14 do SKILL.md promete que os
+# dois textos são o mesmo. Enquanto só a legenda aplicava `corrections.json`, a
+# promessa era falsa sempre que houvesse uma correção.
+sys.path.insert(0, str(HELPERS))
+from cut_transcript import corrections, fix_for  # noqa: E402
+
+
+# Os parâmetros do detector, num lugar só — eles entram na CHAVE do cache, e
+# uma chave que não os contém devolve a medição de outro limiar.
+MIN_SILENCE = "0.12"
+MIN_SPEECH = "0"
+
 
 def speech_regions(video: Path, noise_db: float) -> list[tuple[float, float]]:
-    """Intervalos de fala acústica, via o helper que já existe."""
+    """Intervalos de fala acústica, via o helper que já existe — CACHEADO.
+
+    O spawn continua: `speech_regions.py` é um programa com lógica própria e
+    trazê-la para dentro daqui seria copiá-la. O que muda é que o resultado
+    passa a ser um derivado endereçado pela fonte MAIS o limiar, porque o mesmo
+    arquivo medido a −47 dB e a −35 dB dá dois mapas diferentes de fala. Medido:
+    2,7s por chamada numa fonte de 3 min, e é o passo que o painel de
+    transcrição espera antes de aparecer.
+    """
+    from derivado import derivado  # noqa: PLC0415
+    return derivado(
+        "regions", [video],
+        {"noise_db": round(float(noise_db), 1),
+         "min_silence": MIN_SILENCE, "min_speech": MIN_SPEECH},
+        "1", lambda: _medir_regioes(video, noise_db))
+
+
+def _medir_regioes(video: Path, noise_db: float) -> list[tuple[float, float]]:
     out = subprocess.run(
         [sys.executable, str(HELPERS / "speech_regions.py"), str(video),
-         f"--noise={noise_db:.0f}dB", "--min-silence", "0.12"],
+         # `--min-speech 0` NÃO É DETALHE AQUI. O piso padrão (0,05s) descarta
+         # regiões de fala curtas — uma plosiva, um monossílabo — e o efeito é
+         # o oposto de arrumar: sem a região, o silêncio entre as sobreviventes
+         # engorda, e este arquivo, cujo propósito inteiro é medir a FOLGA onde
+         # o corte cairia, passa a relatar uma folga que não existe. Cortar
+         # nela come a palavra que o piso escondeu.
+         f"--noise={noise_db:.0f}dB", "--min-silence", MIN_SILENCE,
+         "--min-speech", MIN_SPEECH],
         capture_output=True, text=True,
     )
     regions = []
@@ -48,6 +86,47 @@ def speech_regions(video: Path, noise_db: float) -> list[tuple[float, float]]:
     return regions
 
 
+class SemNiveis(RuntimeError):
+    """A medição não aconteceu. Existe como exceção PRÓPRIA para atravessar o
+    cache sem ser guardada: `derivado` só grava o que o produtor devolve, então
+    uma falha transitória de ffmpeg não pode virar um arquivo em cache que
+    responde "sem níveis" para sempre."""
+
+
+def _medir_niveis(video: Path) -> list[float | None]:
+    """As duas populações, calculadas em processo. Devolve [piso, mediana].
+
+    É a MESMA aritmética do `voice_levels.analyze` — `rms_timeline`,
+    `estimate_floor`, mediana dos quadros acima do piso — e os dois valores
+    saem arredondados a uma decimal porque era assim que chegavam pelo console.
+    Reproduzir o arredondamento não é preciosismo: `noise_floor_for` arredonda
+    o PONTO MÉDIO dos dois, e uma decimal a mais aqui muda o limiar em 1 dB nos
+    casos de fronteira — ou seja, mudaria decisões de corte em silêncio.
+
+    Lista em vez de tupla porque isto atravessa JSON no cache.
+    """
+    import numpy as np  # noqa: PLC0415 — só quem mede paga o import
+    sys.path.insert(0, str(HELPERS))
+    from voice_levels import estimate_floor, rms_timeline  # noqa: PLC0415
+
+    # `rms_timeline` chama `sys.exit` quando o ffmpeg falha ou o arquivo não tem
+    # faixa de áudio. Como PROGRAMA isso é correto; importado, o SystemExit
+    # derrubaria o chamador — que era justamente o que o spawn tolerava. A
+    # tolerância tem de sobreviver à mudança, só não em silêncio.
+    try:
+        _, levels = rms_timeline(video)
+    except SystemExit as e:
+        raise SemNiveis(str(e)) from e
+    floor = estimate_floor(levels)
+    fala = levels[levels > floor]
+    if fala.size == 0:
+        # NÃO `sys.exit`, que é o que o `voice_levels` faz como programa: aqui
+        # somos biblioteca, e derrubar o chamador seria pior. Mas também não
+        # calado — ver o aviso em `noise_floor_for`.
+        return [None, None]
+    return [round(float(floor), 1), round(float(np.percentile(fala, 50)), 1)]
+
+
 def levels_for(video: Path) -> tuple[float | None, float | None]:
     """(piso de ruído, mediana da voz) em dBFS, medidos no material.
 
@@ -55,23 +134,24 @@ def levels_for(video: Path) -> tuple[float | None, float | None]:
     populações, não só do limiar entre elas: o limiar diz o que é silêncio, e a
     mediana diz o que é VOZ — é comparando com ela que se descobre que um
     "silêncio" tem alguém falando dentro.
+
+    ISTO ERA UM SPAWN COM PARSE DE STDOUT, e o problema não era a lentidão
+    (0,8s numa fonte de 3 min, cinco módulos chamando em cinco processos). Era
+    que dois floats eram recuperados fazendo `split` no console de outro
+    programa: qualquer mudança no formato do `print` — ou uma fonte sem faixa de
+    áudio — devolvia `(None, None)`, e o `noise_floor_for` respondia −33,0 dBFS
+    **em silêncio**. Medido: numa fonte real o limiar calibrado é −27; o
+    fallback dava −33, e o docstring do `noise_floor_for` explica que um limiar
+    errado faz toda fronteira aparecer como "sem folga" — saída plausível e
+    errada, que é o pior tipo.
     """
-    out = subprocess.run(
-        [sys.executable, str(HELPERS / "voice_levels.py"), str(video)],
-        capture_output=True, text=True,
-    )
-    floor = med = None
-    for line in out.stdout.splitlines():
-        if "noise floor:" in line:
-            try:
-                floor = float(line.split("noise floor:")[1].split("dBFS")[0].strip())
-            except (IndexError, ValueError):
-                pass
-        if "median speech:" in line:
-            try:
-                med = float(line.split("median speech:")[1].split("dBFS")[0].strip())
-            except (IndexError, ValueError):
-                pass
+    from derivado import derivado  # noqa: PLC0415
+    from voice_levels import FRAME  # noqa: PLC0415
+    try:
+        floor, med = derivado(
+            "levels", [video], {"frame": FRAME}, "1", lambda: _medir_niveis(video))
+    except SemNiveis:
+        return None, None
     return floor, med
 
 
@@ -92,6 +172,13 @@ def noise_floor_for(video: Path) -> float:
     floor, med = levels_for(video)
     if floor is not None and med is not None and floor < med:
         return round((floor + med) / 2)
+    # O FALLBACK PASSA A FALAR. Ele continua existindo — derrubar o pipeline por
+    # causa de uma fonte sem áudio seria pior — mas chegar aqui significa que a
+    # calibração NÃO aconteceu, e um limiar não calibrado faz toda fronteira
+    # parecer "sem folga": saída plausível, decisões erradas, nada denunciando.
+    print(f"aviso: não consegui calibrar o limiar em {video.name} — "
+          f"usando -33.0 dBFS fixo, e as folgas medidas daqui saem suspeitas",
+          file=sys.stderr)
     return -33.0
 
 
@@ -145,10 +232,20 @@ def build(edit: Path) -> dict:
     sources = edl.get("sources", {})
     tdir = edit / "transcripts"
 
+    fixes = corrections(edit)
     words_by_src: dict[str, list[dict]] = {}
     regions_by_src: dict[str, list[tuple[float, float]]] = {}
     for key, path in sources.items():
+        # MESMA resolução do `render.py`: absoluto, ou relativo ao <edit>. Aqui
+        # era `Path(path)` cru, resolvido contra o diretório de TRABALHO — e um
+        # EDL com caminho relativo (que o `render.py` aceita de propósito) fazia
+        # `src.exists()` dar falso, o mapa de fala não ser medido, e TODA
+        # fronteira reportar folga 999,0: "pode cortar em qualquer lugar". O
+        # arquivo inteiro existe para responder essa pergunta, e a resposta
+        # errada era a otimista, sem nada denunciando.
         src = Path(path)
+        if not src.is_absolute():
+            src = (edit / src).resolve()
         cache = tdir / f"{src.stem}.json"
         if not cache.exists():
             continue
@@ -156,6 +253,10 @@ def build(edit: Path) -> dict:
         words_by_src[key] = [w for w in (data.get("words") or []) if w.get("type") == "word"]
         if src.exists():
             regions_by_src[key] = speech_regions(src, noise_floor_for(src))
+        else:
+            print(f"aviso: não achei a fonte {key} em {src} — as folgas deste "
+                  f"trecho saem como 999 (sem medição), não como medida",
+                  file=sys.stderr)
 
     out: list[dict] = []
     t_out = 0.0
@@ -167,8 +268,13 @@ def build(edit: Path) -> dict:
             ws, we = float(w["start"]), float(w["end"])
             if we <= a or ws >= b:
                 continue
+            fixed = fix_for(fixes, key, ws, w["text"])
             out.append({
-                "text": w["text"],
+                # o texto CORRIGIDO, igual ao que a legenda vai queimar. O
+                # `srcStart`/`srcEnd` abaixo continuam sendo os da FONTE: é por
+                # eles que uma correção nova casa, e é o que o editor manda de
+                # volta no payload.
+                "text": w["text"] if fixed is None else fixed,
                 "source": key,
                 "range": ri,
                 "srcStart": round(ws, 3),
@@ -187,6 +293,12 @@ def build(edit: Path) -> dict:
         "words": out,
         "ranges": len(edl.get("ranges", [])),
         "edlMtime": (edit / "edl.json").stat().st_mtime,
+        # UMA CORREÇÃO NÃO MEXE NO EDL, e o cache do painel era chaveado só pelo
+        # mtime do EDL — então corrigir uma palavra deixava o painel servindo a
+        # versão anterior indefinidamente. O consumidor (`preview_server._words`)
+        # compara as duas chaves.
+        "fixMtime": (lambda f: f.stat().st_mtime if f.exists() else 0.0)(
+            edit / "transcripts" / "corrections.json"),
         "_note": "gapBefore/gapAfter em segundos de silêncio MEDIDO; 0 = corte cairia dentro da fala",
     }
 

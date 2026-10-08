@@ -127,6 +127,77 @@ def warn_clipped_edges(edl: dict, edit: Path, payload_edl: dict) -> list[str]:
     return warns
 
 
+def aplicar_correcoes(edit: Path, novas: list[dict]) -> tuple[list[str], bool]:
+    """Funde as correções de texto em `transcripts/corrections.json`.
+
+    É MERGE, não substituição: o arquivo é o acúmulo de tudo que já foi
+    consertado, e um save do editor que trouxesse só a correção da vez apagaria
+    as anteriores — que já estão queimadas em vídeos entregues.
+
+    A CHAVE DE DEDUPLICAÇÃO é (fonte, srcStart, palavra original). Corrigir duas
+    vezes a mesma palavra troca a correção em vez de empilhar duas, senão o
+    `fix_for` devolveria a primeira que casasse e a segunda seria ignorada — com
+    o painel mostrando o texto novo e o vídeo queimando o velho, que é
+    exatamente o defeito que esta série de mudanças foi consertar.
+
+    Correção GLOBAL (sem `srcStart`) tem chave própria, então ela conviva com
+    correções pontuais da mesma palavra: a pontual é mais específica e o
+    `fix_for` a encontra primeiro se estiver antes na lista — por isso as
+    pontuais são gravadas ANTES das globais.
+
+    Os tempos são da FONTE, não da saída. É o que torna a correção imune a
+    mudança de corte: remover um trecho não desloca `srcStart`, então uma
+    correção feita antes continua casando depois.
+    """
+    caminho = edit / "transcripts" / "corrections.json"
+    atuais = load(caminho, []) or []
+
+    def chave(c: dict) -> tuple:
+        st = c.get("srcStart")
+        return (c.get("source"), None if st is None else round(float(st), 2),
+                (c.get("from") or "").lower().strip(" .,;:!?"))
+
+    por_chave = {chave(c): c for c in atuais}
+    log: list[str] = []
+    for c in novas:
+        if not c.get("from") or c.get("text") is None or not c.get("source"):
+            log.append(f"  ! correção incompleta, ignorada: {c}")
+            continue
+        limpa = {"source": c["source"], "from": c["from"], "text": c["text"]}
+        if c.get("srcStart") is not None:
+            limpa["srcStart"] = round(float(c["srcStart"]), 3)
+        k = chave(limpa)
+        verbo = "~ trocada" if k in por_chave else "+ nova"
+        por_chave[k] = limpa
+        alcance = "(todas as ocorrências)" if "srcStart" not in limpa else \
+                  f"em {limpa['srcStart']:.2f}s"
+        log.append(f"  {verbo}: \"{c['from']}\" → \"{c['text']}\" {alcance}")
+
+    # pontuais primeiro: mais específicas, e `fix_for` para na primeira que casa
+    ordenadas = sorted(por_chave.values(), key=lambda c: ("srcStart" not in c,
+                                                          c["source"],
+                                                          c.get("srcStart", 0.0)))
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    caminho.write_text(json.dumps(ordenadas, ensure_ascii=False, indent=2))
+
+    # OS DERIVADOS DA LEGENDA PRECISAM MORRER AQUI, e este é o passo que uma
+    # implementação ingênua esquece. `cut_mapped.json` e `captions.json` são
+    # gerados com guarda `if not exists` (phase2.py) e nunca invalidados: sem
+    # apagá-los, a correção é ignorada EM SILÊNCIO — o comando termina limpo e a
+    # palavra errada continua queimada. O painel se cura sozinho, porque a chave
+    # do cache dele já inclui o mtime deste arquivo.
+    fase2_ja_rodou = False
+    for derivado in (edit / "transcripts" / "cut_mapped.json",
+                     edit / "hyperframes" / "captions.json",
+                     edit / "remotion" / "public" / "captions.json"):
+        if derivado.exists():
+            derivado.unlink()
+            log.append(f"  − {derivado.name} invalidado (será regerado)")
+            if derivado.name == "captions.json":
+                fase2_ja_rodou = True
+    return log, fase2_ja_rodou
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -152,6 +223,7 @@ def main() -> None:
         notes = list(notes) + [{"text": pedido, "request": True}]
     has_edl = bool(payload.get("edl"))
     has_data = bool(payload.get("editData"))
+    has_fix = bool(payload.get("corrections"))
 
     if has_edl:
         edl_path = edit / "edl.json"
@@ -190,6 +262,20 @@ def main() -> None:
         dp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
         print("posições de inserts/hook atualizadas")
 
+    if has_fix:
+        log, fase2_ja_rodou = aplicar_correcoes(edit, payload["corrections"])
+        print(f"texto: {len(payload['corrections'])} correção(ões) do editor")
+        for l in log:
+            print(l)
+        if fase2_ja_rodou:
+            # DIZER O PREÇO. A Fase 2 queima o texto quadro a quadro, então uma
+            # palavra corrigida depois dela custa um render inteiro — e é melhor
+            # o usuário saber disso agora do que descobrir esperando.
+            print("  a Fase 2 já tinha rodado: a legenda é queimada, então o "
+                  "texto novo só aparece\n    depois de `phase2.py <edit>` de novo")
+
+    # CORREÇÃO DE TEXTO NÃO REFAZ O CORTE. A imagem e o som são os mesmos; só o
+    # que está escrito muda. Refazer aqui custaria minutos por uma palavra.
     if has_edl and not args.no_render:
         print("\nrefazendo o corte…")
         cmd = [sys.executable, str(HELPERS / "render.py"), str(edit / "edl.json"),
@@ -220,7 +306,7 @@ def main() -> None:
         print("  guardadas em pending_notes.json")
 
     edits_path.unlink(missing_ok=True)
-    if not has_edl and not has_data and not notes:
+    if not has_edl and not has_data and not has_fix and not notes:
         print("nada a aplicar")
 
 

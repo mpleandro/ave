@@ -56,7 +56,12 @@ def _palavras(edit: Path) -> list[dict]:
     out: list[dict] = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
                     if not q.name.startswith(".")):
-        for w in json.loads(p.read_text()).get("words", []):
+        d = json.loads(p.read_text())
+        # `corrections.json` mora aqui e é uma LISTA, não um transcrito —
+        # filtrar por tipo, não por nome (ver checar_spacing em portao_fase1.py)
+        if not isinstance(d, dict):
+            continue
+        for w in d.get("words", []):
             if w.get("type") == "word" and (w.get("text") or "").strip():
                 out.append(w)
     return out

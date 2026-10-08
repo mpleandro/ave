@@ -770,6 +770,12 @@ class Handler(BaseHTTPRequestHandler):
         tmp = out.with_suffix(".tmp")
         tmp.write_text(json.dumps(body, ensure_ascii=False, indent=2))
         tmp.replace(out)
+        # UMA CORREÇÃO INVALIDA O PARECER DO PORTÃO: ele descreve um render que
+        # está prestes a deixar de existir. Mantido, a tela mostraria defeitos
+        # de um corte já refeito — e o pior tipo de defeito é o que o usuário
+        # não consegue mais encontrar no vídeo que está vendo.
+        if name == "preview_edits.json":
+            self._patch_state()
         started = self._maybe_auto_apply(name)
         self._json({"ok": True, "file": str(out), "applying": started})
 
@@ -816,8 +822,7 @@ class Handler(BaseHTTPRequestHandler):
         # existem, e rodá-la aqui gastaria tokens num estilo presumido — foi
         # exatamente o erro que originou este encadeamento.
         if name == "preview_approval.json":
-            self._open_style_tab()
-            return self._encode_full_res()
+            return self._gate_then_approve()
         script = "apply_edits.py" if name == "preview_edits.json" else "phase2.py"
         return self._spawn_helper(script)
 
@@ -932,6 +937,57 @@ class Handler(BaseHTTPRequestHandler):
         tmp = p.with_suffix(".tmp")
         tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=2))
         tmp.replace(p)
+
+    def _gate_then_approve(self) -> bool:
+        """A CONFERÊNCIA roda, mas NUNCA aparece para o usuário nem o trava.
+
+        Decisão do usuário (2026-09-18), e ela nasceu de uma aprovação travada
+        por três achados que a IA já tinha medido e descartado um a um: duas
+        pausas retóricas que o corte existia para preservar e um "e" de emenda
+        cuja transcrição isolada saiu limpa. A tela dizia "3 defeitos no corte",
+        o encode não rodava, e o usuário ficou sem conseguir ver o próprio
+        trabalho — *"tem uma mensagem de erro na tela que me impede de ver o
+        resultado"*.
+
+        O erro de desenho não era o portão: era PUBLICAR o parecer dele. Um
+        detector acústico fala em probabilidade, e traduzir isso para a palavra
+        "defeito", na barra de ação de quem só quer ver o vídeo, transforma
+        ruído de instrumento em veto ao trabalho. Quem sabe ler o parecer é a
+        IA — ela roda os mesmos auditores ANTES de mostrar o corte (Fase 1,
+        passo 6b) e leva ao usuário, em português e no chat, só o que sobrou de
+        verdade.
+
+        Então: aprovar SEMPRE aprova. O encode e a aba Estilo saem na hora, sem
+        esperar a conferência. O relatório é gravado em `gate_report.json` para
+        a IA ler, e `state.gate` nunca mais é escrito — é o campo que a
+        interface renderizava.
+        """
+        self._open_style_tab()
+        ok = self._encode_full_res()
+
+        root = self.root
+        gate = Path(__file__).resolve().parent / "portao_fase1.py"
+
+        def run() -> None:
+            """Confere em segundo plano, para o RELATÓRIO — nunca para a tela."""
+            rel: dict
+            try:
+                r = subprocess.run([helper_python(), str(gate), str(root), "--json"],
+                                   capture_output=True, text=True, timeout=2400)
+                saida = (r.stdout or "").strip()
+                rel = json.loads(saida[saida.index("{"):saida.rindex("}") + 1])
+            except (OSError, ValueError, json.JSONDecodeError,
+                    subprocess.TimeoutExpired) as exc:
+                rel = {"ok": None, "erro": str(exc)[:200]}
+            rel["at"] = time.time()
+            try:
+                (root / "gate_report.json").write_text(
+                    json.dumps(rel, ensure_ascii=False, indent=1))
+            except OSError:
+                pass
+
+        threading.Thread(target=run, daemon=True).start()
+        return ok
 
     def _open_style_tab(self) -> None:
         """Aprovou → a aba Estilo passa a pedir as escolhas, na hora.
@@ -1502,10 +1558,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"words": [], "error": "sem edl.json"}, 200)
             return
         out = self.root / ".preview_cache" / "words.json"
+        # DUAS chaves, não uma. Corrigir uma palavra não toca no `edl.json` — o
+        # corte é o mesmo, só o texto muda — então a chave só-do-EDL servia o
+        # painel velho para sempre, e o usuário via a palavra errada continuar
+        # na tela depois de consertá-la.
+        fix = self.root / "transcripts" / "corrections.json"
+        fix_mtime = fix.stat().st_mtime if fix.exists() else 0.0
         stale = True
         if out.exists():
             try:
-                stale = json.loads(out.read_text()).get("edlMtime") != edl.stat().st_mtime
+                cached = json.loads(out.read_text())
+                stale = (cached.get("edlMtime") != edl.stat().st_mtime
+                         or cached.get("fixMtime", 0.0) != fix_mtime)
             except json.JSONDecodeError:
                 pass
         if stale:

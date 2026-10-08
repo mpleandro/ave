@@ -8,9 +8,26 @@ word-boundary precision from text alone.
 
 Output: <edit>/takes_packed.md
 
+**`--por-palavra` — a segunda vista, palavra a palavra.** O limiar de 0,5s que
+agrupa as frases é generoso demais para engasgo e respiro: uma hesitação de
+0,2s, uma palavra repetida colada ("que que", "e e"), ou uma pausa de 0,3s no
+meio do raciocínio somem dentro da mesma frase empacotada — o texto lê
+perfeito e o silêncio real fica invisível. `--por-palavra` lista CADA palavra
+com a folga antes dela (do token `spacing`, a mesma fonte que `--fix-times`
+corrige — nunca a diferença entre dois carimbos de palavra, que estica por
+cima do silêncio) e marca:
+  ⏸  folga ≥ --gap-min (hesitação/respiro candidato)
+  ↻  a mesma palavra repetida colada (engasgo candidato)
+Não substitui `transcript_audit.py` (esse pega fala ENGOLIDA, sem texto
+nenhum) nem `detect_restarts.py` (frase inteira refeita) — é o meio-termo:
+toda palavra que TEM texto, na resolução onde um engasgo aparece.
+
+Output: <edit>/takes_packed_palavras.md
+
 Usage:
     python helpers/pack_transcripts.py --edit-dir <edit_dir>
     python helpers/pack_transcripts.py --edit-dir <edit_dir> --silence-threshold 0.5
+    python helpers/pack_transcripts.py --edit-dir <edit_dir> --por-palavra --gap-min 0.15
 """
 
 from __future__ import annotations
@@ -122,6 +139,92 @@ def group_into_phrases(
     return phrases
 
 
+def _norm(text: str) -> str:
+    """Normaliza uma palavra pra comparar engasgo: minúscula, sem pontuação
+    de borda ("que," e "que" são a mesma palavra dita duas vezes coladas)."""
+    return text.strip().lower().strip(".,!?;:…()“”\"'")
+
+
+def group_into_words(words: list[dict]) -> tuple[list[dict], bool]:
+    """Walk a word list into one entry per spoken token (word/audio_event),
+    with `gap_before` = the duration of the `spacing` entry that precedes it.
+
+    Usa o SPACING medido, nunca `start_atual - end_anterior`: depois de
+    `transcribe.py --repair-spacing` (ou num transcrito novo, que já nasce
+    assim) é o token de spacing que carrega o silêncio REAL — o carimbo da
+    palavra ainda estica por cima dele (Hard Rule 15). Sem spacing algum
+    (transcrito velho, nunca reparado), cai para a diferença de carimbos e
+    avisa no chamador — melhor um número otimista que nenhum.
+    """
+    out: list[dict] = []
+    pending_gap = 0.0
+    prev_end: float | None = None
+    saw_spacing = False
+    for w in words:
+        t = w.get("type", "word")
+        if t == "spacing":
+            saw_spacing = True
+            start, end = w.get("start"), w.get("end")
+            if start is not None and end is not None:
+                pending_gap = max(pending_gap, end - start)
+            continue
+        raw = (w.get("text") or "").strip()
+        if not raw:
+            continue
+        start = w.get("start")
+        if start is None:
+            continue
+        end = w.get("end", start)
+        gap = pending_gap if saw_spacing else max(0.0, start - (prev_end or start))
+        out.append({
+            "start": start, "end": end, "text": raw,
+            "type": t, "speaker_id": w.get("speaker_id"),
+            "gap_before": gap,
+        })
+        pending_gap = 0.0
+        prev_end = end
+    return out, saw_spacing
+
+
+def render_words_markdown(
+    entries: list[tuple[str, list[dict]]], gap_min: float,
+) -> tuple[str, int, int]:
+    """(markdown, total_engasgos, total_respiros)."""
+    lines = ["# Transcrição palavra a palavra", ""]
+    lines.append(
+        f"Uma linha por palavra. ⏸ = folga ≥ {gap_min:.2f}s antes dela "
+        "(respiro/hesitação candidato); ↻ = mesma palavra repetida colada "
+        "(engasgo candidato). Complementa `takes_packed.md`, não substitui — "
+        "aqui a resolução é a palavra, lá é a frase."
+    )
+    lines.append("")
+    total_engasgos = total_respiros = 0
+    for name, tokens in entries:
+        lines.append(f"## {name}  ({len(tokens)} palavras)")
+        if not tokens:
+            lines.append("  _no speech detected_")
+            lines.append("")
+            continue
+        prev_norm = None
+        for tok in tokens:
+            flags = []
+            if tok["gap_before"] >= gap_min:
+                flags.append(f"⏸{tok['gap_before']:.2f}")
+                total_respiros += 1
+            cur_norm = _norm(tok["text"])
+            if cur_norm and cur_norm == prev_norm:
+                flags.append("↻")
+                total_engasgos += 1
+            prev_norm = cur_norm
+            flag_str = f"  {' '.join(flags)}" if flags else ""
+            spk = tok.get("speaker_id")
+            spk_str = str(spk)[len("speaker_"):] if spk and str(spk).startswith("speaker_") else (spk or "")
+            spk_tag = f" S{spk_str}" if spk_str else ""
+            lines.append(f"  {format_time(tok['start'])}{spk_tag}{flag_str}  {tok['text']}")
+        lines.append("")
+    return "\n".join(lines), total_engasgos, total_respiros
+
+
 def pack_one_file(json_path: Path, silence_threshold: float) -> tuple[str, float, list[dict]]:
     """Return (header_name, duration, phrases) for one transcript file."""
     data = json.loads(json_path.read_text())
@@ -177,6 +280,24 @@ def main() -> None:
         default=None,
         help="Output path (default: <edit-dir>/takes_packed.md)",
     )
+    ap.add_argument(
+        "--por-palavra",
+        action="store_true",
+        help="Também escreve takes_packed_palavras.md — uma linha por palavra, "
+             "com folga medida e marcação de engasgo/respiro (ver docstring).",
+    )
+    ap.add_argument(
+        "--gap-min",
+        type=float,
+        default=0.15,
+        help="Folga mínima (s) pra marcar ⏸ no --por-palavra. Default 0.15.",
+    )
+    ap.add_argument(
+        "--output-palavras",
+        type=Path,
+        default=None,
+        help="Output do --por-palavra (default: <edit-dir>/takes_packed_palavras.md)",
+    )
     args = ap.parse_args()
 
     edit_dir = args.edit_dir.resolve()
@@ -184,10 +305,16 @@ def main() -> None:
     if not transcripts_dir.is_dir():
         sys.exit(f"no transcripts directory at {transcripts_dir}")
 
-    # Skip AppleDouble/dotfiles (e.g. ._name.json) that macOS creates on
-    # exFAT/network drives — they are binary metadata, not transcripts.
+    # Skip AppleDouble/dotfiles (e.g. ._name.json) que o macOS cria em
+    # exFAT/rede — são metadado binário, não transcrito. E skip os arquivos
+    # DERIVADOS que também moram em transcripts/: `corrections.json` é uma
+    # lista (`.get` quebra), `cut_mapped.json`/`cut.json` são o transcrito do
+    # CORTE (Hard Rule 14) — empacotá-los aqui duplicaria o texto da fonte no
+    # takes_packed.md, que é a vista da FONTE, antes do EDL existir.
+    _DERIVADOS = {"corrections.json", "cut_mapped.json", "cut.json"}
     json_files = sorted(
-        p for p in transcripts_dir.glob("*.json") if not p.name.startswith(".")
+        p for p in transcripts_dir.glob("*.json")
+        if not p.name.startswith(".") and p.name not in _DERIVADOS
     )
     if not json_files:
         sys.exit(f"no .json files in {transcripts_dir}")
@@ -204,6 +331,26 @@ def main() -> None:
     print(f"packed {len(entries)} transcripts → {out_path}")
     print(f"  {total_phrases} phrases, {format_duration(total_duration)} total runtime")
     print(f"  {kb:.1f} KB")
+
+    if args.por_palavra:
+        word_entries = []
+        sem_spacing = []
+        for p in json_files:
+            data = json.loads(p.read_text())
+            tokens, saw_spacing = group_into_words(data.get("words", []))
+            word_entries.append((p.stem, tokens))
+            if not saw_spacing and tokens:
+                sem_spacing.append(p.stem)
+        words_md, n_engasgos, n_respiros = render_words_markdown(word_entries, args.gap_min)
+        words_path = args.output_palavras or (edit_dir / "takes_packed_palavras.md")
+        words_path.write_text(words_md, encoding="utf-8")
+        total_words = sum(len(t) for _, t in word_entries)
+        kb2 = words_path.stat().st_size / 1024
+        print(f"\npalavra a palavra → {words_path}  ({kb2:.1f} KB)")
+        print(f"  {total_words} palavras, {n_respiros} respiro(s) ⏸, {n_engasgos} engasgo(s) ↻")
+        if sem_spacing:
+            print(f"  aviso: sem spacing medido em {', '.join(sem_spacing)} — "
+                  f"rode transcribe.py --repair-spacing antes de confiar na folga")
 
 
 if __name__ == "__main__":

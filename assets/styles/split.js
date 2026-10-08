@@ -44,6 +44,8 @@
       // mexer no `display` dele daqui brigaria com o renderer.
       var art = w.querySelector('.ave-split-art');
       var seam = w.querySelector('.ave-split-seam');
+      // a tarja da legenda acende e apaga COM a arte: são a mesma janela
+      var strip = w.querySelector('.ave-split-strip');
       var zoom = parseFloat(w.getAttribute('data-zoom')) || 1;
       var focus = parseFloat(w.getAttribute('data-focus')) || 0;
       var vidTop = parseFloat(w.getAttribute('data-vid-top')) || 0;
@@ -75,6 +77,7 @@
         scale: 1, y: 0, objectFit: 'fill',
       }, start);
       if (art) tl.set(art, { display: 'block' }, start);
+      if (strip) tl.set(strip, { display: 'block' }, start);
       if (seam) tl.set(seam, { display: 'block' }, start);
       var off = w.getAttribute('data-centre-offset');
       if (centred && off !== null) {
@@ -89,6 +92,7 @@
       tl.set(vid, { width: '100%', height: '100%', left: 0, top: 0,
                     scale: 1, y: 0, objectFit: 'cover' }, end);
       if (art) tl.set(art, { display: 'none' }, end);
+      if (strip) tl.set(strip, { display: 'none' }, end);
       if (seam) tl.set(seam, { display: 'none' }, end);
       if (centred && off !== null && centreBase) {
         var back = {}; back[centreVar] = centreBase;

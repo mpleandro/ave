@@ -178,21 +178,35 @@ def faixa(medida: dict, estilo: str) -> dict:
     return out
 
 
-def caixa_bate_no_rosto(video, top_px: int, altura_px: int = 320) -> dict:
+def caixa_bate_no_rosto(video, top_px: int, altura_px: int = 320,
+                        start: float = 0.0, end: float | None = None) -> dict:
     """A CAIXINHA COBRE A CABEÇA? — o usuário pediu para perguntar quando cobrir.
 
     Mede o TOPO da cabeça (não o queixo, como a legenda: o que a caixinha invade
     é a testa) e devolve o veredito com uma sugestão de topo alternativo, para a
     pergunta ao usuário já vir com saída — pergunta sem alternativa é só um aviso
     disfarçado.
+
+    `start`/`end` (segundos) escopam a amostragem para a JANELA em que a
+    caixinha aparece — não o vídeo inteiro. Importa quando `zoomAuto`/
+    `zoomCuts` está ligado: a câmera dinâmica aperta o enquadramento em
+    cortes que podem estar bem depois de a caixinha já ter saído de tela, e
+    medir o vídeo inteiro sugeriria uma posição mais alta do que o
+    necessário, ou pior, deixaria passar um aperto que acontece justamente
+    DENTRO da janela da caixinha (medido: o aperto real ficava em ~76-86s,
+    fora dos primeiros segundos que uma amostragem só-do-início cobriria).
     """
     import cv2
     cap = cv2.VideoCapture(str(video))
     H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    n_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    f0 = max(0, int(start * fps))
+    f1 = n_total if end is None else min(n_total, int(end * fps))
+    n = max(1, f1 - f0)
     casc = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     topos = []
-    for i in range(0, n, max(1, n // 30)):
+    for i in range(f0, f1, max(1, n // 30)):
         cap.set(cv2.CAP_PROP_POS_FRAMES, i)
         ok, fr = cap.read()
         if not ok:
@@ -206,7 +220,7 @@ def caixa_bate_no_rosto(video, top_px: int, altura_px: int = 320) -> dict:
     if not topos:
         return {"rosto": False}
     topos.sort()
-    p10 = topos[max(0, int(len(topos) * 0.1))]      # a cabeça mais ALTA do corte
+    p10 = topos[max(0, int(len(topos) * 0.1))]      # a cabeça mais ALTA na janela
     fundo_caixa = (top_px + altura_px) / H
     bate = fundo_caixa > p10
     # sugestão: subir a caixa até o fundo dela encostar no topo da cabeça
@@ -215,10 +229,21 @@ def caixa_bate_no_rosto(video, top_px: int, altura_px: int = 320) -> dict:
             "bate": bate, "sugestaoTopPx": sugerido}
 
 
+def _altura_estimada_caixinha() -> int:
+    """Estimativa de altura total do adesivo (px), pelo pior caso — 2 linhas
+    de pergunta. `faixaAltura` cobre só a faixa escura; o corpo branco soma
+    padding dos dois lados mais a altura das linhas de texto."""
+    cx = VARIANTS.get("caixinha", {})
+    return round(cx.get("faixaAltura", 132) + cx.get("corpoPadding", 44) * 2
+                + cx.get("corpoTamanho", 47) * cx.get("corpoEntrelinha", 1.28) * 2)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("edit", type=Path)
     ap.add_argument("--aplicar", action="store_true", help="grava captions.offsetY no edit-data.json")
+    ap.add_argument("--caixinha", action="store_true",
+                    help="checa a Caixinha de perguntas contra o rosto (em vez da legenda)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
@@ -228,6 +253,33 @@ def main() -> None:
         sys.exit(f"não achei o corte em {video}")
     dp = edit / "hyperframes" / "edit-data.json"
     data = json.loads(dp.read_text()) if dp.exists() else {}
+
+    if args.caixinha:
+        cx = data.get("questionBox") or {}
+        if not cx.get("pergunta"):
+            sys.exit("sem questionBox.pergunta — nada para checar")
+        top_px = int(cx.get("top", VARIANTS.get("caixinha", {}).get("topoPadrao", 300)))
+        altura_px = _altura_estimada_caixinha()
+        start = float(cx.get("start", 0.0))
+        end = cx.get("end")
+        rec = caixa_bate_no_rosto(video, top_px, altura_px, start=start,
+                                  end=float(end) if end is not None else None)
+        if args.json:
+            print(json.dumps(rec, ensure_ascii=False))
+        elif not rec.get("rosto"):
+            print("nenhum rosto detectado na janela da caixinha")
+        elif rec["bate"]:
+            print(f"  caixinha bate na cabeça (topo da cabeça a {rec['topoCabecaP10']:.3f}, "
+                  f"caixinha desce até {rec['fundoCaixa']:.3f}) → sugestão: top={rec['sugestaoTopPx']}px")
+        else:
+            print(f"  nada a mexer — caixinha (fundo {rec['fundoCaixa']:.3f}) não invade "
+                  f"a cabeça (topo {rec['topoCabecaP10']:.3f})")
+        if args.aplicar and dp.exists() and rec.get("rosto") and rec["bate"]:
+            data.setdefault("questionBox", {})["top"] = rec["sugestaoTopPx"]
+            dp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+            print(f"  aplicado em {dp.name}")
+        return
+
     estilo = (data.get("captions") or {}).get("style", "karaoke")
 
     medida = medir(video)

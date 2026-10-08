@@ -127,7 +127,7 @@ const CARTELAS = [
   ['adesivo', 'Adesivo'],
   // 'noticia' NÃO mora aqui: virou elemento independente em STYLE_CATALOG.elements
   // (ela e a Caixinha disputavam a mesma zona alta da tela sem nenhuma arbitragem —
-  // ver elLocked() e a trava cruzada elemento↔headline).
+  // ver limpaConflitoZonaAlta(), que hoje resolve por substituição).
   ['capa', 'Capa sólida'], ['capa_blur', 'Capa desfocada'], ['cortina', 'Cortina'],
   ['meia_tela', 'Meia-tela'], ['moldura', 'Moldura'], ['contagem', 'Contagem'],
   ['knockout', 'Knockout'], ['poster', 'Pôster tipográfico'], ['aspas', 'Aspas'],
@@ -136,8 +136,8 @@ const CARTELAS = [
 const CT_IDS = new Set(CARTELAS.map((c) => c[0]));
 // As dez cartelas "banda" (cheia:false, entram SOBRE o vídeo) — disputam a
 // mesma zona alta que a Caixinha e a Notícia. Lista explícita, não um slice
-// da ordem do array: a trava não pode quebrar em silêncio se alguém reordenar
-// CARTELAS por outro motivo.
+// da ordem do array: a substituição não pode quebrar em silêncio se alguém
+// reordenar CARTELAS por outro motivo.
 const CARTELA_BANDA_IDS = new Set(['fita', 'jornal', 'terminal', 'alerta', 'placar',
                                     'sombra_longa', 'neon', 'balao', 'filete', 'adesivo']);
 
@@ -149,8 +149,25 @@ const PORTED = {
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
                       'relevo', 'grifo', 'contorno_duplo',
                       ...CARTELAS.map((c) => c[0])]),
-  edits: new Set(['limpa', 'split', 'split2']),
+  // os três de `EDIT_ELEMENTS` entram aqui porque o radio de FORMATO os
+  // oferece junto com limpa/split/split2 (ver `radios()`) — e os três têm
+  // caminho de render de verdade no compositor (`questionBox`,
+  // `brollOverlays[]`, `hook.style="noticia"`).
+  edits: new Set(['limpa', 'split', 'split2', 'caixinha', 'brollOverlay', 'noticia']),
 };
+
+/* FORMATO É UMA ESCOLHA SÓ, e ela mora em dois lugares no dado.
+ *
+ * `limpa`/`split`/`split2` viajam em `S.style.edit` (→ `editStyle`); Caixinha,
+ * Broll Overlay e Notícia viajam em `S.style.elements` (→ `questionBox`,
+ * `brollOverlays[]`, `hook.style`). São contratos DIFERENTES com o compositor,
+ * e é por isso que o dado continua separado — mas na TELA os seis são o mesmo
+ * radio: o usuário escolhe um formato, não uma combinação.
+ *
+ * Escolher um destes três zera os outros dois E devolve `edit` a `limpa` (ver
+ * o handler de clique): sem isso, `editStyle: "split"` + `questionBox` sairiam
+ * os dois no render, que é exatamente a combinação que o radio nega. */
+const EDIT_ELEMENTS = ['caixinha', 'brollOverlay', 'noticia'];
 
 // Quadro de foco de câmera — substitui o "boneco" genérico (círculo+blob) nos
 // mocks de tipo de edição por um vocabulário de editor: cantos em L, ponto de
@@ -312,12 +329,6 @@ const STYLE_CATALOG = {
       icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="3.4" width="6" height="9.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9.6" y="1.9" width="5.2" height="12.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8.4 8h.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
     },
     {
-      id: 'flashCut',
-      name: 'Flash na transição',
-      def: false,
-      icon: '<svg viewBox="0 0 16 16"><path d="M3 13.2L13 3.2" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" fill="none"/><path d="M6.6 14L9.4 11.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/><path d="M6.6 4.8L3.8 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".55"/></svg>',
-    },
-    {
       id: 'sfx',
       /* Efeitos LOCAIS, da biblioteca em assets/sfx/. Vem antes da geração por
        * IA de propósito: é o caminho que não custa token nem espera, e a
@@ -354,6 +365,25 @@ const STYLE_CATALOG = {
       name: 'Caixinha de perguntas',
       def: false,
       icon: '<svg viewBox="0 0 16 16"><path d="M2 3.6A1.6 1.6 0 013.6 2h8.8A1.6 1.6 0 0114 3.6v5.8a1.6 1.6 0 01-1.6 1.6H8l-3 2.6v-2.6H3.6A1.6 1.6 0 012 9.4V3.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><rect x="4.2" y="4.6" width="7.6" height="1.4" rx=".7"/><rect x="4.2" y="7.2" width="5" height="1.4" rx=".7"/></svg>',
+      // O mock imita o ADESIVO DE VERDADE (fidelidade com o app, não com a
+      // marca — ver caixinha.css): faixa escura no topo, corpo branco embaixo,
+      // cantos largos, sem inclinação. As cores são as MESMAS fixas do
+      // render, não um placeholder — mudar o CSS real muda este mock junto
+      // só se alguém lembrar de atualizar os dois; os dois vivem lidos lado a
+      // lado na mesma aba, então uma prévia que mentisse sobre a forma seria
+      // pior que nenhuma.
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="76" r="12" fill="rgba(255,255,255,.12)"/>
+        <path d="M18 112a15 15 0 0130 0z" fill="rgba(255,255,255,.12)"/>
+        <rect x="9" y="16" width="48" height="27" rx="6" fill="#fff" opacity=".92"/>
+        <rect x="9" y="16" width="48" height="11" rx="6" fill="#20252b"/>
+        <rect x="9" y="22" width="48" height="5" fill="#20252b"/>
+        <rect x="14" y="19.7" width="21" height="3" rx="1.5" fill="#fff" opacity=".85"/>
+        <rect x="14" y="33" width="34" height="3" rx="1.5" fill="#20252b" opacity=".55"/>
+        <rect x="14" y="38" width="24" height="3" rx="1.5" fill="#20252b" opacity=".32"/>
+      </svg>`,
     },
     {
       id: 'brollOverlay',
@@ -364,16 +394,47 @@ const STYLE_CATALOG = {
       name: 'Broll Overlay',
       def: false,
       icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="9.6" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="8.6" y="7.2" width="6.2" height="6.6" rx="1.4" fill="var(--bg1)" stroke="currentColor" stroke-width="1.4"/></svg>',
+      // O formato tem quatro tipos (`words`/`stat`/`labels`/`media`) e três
+      // posições — nenhum mock cabe todos. Este mostra o mais comum: uma
+      // faixa escurecida (o `dim`, NUNCA opacity no vídeo — ver
+      // brollOverlay_markup) por cima do a-roll, com a palavra de destaque
+      // (`bo-w.acc`) na cor de acento, e os anéis do cenário "hero" ao fundo.
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="46" cy="26" r="13" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="1.3"/>
+        <circle cx="46" cy="26" r="19" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="1.1"/>
+        <rect x="3" y="80" width="60" height="35" rx="5" fill="rgba(0,0,0,.42)"/>
+        <rect x="11" y="88" width="19" height="4.2" rx="2.1" fill="rgba(255,255,255,.55)"/>
+        <rect x="32" y="88" width="15" height="4.2" rx="2.1" fill="rgb(var(--orange-rgb) / .9)"/>
+        <rect x="11" y="95.5" width="28" height="4.2" rx="2.1" fill="rgba(255,255,255,.55)"/>
+      </svg>`,
     },
     {
       /* NOTÍCIA — cartela banda (motor `cartela`) que virou elemento por
        * disputar a mesma zona alta que a Caixinha, sem nenhuma arbitragem
-       * antes disto. A trava contra Headline (qualquer cartela banda, `cheia:
-       * false`) mora em elLocked(). */
+       * antes disto. Ligá-la zera o Headline (e vice-versa) em
+       * limpaConflitoZonaAlta(): as duas usam o MESMO `hook.style`. */
       id: 'noticia',
       name: 'Notícia',
       def: false,
       icon: '<svg viewBox="0 0 16 16"><rect x="1.4" y="3" width="13.2" height="10" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="3.2" y="4.8" width="4.4" height="3.4" rx=".5" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="8.6" y="4.9" width="4.6" height="1.2" rx=".6"/><rect x="8.6" y="7" width="4.6" height="1.2" rx=".6"/><rect x="3.2" y="9.6" width="10" height="1.2" rx=".6"/></svg>',
+      // Espelha `paint` do variants.json (`lines: papelEscuro, barra: accent,
+      // olho: sobreAccent`): cartão claro, barra lateral na cor de acento, o
+      // rótulo (olho) sentado SOBRE a barra em contraste, manchete escura
+      // preenchendo a largura (`quebra: "encher"`).
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="80" r="12" fill="rgba(255,255,255,.12)"/>
+        <path d="M18 114a15 15 0 0130 0z" fill="rgba(255,255,255,.12)"/>
+        <rect x="7" y="17" width="52" height="34" rx="4" fill="#eee7d8" opacity=".95"/>
+        <rect x="7" y="17" width="5" height="34" rx="2" fill="rgb(var(--orange-rgb) / .9)"/>
+        <rect x="18" y="21.5" width="19" height="6" rx="3" fill="rgb(var(--orange-rgb) / .9)"/>
+        <rect x="21" y="23.6" width="13" height="1.8" rx=".9" fill="#fff" opacity=".92"/>
+        <rect x="18" y="33" width="36" height="4.6" rx="1" fill="#241f18" opacity=".82"/>
+        <rect x="18" y="40" width="28" height="4.6" rx="1" fill="#241f18" opacity=".82"/>
+      </svg>`,
     },
   ],
 };
@@ -592,6 +653,14 @@ const HL_FALLBACK = {
 };
 const hlStyle = (id) =>
   ((LIVE.variants && LIVE.variants.headlines) || {})[id] || HL_FALLBACK[id] || HL_FALLBACK.card;
+
+// Mesmo padrão de `hlStyle`, para a legenda — espelha a busca já usada em
+// `renderLive` (linha ~3138). Faltava ESTE helper: `sendStyle()` chamava uma
+// função `capVariant()` que nunca existiu, e quebrava com `ReferenceError`
+// ANTES do `fetch('/api/save')` — o clique em "Enviar e renderizar" morria
+// ali, sem POST nenhum sair e sem toast nenhum avisar. Sem `.family`: o campo
+// do variant é `.cssFamily` (ver `vestirPal`/`renderLive`), não `.family`.
+const capVariant = (id) => ((LIVE.variants && LIVE.variants.styles) || {})[id] || {};
 
 /* ---------- as duas famílias ----------
  * Catálogo CURADO do Google Fonts, não a API inteira. Duas razões, e a segunda
@@ -1364,6 +1433,12 @@ let S = {
   view: 'tl',       // 'tl' linha do tempo · 'tx' transcrição
   words: [],        // transcrito do corte (/gen/words.json)
   cutWords: new Set(), // índices riscados = PEDIDO de corte, não corte feito
+  /* CORREÇÃO DE TEXTO ≠ CORTE, e as duas moram no mesmo painel de propósito:
+     é lendo que se percebe as duas coisas. Riscar uma palavra pede um CORTE no
+     vídeo; corrigi-la conserta o que o Whisper ESCREVEU, sem tocar em imagem
+     nem em som. Mapa índice→texto novo; o texto original vem de S.words[i]. */
+  fixWords: new Map(),
+  fixTodas: new Set(),  // índices marcados como "em todas as ocorrências"
   cutBreaths: new Set(), // respiros marcados: índice da palavra que vem ANTES
   approved: false,  // aprovação enviada nesta sessão (some a barra na hora)
   selWords: new Set(),
@@ -1386,8 +1461,6 @@ let S = {
  * A resposta vem do servidor (`keys`), não de um campo fixo no catálogo:
  * assim a trava some sozinha quando a chave entra, sem ninguém ter de lembrar
  * de destravar nada. */
-const ZONA_ALTA_MSG = 'a caixinha e o headline disputam a mesma zona da tela — desligue um dos dois';
-
 function elLocked(e) {
   if (e.needsKey) {
     const keys = S.keys || {};
@@ -1395,25 +1468,37 @@ function elLocked(e) {
     // dado travaria a opção no primeiro segundo de cada carregamento.
     if (e.needsKey in keys && !keys[e.needsKey]) return e.keyMsg || 'Falta a chave de API para isto.';
   }
-  /* ZONA ALTA: Caixinha, Notícia e qualquer cartela "banda" ocupam o mesmo
-   * canto superior da tela por padrão (top:300, janela do gancho) — e por
-   * decisão do usuário a saída é TRAVAR a combinação, não reposicionar por
-   * conta própria. Ver CARTELA_BANDA_IDS. */
-  if (e.id === 'caixinha'
-      && (CARTELA_BANDA_IDS.has(S.style.headline) || S.style.elements.noticia)) {
-    return ZONA_ALTA_MSG;
-  }
-  if (e.id === 'noticia') {
-    if (S.style.elements.caixinha) return ZONA_ALTA_MSG;
-    /* Notícia É uma cartela banda que só mudou de endereço na interface — ela
-     * ocupa o MESMO hook/trilha que qualquer headline do radio (mesmo motor
-     * `cartela`, ver o branch `elif "noticia" in pecas` em
-     * compose_shortform.py). As duas nunca coexistem tecnicamente, então
-     * escolher um headline real desliga a porta da Notícia até ele voltar a
-     * "Nenhum". */
-    if (S.style.headline) return 'desligue o headline escolhido em Headline para ligar a Notícia';
-  }
+  /* ZONA ALTA: a trava virou SUBSTITUIÇÃO (decisão do usuário, 2026-09-15).
+   *
+   * Caixinha, Notícia e as cartelas "banda" continuam disputando o mesmo canto
+   * superior (top:300, janela do gancho) — isso é física do render e não mudou.
+   * O que mudou é a resposta da interface: em vez de DESABILITAR a opção em
+   * conflito, escolher uma desliga a outra (ver `limpaConflitoZonaAlta`).
+   *
+   * O motivo é que a trava não tinha saída visível. "Nenhum" é a última opção
+   * de uma lista de 31 headlines, e até chegar nela o usuário via Notícia
+   * permanentemente apagada — com uma dica que pedia justamente o passo que ele
+   * não encontrava. Desabilitar explica o conflito depois que a pessoa já
+   * desistiu; substituir resolve no próprio clique. */
   return '';
+}
+
+/* Escolher na zona alta DESLIGA o que colide, em vez de impedir o clique.
+ *
+ * Só desliga o que colide de verdade: a Notícia é tecnicamente uma cartela
+ * banda (mesmo `hook.style`, mesma trilha), então ela e QUALQUER headline
+ * nunca coexistem; a Caixinha é um elemento próprio e só briga com as cartelas
+ * BANDA — com uma cartela de tela cheia ou com os onze estilos clássicos ela
+ * convive, e essa combinação continua alcançável. */
+function limpaConflitoZonaAlta(origem) {
+  const els = S.style.elements;
+  if (origem === 'headline') {
+    if (S.style.headline) els.noticia = false;
+    if (CARTELA_BANDA_IDS.has(S.style.headline)) els.caixinha = false;
+  } else {
+    if (els.noticia) S.style.headline = '';
+    if (els.caixinha && CARTELA_BANDA_IDS.has(S.style.headline)) S.style.headline = '';
+  }
 }
 
 function defaultStyle() {
@@ -1570,6 +1655,13 @@ function renderedToDraft(t) {
 // ---------- dirty tracking ----------
 const wordsDirty = () => S.cutWords.size > 0 || S.cutBreaths.size > 0;
 
+/* SEPARADO de `wordsDirty()` por duas razões que a interface já modela:
+   (a) uma correção se aplica sozinha — não é "marcação para alguém ler", que é
+       o que `wordsDirty()` significa nos avisos;
+   (b) ela não é CARA: não refaz o corte, então não pode entrar no `caro` que
+       dispara o aviso de "minutos de render e tokens". */
+const fixDirty = () => S.fixWords.size > 0;
+
 const jcutDirty = () => S.draft.some((r) => r.leadF != null || r.tailF != null);
 
 function edlDirty() {
@@ -1582,6 +1674,7 @@ function dirtyCount() {
   let n = S.draft.filter((r) => r.removed || r.start !== r.orig.start || r.end !== r.orig.end).length;
   n += S.insertsDraft.filter((c) => c.start !== c.orig.start || c.end !== c.orig.end).length;
   n += S.notes.length; // each correction marker is an unsaved adjustment too
+  n += S.fixWords.size;
   return n;
 }
 function refreshHeader() {
@@ -1653,7 +1746,14 @@ function refreshActionBar() {
   const ins = insertsDirty();
   const notes = S.notes.length + (wordsDirty() ? 1 : 0);
   const style = styleDirty();
-  const has = cuts || ins || notes || style;
+  /* CORREÇÃO DE TEXTO É TERMO PRÓPRIO em `has`, não parte de `notes`.
+     Dobrada em `notes`, a barra diria "ler as suas marcações" — e ninguém
+     precisa LER uma correção: ela se aplica sozinha, mecanicamente, como
+     arrastar uma borda. Sem estar em `has`, o botão fica desabilitado e
+     corrigir texto é impossível pela interface (encontrado dirigindo o
+     navegador: `dirtyCount()` dava 2 e o botão continuava apagado). */
+  const fix = fixDirty();
+  const has = cuts || ins || notes || style || fix;
   /* O PEDIDO EM TEXTO é um canal, não um apêndice das alterações.
    *
    * A barra inteira sumia quando não havia nada marcado — e levava a caixa de
@@ -1701,13 +1801,29 @@ function refreshActionBar() {
   go.dataset.mode = podeAprovar ? 'approve' : '';
   go.classList.toggle('aprovar', podeAprovar);
   if (podeAprovar) {
-    $('actionCount').textContent = 'Fase 1 pronta para aprovação';
+    /* APROVAR SEMPRE APROVA. A conferência automática continua rodando, mas
+       para o RELATÓRIO da IA (`gate_report.json`), nunca para esta barra.
+
+       Decisão do usuário (2026-09-18), e ela nasceu de uma aprovação travada
+       por três achados que a IA já tinha medido e descartado: duas pausas
+       retóricas que o corte existia para preservar e um "e" de emenda cuja
+       transcrição isolada saiu limpa. A tela dizia "3 defeitos no corte", o
+       encode não rodava, e ele ficou sem conseguir ver o próprio trabalho.
+
+       O erro não era conferir — era PUBLICAR o parecer. Um detector acústico
+       fala em probabilidade, e imprimir isso como "defeito" na barra de quem
+       só quer ver o vídeo transforma ruído de instrumento em veto ao trabalho.
+       Quem sabe ler o parecer é a IA: ela roda os mesmos auditores antes de
+       mostrar o corte e traz, em português e no chat, só o que sobrou. */
+    go.classList.remove('forcar');
     go.disabled = false;
+    $('actionCount').textContent = 'Fase 1 pronta para aprovação';
     go.innerHTML = 'Aprovar corte';
-    go.title = 'Libera o corte final e as camadas do render — mudou algo, o botão vira Enviar';
+    go.title = 'Confere o corte e, passando, libera o final e as camadas do render';
     $('actionWhat').textContent = '';
     return;
   }
+  go.classList.remove('forcar');
   if (!temAlgo) {
     $('actionCount').textContent = 'Nada a enviar';
 
@@ -1744,6 +1860,10 @@ function refreshActionBar() {
   if (cuts) vai.push('refazer o corte');
   if (style || ins) vai.push(S.state.finalVideo ? 'refazer a finalização' : 'montar a finalização');
   if (notes) vai.push(wordsDirty() ? 'ler o que foi riscado no texto e as marcações' : 'ler as suas marcações');
+  // "sem refazer o corte" é a metade que importa: a pessoa acabou de mexer em
+  // texto num painel onde o gesto vizinho refaz o vídeo, e o preço tem de ser
+  // dito no momento da decisão.
+  if (fix) vai.push('corrigir o texto da legenda (sem refazer o corte)');
   if (pedido) vai.push('ler o seu pedido');
   /* A CONSEQUÊNCIA saiu da barra e virou o `title` do botão.
    * A frase longa competia com o número — que é a informação que se lê de
@@ -1751,11 +1871,20 @@ function refreshActionBar() {
   $('actionWhat').textContent = '';
 
   const caro = style || ins || cuts;
-  $('setupGo').innerHTML = `<span class="btn-ai">${ICON.ai}</span>`
-    + (caro ? 'Enviar e renderizar' : 'Enviar marcações');
-  $('setupGo').title = caro
-    ? 'Vai para a IA e renderiza de novo — leva alguns minutos'
-    : 'Manda as marcações para a IA ler; não renderiza nada';
+  /* SÓ CORREÇÃO tem rótulo próprio, e sem o ícone de IA: nada vai para a IA
+     aqui, nada renderiza, e o `apply_edits` aplica direto. Chamar isso de
+     "Enviar marcações" prometeria uma leitura que não acontece — e o ícone de
+     IA num gesto que não gasta token é a mesma mentira em desenho. */
+  const soFix = fix && !caro && !notes && !pedido;
+  $('setupGo').innerHTML = soFix
+    ? 'Aplicar correções'
+    : `<span class="btn-ai">${ICON.ai}</span>`
+      + (caro ? 'Enviar e renderizar' : 'Enviar marcações');
+  $('setupGo').title = soFix
+    ? 'Grava as correções de texto e regera a legenda — não renderiza o vídeo'
+    : caro
+      ? 'Vai para a IA e renderiza de novo — leva alguns minutos'
+      : 'Manda as marcações para a IA ler; não renderiza nada';
 }
 
 // ---------- data loading ----------
@@ -1780,7 +1909,7 @@ async function poll() {
     // de deixar o usuário descobrir por 404 em cada botão novo
     if (data.serverStale && !S.staleWarned) {
       S.staleWarned = true;
-      toast('O servidor de preview está desatualizado em relação ao editor — reinicie-o para liberar o que é novo', 9000);
+      toast('O editor foi atualizado — feche e abra o Avelin para usar o que é novo', 9000);
     }
     checkProcessing();
     if (sig !== S.lastSig) {
@@ -1789,7 +1918,7 @@ async function poll() {
         S.lastSig = sig;
         await applyState(data);
       } else {
-        toast('Novo estado disponível — salve ou descarte seus ajustes para atualizar', 4000);
+        toast('O vídeo mudou — salve ou descarte seus ajustes para ver a versão nova', 4000);
       }
     }
   } catch (e) { /* server restarting; keep polling */ }
@@ -2242,6 +2371,24 @@ function closeNoteEditor() {
 
 // ---------- style setup ----------
 const styleName = (group, id) => (STYLE_CATALOG[group].find((o) => o.id === id) || {}).name || '—';
+
+/* As OPÇÕES do radio de formato: as três de `edits` mais as três que moram em
+ * `elements` (ver EDIT_ELEMENTS). Uma função, e não uma lista montada uma vez,
+ * porque `STYLE_CATALOG` é dado e a ordem do catálogo é a ordem da tela. */
+const editOptions = () => [
+  ...STYLE_CATALOG.edits,
+  ...EDIT_ELEMENTS.map((id) => STYLE_CATALOG.elements.find((e) => e.id === id)).filter(Boolean),
+];
+/* Qual dos três está ligado (string vazia = o formato é um `edit` comum). */
+const formatoEl = () => EDIT_ELEMENTS.find((id) => S.style.elements[id]) || '';
+/* O NOME do formato escolhido, para os resumos. `styleName('edits', …)` não
+ * serve sozinho: com Caixinha ligada o `edit` é `limpa`, e o resumo diria
+ * "Nenhum" para um vídeo que tem um adesivo na tela. */
+const formatoName = () => {
+  const id = formatoEl();
+  return id ? ((STYLE_CATALOG.elements.find((e) => e.id === id) || {}).name || '—')
+            : styleName('edits', S.style.edit);
+};
 // the accent is a free colour, not a named entry in a list — it names itself
 const accentName = (hex) => String(hex || ACCENT_DEFAULT).toUpperCase();
 const normHex = (v) => {
@@ -2324,10 +2471,13 @@ const accentUsed = () =>
 function updateSummary() {
   const box = $('depsSummary');
   if (!box) return;   // o resumo saiu da tela — nada a escrever
-  const on = STYLE_CATALOG.elements.filter((e) => S.style.elements[e.id]);
+  // os três de EDIT_ELEMENTS saem da lista de "extras": eles SÃO o formato,
+  // e já aparecem nomeados na primeira posição por `formatoName()`.
+  const on = STYLE_CATALOG.elements.filter(
+    (e) => S.style.elements[e.id] && !EDIT_ELEMENTS.includes(e.id));
   const accentBit = accentUsed() ? ` · destaque ${accentName(S.style.accent)}` : '';
   box.textContent =
-    `${styleName('edits', S.style.edit)} · headline ${styleName('headlines', S.style.headline)}` +
+    `${formatoName()} · headline ${styleName('headlines', S.style.headline)}` +
     ` · legenda ${styleName('captions', S.style.captions)}${accentBit} · ` +
     (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
 }
@@ -2344,21 +2494,25 @@ function updateSummary() {
  * Uma linha sem controle NENHUM ainda aparece, com o motivo escrito. Some-la
  * faria o painel prometer que a lista está completa. */
 const LAYERS = [
-  { id: 'elementos', name: 'Elementos visuais', sub: 'Layout do corte, caixinha, broll overlay e notícia',
-    ico: 'inserts', groups: ['edits'], elements: ['caixinha', 'brollOverlay', 'noticia'] },
+  /* Sem `elements`: Caixinha, Broll Overlay e Notícia entram no PRÓPRIO radio
+     de `edits` (ver EDIT_ELEMENTS) em vez de virem como checkbox ao lado dele.
+     Listá-los aqui também os desenharia duas vezes na mesma camada. */
+  { id: 'elementos', name: 'Formato', sub: 'Um formato por vídeo — layout do corte, caixinha, broll overlay ou notícia',
+    ico: 'inserts', groups: ['edits'] },
   { id: 'headline', name: 'Headline', sub: 'Layout — o texto é combinado no chat',
     ico: 'text', groups: ['headlines'] },
   { id: 'legendas', name: 'Legendas', sub: 'Estilo',
     ico: 'captions', groups: ['captions'] },
   { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
     ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
-  { id: 'transicoes', name: 'Transições', sub: 'Cortes, fades e transições entre clipes',
-    ico: 'notes', elements: ['flashCut'] },
   { id: 'trilha', name: 'Trilha & mixagem', sub: 'Áudio, níveis, ducking e mixagem final',
     ico: 'music', elements: ['sfx', 'musicAI'] },
 ];
 
-const GROUP_TITLE = { edits: 'Tipo de edição', headlines: 'Estilo de headline', captions: 'Estilo de legenda' };
+// `edits` deixou de ser só "tipo de edição" quando Caixinha, Broll Overlay e
+// Notícia entraram no mesmo radio (ver EDIT_ELEMENTS) — o título tem de
+// cobrir os seis, e "um por vídeo" é a regra que o radio impõe.
+const GROUP_TITLE = { edits: 'Formato — um por vídeo', headlines: 'Estilo de headline', captions: 'Estilo de legenda' };
 /* Uma camada por vez, num INSPETOR de altura fixa — o modelo de NLE.
  * O acordeão anterior crescia para dentro do layout: cada clique mudava a
  * altura do painel e empurrava a linha do tempo e o preview. Trocar de camada
@@ -2456,7 +2610,10 @@ function renderSetup() {
   buildLayerRows();
   capAnims = [];
   const radios = (host, group, chosen) => {
-    const opts = STYLE_CATALOG[group];
+    // O radio de FORMATO junta os dois contratos de dado numa escolha só —
+    // ver EDIT_ELEMENTS. Os outros grupos são o catálogo puro.
+    const opts = group === 'edits' ? editOptions() : STYLE_CATALOG[group];
+    const elAtivo = formatoEl();
     host.innerHTML = '';
     for (const o of opts) {
       // Estilos ainda não portados para o HyperFrames aparecem apagados e não
@@ -2465,19 +2622,21 @@ function renderSetup() {
       // hora de renderizar.
       let off = PORTED[group] && !PORTED[group].has(o.id);
       let offMsg = 'ainda não disponível';
-      /* ZONA ALTA (ver elLocked()): "Nenhum" (id vazio) fica sempre disponível
-       * — é a porta de saída de quem quer desligar um headline para ligar a
-       * Notícia ou a Caixinha. */
-      if (group === 'headlines' && o.id) {
-        if (S.style.elements.noticia) {
-          off = true;
-          offMsg = 'desligue a Notícia em Elementos visuais para escolher um headline';
-        } else if (CARTELA_BANDA_IDS.has(o.id) && S.style.elements.caixinha) {
-          off = true;
-          offMsg = ZONA_ALTA_MSG;
-        }
+      /* ZONA ALTA: nada aqui desabilita mais por conflito — escolher desliga o
+         que colide (ver limpaConflitoZonaAlta). O único `off` que sobra é o de
+         estilo não portado, que é sobre o RENDER não existir, não sobre a
+         combinação ser proibida. */
+      if (group === 'edits' && EDIT_ELEMENTS.includes(o.id)) {
+        const trava = elLocked(o);
+        if (trava) { off = true; offMsg = trava.split('\n')[0]; }
       }
-      const card = el('div', `opt${o.id === chosen ? ' on' : ''}${off ? ' unavailable' : ''}`, host);
+      /* MARCADO é o formato ATUAL, e ele pode vir de qualquer um dos dois
+         lados: com Caixinha ligada, `edit` continua `limpa` — marcar por
+         `o.id === chosen` acenderia "Nenhum" junto com ela. */
+      const on = group === 'edits'
+        ? (EDIT_ELEMENTS.includes(o.id) ? o.id === elAtivo : !elAtivo && o.id === chosen)
+        : o.id === chosen;
+      const card = el('div', `opt${on ? ' on' : ''}${off ? ' unavailable' : ''}`, host);
       card.dataset.group = group;
       card.dataset.id = o.id;
       if (off) card.title = offMsg;
@@ -2521,6 +2680,10 @@ function renderSetup() {
       if (!e) continue;
       const trava = elLocked(e);
       const on = !!S.style.elements[e.id] && !trava;
+      /* Os que sobraram aqui (tracking, zoom, sfx, trilha) são
+         liga/desliga INDEPENDENTE de verdade, e continuam a fileira de chips.
+         Os três que tinham prévia viraram opções do radio de formato — quem
+         desenha o `mock` deles agora é `radios()`. */
       const row = el('div', `chk${on ? ' on' : ''}${trava ? ' locked' : ''}`, eh);
       row.dataset.id = e.id;
       if (trava) row.title = trava.split('\n')[0];
@@ -2613,7 +2776,11 @@ function refreshLayerSummaries() {
     if (!n) continue;
     if (L.soon) { n.textContent = 'em breve'; continue; }
     const bits = [];
-    for (const g of L.groups || []) bits.push(styleName(g, { edits: S.style.edit, headlines: S.style.headline, captions: S.style.captions }[g]));
+    // `edits` passa por `formatoName()`: com um dos três de EDIT_ELEMENTS
+    // ligado, `S.style.edit` é `limpa` e o resumo diria "Nenhum" para um
+    // vídeo que tem adesivo (ou cartela, ou ênfase) na tela.
+    for (const g of L.groups || []) bits.push(g === 'edits' ? formatoName()
+      : styleName(g, { headlines: S.style.headline, captions: S.style.captions }[g]));
     if (L.elements) {
       const on = L.elements.filter((id) => S.style.elements[id]);
       bits.push(on.length ? `${on.length} ativo${on.length === 1 ? '' : 's'}` : 'desligado');
@@ -2657,9 +2824,26 @@ $('layersPanel').addEventListener('click', (e) => {
 
   const opt = e.target.closest('.opt:not(.ghost):not(.unavailable)');
   if (opt) {
-    const key = {edits: 'edit', headlines: 'headline', captions: 'captions'}[opt.dataset.group];
+    /* FORMATO: um só, sempre. Zerar os três ANTES de ligar o escolhido é o que
+       faz o radio ser radio — e é por isso que a escolha passa por aqui em vez
+       de cair no `S.style[key] = id` genérico abaixo: o formato é o único
+       grupo cuja seleção mora em duas estruturas de dado diferentes. */
+    if (opt.dataset.group === 'edits') {
+      const id = opt.dataset.id;
+      for (const k of EDIT_ELEMENTS) S.style.elements[k] = (k === id);
+      // `limpa` sob os três: o adesivo, a ênfase e a cartela desenham sobre o
+      // quadro cheio. Deixar um `split` anterior de pé mandaria os dois ao
+      // render — a combinação que o radio existe para negar.
+      S.style.edit = EDIT_ELEMENTS.includes(id) ? 'limpa' : id;
+      limpaConflitoZonaAlta('formato');
+      LIVE.hookKey = null;
+      renderSetup();
+      return;
+    }
+    const key = {headlines: 'headline', captions: 'captions'}[opt.dataset.group];
     S.style[key] = opt.dataset.id;
     const doHeadline = opt.dataset.group === 'headlines';
+    if (doHeadline) limpaConflitoZonaAlta('headline');
     /* ESCOLHER TEM DE MOSTRAR. O gancho vive nos primeiros segundos do corte;
        com o ponteiro em 00:40 o usuário clicaria num layout e o vídeo não
        mudaria nada — escolher sem ver a escolha é o mesmo que não ter
@@ -2718,6 +2902,12 @@ async function sendStyle() {
     rerender,
     edit: S.style.edit,
     editName: styleName('edits', S.style.edit),
+    /* O FORMATO como UMA coisa, para quem LÊ o pedido. `edit`/`elements`
+       continuam sendo o contrato de máquina (o phase2.py lê os dois e não
+       sabe deste campo), mas sozinho o `edit` diz "Nenhum" quando a escolha
+       foi Caixinha — e é essa a linha que o watch_edits.py mostra à sessão. */
+    formato: formatoEl() || S.style.edit,
+    formatoName: formatoName(),
     headline: S.style.headline,
     headlineName: styleName('headlines', S.style.headline),
     captions: S.style.captions,
@@ -2728,7 +2918,7 @@ async function sendStyle() {
     textColor: S.style.textColor || '#FFFFFF',
     fontMain: S.style.fontMain || FONT_MAIN_DEF,
     fontAccent: S.style.fontAccent || FONT_ACCENT_DEF,
-    capFont: S.style.capFont || capVariant().family || FONT_MAIN_DEF,
+    capFont: S.style.capFont || capVariant(S.style.captions || 'karaoke').cssFamily || FONT_MAIN_DEF,
     // se a segunda família chega a aparecer neste layout — sem isto a skill
     // não sabe se a fonte de destaque é uma instrução ou um valor sem uso
     fontAccentUsed: !!(hlStyle(S.style.headline) || {}).fontRole,
@@ -3579,10 +3769,10 @@ $('btnApprove').addEventListener('click', async () => {
     if (!(await r.json()).ok) throw new Error('save');
     S.approved = true;
     refreshActionBar();
-    toast('Corte aprovado — renderizando o final e liberando a Fase 2', 4000);
+    toast('Corte aprovado — renderizando o final', 4500);
   } catch (e) {
     btn.disabled = false;
-    toast('não consegui salvar a aprovação — tente de novo', 3000);
+    toast('Não consegui registrar a aprovação — tente de novo', 3000);
   }
 });
 
@@ -3603,8 +3793,14 @@ function setTlMode(compact) {
                     : 'Recolher para vídeo + áudio';
   try { localStorage.setItem('avelin.tlMode', compact ? 'compact' : 'full'); } catch (e) { /* privado */ }
   // a régua e a waveform desenham em canvas dimensionado pelo layout: trocar a
-  // densidade muda a altura da pista de áudio, então remede e redesenha
-  requestAnimationFrame(() => { fitZoom(); renderAll(); });
+  // densidade muda a ALTURA da pista de áudio, então remede e redesenha.
+  // NÃO chama `fitZoom()` — isso reseta o zoom pra "ajustar à janela"
+  // (`S.pps = S.minPps`), e o toggle aqui é sobre ALTURA (quais trilhas
+  // aparecem), não sobre a escala horizontal. `toggleMark()` chama esta
+  // função pra expandir a timeline compacta antes de cravar o pino do IN —
+  // com `fitZoom()` aqui, marcar o início do corte jogava fora qualquer zoom
+  // que a pessoa tivesse acabado de ajustar à mão.
+  requestAnimationFrame(() => { renderAll(); });
 }
 $('tlMode').addEventListener('click', () =>
   setTlMode(!$('timeline').classList.contains('compact')));
@@ -3730,6 +3926,20 @@ async function sendTimeline() {
                gapBefore: w.gapBefore, gapAfter: w.gapAfter };
     });
   }
+  if (fixDirty()) {
+    /* Sai no formato FINAL do `corrections.json` — sem tradução do outro lado.
+       Os tempos são da FONTE (`srcStart`), não da saída: é o que faz a correção
+       sobreviver a uma mudança de corte, porque remover um trecho não desloca
+       o tempo da palavra dentro da gravação original.
+       `from` é obrigatório e é o que impede a correção de pintar a palavra
+       vizinha — com fala corrida cabem três dentro da tolerância de ±0,15s. */
+    payload.corrections = [...S.fixWords].map(([i, text]) => {
+      const w = S.words[i];
+      const c = { source: w.source, from: w.text, text };
+      if (!S.fixTodas.has(i)) c.srcStart = w.srcStart;
+      return c;
+    });
+  }
   if (breathsDirty()) {
     /* Também PEDIDO, e com uma diferença que precisa chegar do lado de lá: o
        respiro não é apagado, é ENCURTADO. `keep` é o piso e `trim` é quanto sai.
@@ -3780,6 +3990,8 @@ async function sendTimeline() {
   S.insertsDraft.forEach((c) => { c.orig = { start: c.start, end: c.end }; });
   S.cutWords.clear();
   S.cutBreaths.clear();
+  S.fixWords.clear();
+  S.fixTodas.clear();
   renderTx();
   return true;
 }
@@ -3798,6 +4010,8 @@ $('setupGo').addEventListener('click', async () => {
     try {
       const r = await fetch('/api/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
+        /* Sem `force`: aprovar aprova. A conferência roda em segundo plano
+           para o relatório da IA e nunca recusa a aprovação do usuário. */
         body: JSON.stringify({ type: 'approve-cut',
                                note: ($('setupNote').value || '').trim(),
                                video: S.state.video || null }),
@@ -3806,10 +4020,12 @@ $('setupGo').addEventListener('click', async () => {
       S.approved = true;
       $('setupNote').value = '';
       refreshActionBar();
-      toast('Corte aprovado — renderizando o final e liberando a Fase 2', 4000);
+      /* Agora o encode começa JUNTO com a aprovação, então o toast pode
+         prometê-lo: nada mais pode recusar o que o usuário acabou de aprovar. */
+      toast('Corte aprovado — renderizando o final', 4500);
     } catch (e) {
       btn.disabled = false;
-      toast('não consegui salvar a aprovação — tente de novo', 3000);
+      toast('Não consegui registrar a aprovação — tente de novo', 3000);
     }
     return;
   }
@@ -3842,7 +4058,11 @@ $('setupGo').addEventListener('click', async () => {
     style: styleDirty(),
     // `pedidoTxt` entra aqui: sem ele, um pedido só de texto saía com os dois
     // canais falsos, NADA era gravado, e o toast ainda dizia "✓ Enviado".
-    tl: edlDirty() || insertsDirty() || S.notes.length > 0 || wordsDirty() || !!pedidoTxt,
+    // `fixDirty()` entra aqui e NÃO no `caro` abaixo: sem isto, corrigir só o
+    // texto saía com os dois canais falsos, nada era gravado, e o toast ainda
+    // dizia "✓ Enviado" — o mesmo defeito que o `pedidoTxt` já teve.
+    tl: edlDirty() || insertsDirty() || S.notes.length > 0 || wordsDirty()
+        || fixDirty() || !!pedidoTxt,
   };
   const caro = quer.style || edlDirty() || insertsDirty();
   let ok = true;
@@ -3859,7 +4079,7 @@ $('setupGo').addEventListener('click', async () => {
     S.style.note = '';
   }
   refreshActionBar();
-  toast(!ok ? 'Erro ao enviar — o servidor está de pé?'
+  toast(!ok ? 'Não consegui enviar agora — recarregue a página (F5) e tente de novo'
     : S.lastApplying ? '✓ Enviado — trabalhando, acompanhe na barra de progresso'
     : 'Pedido salvo — aguardando uma sessão da IA executar', 5000);
 });
@@ -4065,11 +4285,23 @@ function renderTx() {
       const w = S.words[i];
       const sp = el('span', 'tw', txt);
       sp.dataset.i = i;
-      sp.textContent = w.text;
+      // A palavra CORRIGIDA mostra o texto novo, não o do transcrito: o painel
+      // tem de ser o que vai para o vídeo, senão editar aqui não é editar nada.
+      const corr = S.fixWords.get(i);
+      sp.textContent = corr === undefined ? w.text : corr;
       if (w.gapBefore === 0 && w.gapAfter === 0) sp.classList.add('tight');
       if (S.cutWords.has(i)) sp.classList.add('cut');
       if (S.selWords.has(i)) sp.classList.add('sel');
-      sp.title = `${fmt(w.outStart)} · folga ${w.gapBefore.toFixed(2)}s / ${w.gapAfter.toFixed(2)}s`;
+      if (corr !== undefined) {
+        sp.classList.add('fixed');
+        if (S.fixTodas.has(i)) sp.classList.add('fixed-all');
+      }
+      sp.title = corr === undefined
+        ? `${fmt(w.outStart)} · folga ${w.gapBefore.toFixed(2)}s / ${w.gapAfter.toFixed(2)}s`
+             + '\n2 cliques para corrigir o texto'
+        : `corrigido: "${w.text}" → "${corr}"`
+             + (S.fixTodas.has(i) ? ' (todas as ocorrências)' : '')
+             + '\n2 cliques para editar · campo vazio desfaz';
       // o respiro entra COMO CHIP no lugar do espaço: ele ocupa tempo no vídeo,
       // então ocupa espaço no texto. Um respiro invisível não se remove.
       const br = breathAt(i);
@@ -4090,12 +4322,18 @@ function renderTx() {
   const n = S.cutWords.size;
   const b = S.cutBreaths.size;
   const partes = [];
+  // A correção vem PRIMEIRO e com verbo próprio: ela não é "para remoção", e
+  // juntar as duas contagens na mesma frase diria que o texto vai ser cortado.
   if (n) partes.push(`${n} palavra${n === 1 ? '' : 's'}`);
   if (b) {
     const ganho = [...S.cutBreaths].reduce((s, i) => s + (breathAt(i)?.trim || 0), 0);
     partes.push(`${b} respiro${b === 1 ? '' : 's'} (−${ganho.toFixed(1)}s)`);
   }
-  $('txCount').textContent = partes.length ? `${partes.join(' · ')} para remoção` : '';
+  const remocao = partes.length ? `${partes.join(' · ')} para remoção` : '';
+  const fix = S.fixWords.size
+    ? `${S.fixWords.size} texto${S.fixWords.size === 1 ? '' : 's'} corrigido${S.fixWords.size === 1 ? '' : 's'}`
+    : '';
+  $('txCount').textContent = [fix, remocao].filter(Boolean).join('  ·  ');
   renderCutMarks();   // a marca segue o texto, mesmo com a timeline recolhida
   markNowWord();
 }
@@ -4159,7 +4397,26 @@ $('txBody').addEventListener('pointerdown', (e) => {
   }
   const sp = e.target.closest('.tw');
   if (!sp) return;
+  if (sp.querySelector('input')) return;   // já está sendo editada
   const i = +sp.dataset.i;
+
+  /* O DUPLO CLIQUE É DETECTADO AQUI, e não com um listener de `dblclick`.
+     Este handler termina em `preventDefault()` para o arraste não selecionar
+     texto da página — e pela spec de Pointer Events, `preventDefault()` num
+     `pointerdown` suprime os eventos de mouse de compatibilidade, `dblclick`
+     incluído. Medido: com o listener de `dblclick` o campo nunca abria, sem
+     nenhum erro no console. Contar o intervalo à mão é o que sobra, e de
+     quebra funciona igual no toque. */
+  const agora = Date.now();
+  if (txClique.i === i && agora - txClique.t < 420) {
+    txClique = { i: null, t: 0 };
+    S.selWords.clear();   // corrigir e "selecionada para corte" se contradizem
+    abrirEdicao(sp);
+    e.preventDefault();
+    return;
+  }
+  txClique = { i, t: agora };
+
   if (e.shiftKey && S.selWords.size) { txPaint(Math.min(...S.selWords), i); return; }
   if (e.metaKey || e.ctrlKey) {
     S.selWords.has(i) ? S.selWords.delete(i) : S.selWords.add(i);
@@ -4171,6 +4428,75 @@ $('txBody').addEventListener('pointerdown', (e) => {
   try { $('txBody').setPointerCapture(e.pointerId); } catch (err) { /* toque */ }
   e.preventDefault();
 });
+
+/* CORRIGIR O TEXTO — duplo clique na palavra.
+   O gesto é duplo clique porque UM clique já é a seleção por arraste que existe
+   para riscar, e as duas coisas convivem no mesmo painel: é lendo que se
+   percebe tanto "essa parte sai" quanto "essa palavra está escrita errada".
+   O campo nasce COM o texto atual e selecionado, então digitar substitui e
+   Enter confirma — o caminho de uma correção é um duplo clique, digitar, Enter. */
+let txClique = { i: null, t: 0 };
+
+function abrirEdicao(sp) {
+  if (sp.querySelector('input')) return;
+  const i = +sp.dataset.i;
+  const w = S.words[i];
+  const atual = S.fixWords.has(i) ? S.fixWords.get(i) : w.text;
+
+  const inp = document.createElement('input');
+  inp.className = 'tw-edit';
+  inp.value = atual;
+  // A largura acompanha o conteúdo: um campo de tamanho fixo empurraria a linha
+  // inteira e a pessoa perderia de vista a frase que está consertando.
+  inp.size = Math.max(4, atual.length + 2);
+  inp.addEventListener('input', () => { inp.size = Math.max(4, inp.value.length + 2); });
+
+  const todas = document.createElement('button');
+  todas.type = 'button';
+  todas.className = 'tw-all' + (S.fixTodas.has(i) ? ' on' : '');
+  todas.textContent = 'todas';
+  // NOME PRÓPRIO, MARCA, JARGÃO — é o caso mais comum, e sem isto "Avelim" →
+  // "Avelin" custaria uma correção por ocorrência. A correção sem `srcStart`
+  // vale para toda ocorrência da palavra naquela fonte.
+  todas.title = `aplicar em todas as vezes que "${w.text}" aparece nesta fonte`;
+  todas.addEventListener('pointerdown', (ev) => {
+    ev.preventDefault(); ev.stopPropagation();
+    todas.classList.toggle('on');
+    inp.focus();
+  });
+
+  const fechar = (confirmar) => {
+    if (!sp.isConnected) return;
+    if (confirmar) {
+      const novo = inp.value.trim();
+      // VAZIO DESFAZ, e não "apaga a palavra da legenda": o gesto de tirar
+      // palavra do vídeo já existe (riscar), e dar dois significados a um campo
+      // vazio faria a pessoa apagar texto achando que estava cancelando.
+      if (!novo || novo === w.text) {
+        S.fixWords.delete(i);
+        S.fixTodas.delete(i);
+      } else {
+        S.fixWords.set(i, novo);
+        todas.classList.contains('on') ? S.fixTodas.add(i) : S.fixTodas.delete(i);
+      }
+    }
+    renderTx();
+    refreshHeader();
+  };
+
+  inp.addEventListener('keydown', (ev) => {
+    ev.stopPropagation();   // senão Backspace no campo risca a palavra selecionada
+    if (ev.key === 'Enter') { ev.preventDefault(); fechar(true); }
+    if (ev.key === 'Escape') { ev.preventDefault(); fechar(false); }
+  });
+  inp.addEventListener('blur', () => fechar(true));
+  inp.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+
+  sp.textContent = '';
+  sp.append(inp, todas);
+  inp.focus();
+  inp.select();
+}
 
 $('txBody').addEventListener('pointermove', (e) => {
   if (!txDrag) return;
@@ -4481,7 +4807,7 @@ async function doExport() {
     const rede = e && (e.name === 'TypeError' || /fetch/i.test(e.message || ''));
     toast(rede
       ? 'O servidor reiniciou — recarregue a página (F5) e exporte de novo'
-      : `Não consegui exportar: ${e.message}`, 6000);
+      : 'Não consegui exportar o vídeo — tente de novo', 6000);
   } finally {
     b.classList.remove('busy');
     lab.textContent = textoOriginal;
@@ -4619,14 +4945,14 @@ async function openProject(path, create) {
       if (d.canCreate && confirm(`Criar um projeto novo em ${path}?`)) {
         return openProject(path, true);
       }
-      toast(d.error || 'não consegui abrir', 5000);
+      toast(d.error || 'Não consegui abrir essa pasta', 5000);
       return false;
     }
     closeBrowser();
     await refreshNow();
     return true;
   } catch (e) {
-    toast(`não consegui abrir: ${e.message}`, 5000);
+    toast('Não consegui abrir essa pasta — confira se o caminho existe', 5000);
     return false;
   }
 }
@@ -4654,8 +4980,8 @@ async function handleFile(file) {
       body: JSON.stringify({ name: file.name, size: file.size }),
     });
     d = await res.json();
-    if (!res.ok && !d.needUpload) { dzBusy(false); dzMsg(d.error || 'não deu', true); return; }
-  } catch (e) { dzBusy(false); dzMsg(e.message, true); return; }
+    if (!res.ok && !d.needUpload) { dzBusy(false); dzMsg(d.error || 'Não consegui abrir esse vídeo', true); return; }
+  } catch (e) { dzBusy(false); dzMsg('Não consegui abrir esse vídeo — tente de novo', true); return; }
 
   if (d.needUpload) {
     // Não achou no disco: agora sim os bytes sobem. XHR e não fetch porque só
@@ -4676,7 +5002,7 @@ async function handleFile(file) {
         x.onerror = () => fail(new Error('a transferência falhou'));
         x.send(file);
       });
-    } catch (e) { dzBusy(false); dzMsg(e.message, true); return; }
+    } catch (e) { dzBusy(false); dzMsg('Não consegui carregar esse arquivo — tente de novo', true); return; }
   }
   dzBusy(false);
   dzMsg('');
@@ -4702,12 +5028,12 @@ async function handleDirEntry(entry) {
     const d = await res.json();
     dzBusy(false);
     if (!res.ok) {
-      dzMsg(`${d.error || 'não achei'} — use “selecione uma pasta”`, true);
+      dzMsg('Não achei esse arquivo no disco — use “selecione uma pasta”', true);
       return;
     }
     dzMsg('');
     await refreshNow();
-  } catch (e) { dzBusy(false); dzMsg(e.message, true); }
+  } catch (e) { dzBusy(false); dzMsg('Não consegui abrir isso — tente de novo', true); }
 }
 
 function wireDropzone() {
@@ -4777,7 +5103,7 @@ async function browseTo(path) {
   let d;
   try {
     d = await (await fetch(`/api/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`)).json();
-  } catch (e) { toast(`não consegui listar: ${e.message}`, 4000); return; }
+  } catch (e) { toast('Não consegui ler essa pasta', 4000); return; }
   if (d.error) { toast(d.error, 4000); return; }
   brPath = d.path;
   // Encurta pelo MEIO: num caminho longo quem identifica onde você está é o

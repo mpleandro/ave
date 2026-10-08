@@ -70,6 +70,17 @@ def sh(args: list[str]) -> str:
 
 
 def speech_regions(video: Path, noise: float, min_silence: float = 0.25):
+    """CACHEADO, e com chave própria: o `min_silence` daqui é 0,25 contra os 0,12
+    do `cut_words`, então são medições diferentes do mesmo arquivo e precisam de
+    entradas de cache diferentes. É por isso que os parâmetros entram na chave —
+    um cache chaveado só pela fonte devolveria a régua do outro chamador."""
+    from derivado import derivado  # noqa: PLC0415
+    return derivado("regions_audit", [video],
+                    {"noise_db": round(float(noise), 1), "min_silence": min_silence},
+                    "1", lambda: _medir_regioes(video, noise, min_silence))
+
+
+def _medir_regioes(video: Path, noise: float, min_silence: float):
     out = []
     for line in sh([sys.executable, str(HELPERS / "speech_regions.py"), str(video),
                     f"--noise={noise:.0f}dB", "--min-silence", str(min_silence)]).splitlines():
@@ -82,20 +93,13 @@ def speech_regions(video: Path, noise: float, min_silence: float = 0.25):
     return out
 
 
-def noise_floor_for(video: Path) -> float:
-    """Limiar no MEIO entre o piso de ruído e a mediana de fala DESTA gravação.
-
-    Mesma calibração do `cut_words.py`, e pelo mesmo motivo: o default do
-    detector fica ACIMA da fala em gravações baixas, e aí toda região some.
-    """
-    floor = med = None
-    for line in sh([sys.executable, str(HELPERS / "voice_levels.py"), str(video)]).splitlines():
-        if "noise floor:" in line:
-            floor = float(line.split("noise floor:")[1].split("dBFS")[0])
-        if "median speech:" in line:
-            med = float(line.split("median speech:")[1].split("dBFS")[0])
-    return round((floor + med) / 2) if (floor is not None and med is not None
-                                        and floor < med) else -33.0
+# A CALIBRAÇÃO VEM DO IRMÃO, não de uma cópia. Aqui havia uma reimplementação
+# literal — mesmo spawn do `voice_levels.py`, mesmo parse de stdout, mesmo
+# −33,0 devolvido em silêncio, mesmo ponto médio — e o docstring dela já dizia
+# "mesma calibração do cut_words.py". Duas cópias da mesma régua é o defeito que
+# este repositório documenta em três lugares; a quarta cópia era esta. Importando,
+# ela herda o cache de derivados e o aviso quando a calibração NÃO acontece.
+from cut_words import noise_floor_for  # noqa: E402
 
 
 def words_of(path: Path) -> list[dict]:

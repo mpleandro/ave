@@ -78,6 +78,39 @@ FUNCIONAIS = {
     "muito", "ja", "nao", "eh", "ser", "vai", "tem",
 }
 
+# MULETA NÃO CONTA COMO COMEÇO DE FRASE — e é isto que fazia o falso começo
+# mais comum escapar. O teste de `mesmo_inicio` compara os prefixos CRUS, então
+# "basicamente vamos categorizar" e "bom, vamos categorizar" não têm o mesmo
+# começo: o n-grama comum ("vamos categorizar") não é prefixo de nenhum dos
+# dois. O par caía em `semantica → perguntar` quando é o caso mais óbvio de
+# tomada abortada que existe — a pessoa começou, se perdeu, e recomeçou com
+# outra muleta na frente. Descartadas as muletas de cabeça, o prefixo bate.
+# Só marcador de discurso INEQUÍVOCO. "gente", "cara", "bem", "agora" e "aqui"
+# saíram da lista: em uso normal são palavras de conteúdo ("a gente vai", "o
+# caminho certo", "bem feito"), e tratá-las como muleta enfraquece a detecção
+# em silêncio — o pior modo de falhar que um detector tem.
+MULETAS = {
+    "bom", "basicamente", "entao", "tipo", "assim", "ne", "olha", "veja",
+    "enfim", "digamos", "ah", "ahn", "hum", "uh", "ok", "opa", "sabe",
+}
+# Palavras que carregam SIGNIFICADO — nem funcional, nem muleta. O falso começo
+# só é removido sozinho quando as duas versões compartilham pelo menos duas
+# delas: sem isso, "que a" (duas funcionais) bastava para o detector propor
+# apagar uma frase, e remoção automática é a única ação daqui que não tem volta.
+MIN_CONTEUDO = 2
+
+
+def _sem_muleta(ws: list[str]) -> list[str]:
+    """As palavras a partir da primeira que não é muleta."""
+    i = 0
+    while i < len(ws) and ws[i] in MULETAS:
+        i += 1
+    return ws[i:]
+
+
+def _conteudo(ws: list[str]) -> int:
+    return sum(1 for w in ws if w not in FUNCIONAIS and w not in MULETAS)
+
 
 def norm(t: str) -> str:
     t = unicodedata.normalize("NFD", t.lower())
@@ -94,17 +127,27 @@ def _palavras(edit: Path) -> list[dict]:
     Ordem de leitura e não ordem de relógio: os tempos do Whisper não são
     monotônicos (medido: 'hambúrguer' 40.10–40.48 sobrepõe 'É' 40.02–40.96), e
     ordenar por tempo embaralha a frase.
+
+    Cada palavra carrega `arquivo` (o stem do transcrito de origem) — um EDL
+    com mais de uma fonte tem relógios independentes que se sobrepõem (a
+    fonte do gancho e a do vídeo final começam as duas em ~0s), e sem essa
+    marca uma palavra do arquivo errado casa por pura coincidência de tempo.
     """
     out: list[dict] = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
                     if not q.name.startswith(".")):
-        for w in json.loads(p.read_text()).get("words", []):
+        d = json.loads(p.read_text())
+        # `corrections.json` mora aqui e é uma LISTA, não um transcrito —
+        # filtrar por tipo, não por nome (ver checar_spacing em portao_fase1.py)
+        if not isinstance(d, dict):
+            continue
+        for w in d.get("words", []):
             if w.get("type") != "word":
                 continue
             txt = (w.get("text") or "").strip()
             if txt and norm(txt):
                 out.append({"t": float(w["start"]), "fim": float(w["end"]),
-                            "txt": txt, "n": norm(txt)})
+                            "txt": txt, "n": norm(txt), "arquivo": p.stem})
     return out
 
 
@@ -116,12 +159,21 @@ def _palavras_do_corte(edit: Path) -> list[dict]:
     porque lá as duas versões estão longe uma da outra.
     """
     edl = json.loads((edit / "edl.json").read_text())
+    sources = edl.get("sources", {})
     todas = _palavras(edit)
     out: list[dict] = []
     base = 0.0
     for idx, r in enumerate(edl.get("ranges", [])):
         ini, fim = float(r["start"]), float(r["end"])
+        # o stem do ARQUIVO da fonte deste range — nunca a chave lógica
+        # ("gancho", "final"): é contra esse stem que `_palavras` marcou cada
+        # palavra, e sem resolver por aqui um range de uma fonte pega palavra
+        # de outra que caiu, por acaso, na mesma janela de tempo absoluto.
+        src_path = sources.get(r.get("source"))
+        src_stem = Path(src_path).stem if src_path else None
         for w in todas:
+            if src_stem is not None and w["arquivo"] != src_stem:
+                continue
             # centro dentro do range: a borda pode ter aparado a palavra, e
             # exigir contenção total descartaria a primeira/última de cada trecho
             centro = (w["t"] + w["fim"]) / 2
@@ -234,7 +286,9 @@ def achar(fs: list[dict]) -> list[dict]:
             comum = _maior_ngrama_comum(a["n"], b["n"])
             if len(comum) < MIN_NGRAMA:
                 continue
-            prefixo = comum == a["n"][:len(comum)] and comum == b["n"][:len(comum)]
+            # prefixo MEDIDO sem a muleta de cabeça — ver MULETAS
+            pa, pb = _sem_muleta(a["n"]), _sem_muleta(b["n"])
+            prefixo = comum == pa[:len(comum)] and comum == pb[:len(comum)]
             hits.append({
                 "ngrama": " ".join(comum),
                 "palavras_iguais": len(comum),
@@ -247,7 +301,15 @@ def achar(fs: list[dict]) -> list[dict]:
     # reinício sai quatro vezes, uma por n-grama que casou.
     melhores: list[dict] = []
     usadas: set[float] = set()
-    for h in sorted(hits, key=lambda x: -x["palavras_iguais"]):
+    # PROXIMIDADE DESEMPATA, e não é detalhe: reinício é por definição PERTO.
+    #
+    # Medido num corte entregue — a frase "e aqui, tudo que" (38,01s) tinha dois
+    # pares possíveis, os dois de 2 palavras: "tudo que" com 32,68s (5,2s de
+    # distância, recorrência de TEMA) e "e aqui" com 39,31s (1,3s, o gaguejo de
+    # verdade). Sem desempate a ordenação pegou o primeiro que apareceu, o
+    # `usadas` consumiu a frase, e o par certo foi descartado em silêncio — o
+    # defeito chegou ao vídeo enquanto o relatório mostrava o par errado.
+    for h in sorted(hits, key=lambda x: (-x["palavras_iguais"], x["delta"])):
         if h["a"]["t"] in usadas or h["b"]["t"] in usadas:
             continue
         usadas.add(h["a"]["t"]); usadas.add(h["b"]["t"])
@@ -265,10 +327,23 @@ def classificar(h: dict) -> dict:
     # funcional não basta: num EDL os ranges partem frases no meio de propósito
     # ("…Isso explica muito" | "porque você ganha…"), e a régua antiga acusava a
     # continuação legítima como tomada abortada — bloqueando o corte certo.
-    if ultima in FUNCIONAIS and not termina_em_pontuacao and h["mesmo_inicio"]:
-        classe, acao, julgar = "truncada", "remover_A", False
-    elif a["n"] == b["n"]:
+    # TRUNCADA é a única classe que remove sozinha, então é a que carrega a
+    # exigência extra: duas palavras de CONTEÚDO em comum. Um par que só
+    # compartilha funcionais ("que a", "de um") é coincidência de língua, não
+    # tomada refeita — e propor apagar uma frase por causa disso gasta a
+    # confiança de que a próxima proposta vai precisar.
+    conteudo_ok = _conteudo(h["ngrama"].split()) >= MIN_CONTEUDO
+    # IGUALDADE EXATA PRIMEIRO. Estava depois da truncada, e uma repetição
+    # literal que por acaso terminava em palavra funcional ("isso explica
+    # muito") saía rotulada como tomada abortada. As duas ações removem uma
+    # cópia, então o vídeo saía igual — mas o RÓTULO é o que o usuário lê para
+    # decidir, e "truncada" descreve outra coisa: alguém que não terminou de
+    # falar. Aqui a pessoa terminou, e disse duas vezes.
+    if a["n"] == b["n"]:
         classe, acao, julgar = "identica", "fica_a_ultima", False
+    elif (ultima in FUNCIONAIS and not termina_em_pontuacao
+            and h["mesmo_inicio"] and conteudo_ok):
+        classe, acao, julgar = "truncada", "remover_A", False
     else:
         classe, acao, julgar = "semantica", "perguntar", True
 

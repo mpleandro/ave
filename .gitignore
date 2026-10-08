@@ -31,6 +31,12 @@ ENV/
 .DS_Store
 Thumbs.db
 
+# launch.json (config de debug do preview server) tem caminho absoluto e
+# --root fixos NA MÁQUINA de quem editou por último — a cada sessão ele muda
+# pra apontar pro projeto do momento. Comitar isso quebra o próximo clone
+# (caminho de outra máquina) e reescreve o --root de todo mundo a cada push.
+.claude/launch.json
+
 # Node / HyperFrames (resolved on demand, not vendored)
 node_modules/
 package-lock.json

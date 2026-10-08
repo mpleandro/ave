@@ -1,6 +1,6 @@
 ---
 name: ave
-description: Avelin — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — HyperFrames visuals from a data-driven template: short-form gets karaoke captions, a hook headline (a band over the video or a full-screen cartela that hands the video over on exit), a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
+description: Avelin — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, mine the strongest recorded line as the HOOK — cold open when it sits mid-video — cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — HyperFrames visuals from a data-driven template: short-form gets karaoke captions, a hook headline (a band over the video or a full-screen cartela that hands the video over on exit), a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
 ---
 
 # Avelin — editor de vídeo
@@ -57,6 +57,22 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
     Pular esse passo entrega gaguejo no vídeo e legenda fora do tempo, e o usuário descobre assistindo.
 16. **Pediu vídeo "transparente"? AVALIE O OVERLAY ANTES DE ESCOLHER.** Toda vez que o usuário quiser um vídeo transparente, ou tirar o fundo de uma gravação de tela, decida entre `mix-blend-mode: screen` (o escuro some de graça — só serve para arte CLARA) e alfa de verdade em VP9 `yuva420p` (a arte tem escuro que importa: texto escuro, sombra, contorno). **Olhe a arte e prove antes de renderizar** — compor `1-(1-a)*(1-b)` sobre um quadro real do corte custa segundos e responde o que uma render responderia em minutos. Screen apaga TODO pixel escuro, não só o fundo. A tabela de decisão, as armadilhas e a receita da matte estão em `references/shortform.md`, seção "Quero o vídeo transparente".
 
+
+16b. **UMA RÉGUA SÓ PARA O SILÊNCIO, E ELA É MEDIDA NA FONTE.** O limiar do
+    `silencedetect` não é uma preferência: é a linha entre sala e voz, e ela
+    muda por gravação. `cut_words.noise_floor_for()` a calcula (ponto médio
+    entre piso de ruído e voz mediana) e **todo consumidor usa a mesma**:
+    `speech_regions` (CLI e API), `propose_breaths`, `transcript_audit`,
+    `cut_words`, o orçamento do J-cut em `render.py` e o `verify_cut`. Três
+    deles usavam número fixo (−33 e −35) enquanto os outros calibravam — três
+    réguas medindo o mesmo silêncio, discordando em silêncio. O sintoma é
+    cruel: o `propose_breaths` decide encurtar uma pausa que o J-cut acha que
+    não existe, ou o `verify_cut` acusa "ar morto" onde há voz baixa. Fixo só
+    sobrevive como SOCORRO de quando a calibração falha (piso ≥ mediana), e aí
+    o relatório diz que caiu no socorro. **E `--min-speech 0` quando a resposta
+    alimenta um CORTE**: o piso de 0,05s descarta plosiva e monossílabo, e sem
+    a região o silêncio entre as sobreviventes engorda — a folga relatada passa
+    a ser maior que a real, e cortar nela come a palavra que o piso escondeu.
 
 17. **INÍCIO DE REGIÃO ACÚSTICA NÃO É INÍCIO DE FRASE NOVA.** A retomada engolida
     mora no COMEÇO da região seguinte, escondida dentro do carimbo esticado da
@@ -152,11 +168,11 @@ Phase 1:
 - **`local_fonts.py [--rebuild] [--grep <trecho>]`** — índice das fontes INSTALADAS nesta máquina, para o seletor de fonte da headline (`~/.avelin/localfonts.json`, refeito só quando as pastas de fonte mudam). Existe porque o catálogo do Google cobre o genérico e não cobre a MARCA de ninguém. Guarda o CAMINHO de cada corte porque a medição (`text_measure`) precisa abrir o arquivo — a prévia e o render resolvem a família pelo nome, direto do sistema.
 - **`transcribe.py <video> --edit-dir <edit> [--language pt] [--backend auto|groq|elevenlabs|whispercpp]`** — word-level, cached. `backend=auto` (default): ElevenLabs Scribe for sources >5 min (when `ELEVENLABS_API_KEY` set), else Groq Whisper. Audio uploads as CBR 64kbps mono MP3 (~0.5 MB/min); oversized audio auto-chunks **by bytes**, so every chunk is guaranteed under Groq's 25 MB cap regardless of length. Chunks fetch **in parallel** with per-chunk resume cache and 5x backoff retries (provider blips don't restart the job).
 - **`transcribe_batch.py <videos_dir> [--backend auto|groq|elevenlabs]`** — 4-worker parallel transcription for multi-take shoots; same per-file auto backend selection by length.
-- **`pack_transcripts.py --edit-dir <dir>`** — transcripts → `takes_packed.md` (phrase-level, breaks on ≥0.5s silence). **The** reading view: 1/10 the tokens of raw JSON.
+- **`pack_transcripts.py --edit-dir <dir>`** — transcripts → `takes_packed.md` (phrase-level, breaks on ≥0.5s silence). **The** reading view: 1/10 the tokens of raw JSON. **`--por-palavra [--gap-min 0.15]`** também escreve `takes_packed_palavras.md` — uma palavra por linha, com a folga medida do token `spacing` (nunca a diferença entre carimbos, que estica por cima do silêncio) e duas marcas: `⏸` folga ≥ `--gap-min` (respiro/hesitação candidato) e `↻` mesma palavra repetida colada (engasgo candidato). O limiar de 0,5s da frase esconde os dois — uma hesitação de 0,2s ou um "que que" colado somem dentro da mesma frase empacotada. Complementa, não substitui: `transcript_audit.py` ainda é quem pega fala ENGOLIDA (sem texto nenhum) e `detect_restarts.py` quem pega frase inteira refeita.
 - **`transcript_audit.py <edit> [--recheck]`** — ONDE A TRANSCRIÇÃO MENTE, e é o portão que faltava antes do EDL. O Whisper **engole repetição**: o locutor gagueja, refaz a frase, e sai UMA passada limpa — o parágrafo lê perfeito e o `takes_packed.md` não tem como avisar. Também **troca palavra por palavra** ("trabalhar" → "avaliar", ambas plausíveis). Nenhum detector de TEXTO pega isso porque o texto está bem. Este pega por **densidade acústica** (região de fala com poucas palavras dentro = fala não transcrita; é física, não linguagem) e por **discordância entre as duas passadas** que o projeto já faz de graça. `--recheck` transcreve só a janela suspeita, isolada — sem contexto em volta o modelo não tem para onde suavizar e a repetição reaparece. Medido na série "170 Questões": achou 2 das 3 gaguejadas que o usuário só viu assistindo, uma delas com **0 palavras em 0,80s de fala**.
 - **`cut_transcript.py <edit> -o transcripts/cut_mapped.json`** — o transcrito do CORTE por mapeamento do EDL, não por transcrever de novo. É o que a Fase 2 usa para legenda (veja a Hard Rule 15).
 - **`transcribe.py <video> --edit-dir <edit> --repair-spacing`** — REESCREVE a pausa de um transcrito já gravado, medindo o áudio. Não re-transcreve, não sobe nada: as palavras do Whisper ficam, só a informação de silêncio é refeita. **Todo transcrito Whisper anterior a esta correção nasceu cego a pausa** — o adaptador reconstruía o token `spacing` do gap entre palavras do próprio Whisper (`s > prev_end`), e esse número é sempre 0.00 porque a timeline dele é contígua e a pausa vira DURAÇÃO da palavra anterior. Medido num take de 60s: 10 tokens `spacing` para 14 silêncios reais, os 8 ausentes exatamente os que caíam dentro de uma palavra; o `takes_packed.md` foi de 7 para 16 frases depois do reparo. Rode em qualquer projeto antigo antes de reaproveitar o transcrito.
-- **`detect_restarts.py <edit> [--edl] [--json]`** — FRASE REFEITA, por n-grama repetido em janela curta. Quatro delas foram para um corte final estando escritas, em português, no `takes_packed.md` que o editor leu. Três regras, nesta ordem: **truncada** (a primeira versão morre em palavra funcional — "é um negócio DE") → remove sozinho; **idêntica** → fica a última; **semântica** → PERGUNTA. `--edl` roda sobre o corte e pega repetição que atravessa emenda. Todo hit semântico sai marcado `precisa_julgamento`: repetição também é anáfora ("com um sistema impecável" / "Um sistema eficiente"), e separar as duas é significado, não string — é o único ponto do pipeline onde julgar é o trabalho certo.
+- **`detect_restarts.py <edit> [--edl] [--json]`** — FRASE REFEITA, por n-grama repetido em janela curta. Quatro delas foram para um corte final estando escritas, em português, no `takes_packed.md` que o editor leu. Três regras, nesta ordem: **idêntica** (as duas versões são a mesma string) → fica a última; **truncada** (a primeira morre em palavra funcional — "é um negócio DE" — E as duas compartilham ≥2 palavras de CONTEÚDO) → remove sozinho; **semântica** → PERGUNTA. A **muleta de cabeça é descartada antes do teste de prefixo**: sem isso "basicamente vamos categorizar…" / "bom, vamos categorizar…" — o falso começo mais comum que existe — não tinha "o mesmo início" e caía em semântica, pedindo julgamento para o caso mais óbvio de tomada abortada. A exigência de conteúdo mora só na truncada porque ela é a única que remove sozinha: um par que só compartilha funcionais ("que a") é coincidência de língua. `--edl` roda sobre o corte e pega repetição que atravessa emenda. Todo hit semântico sai marcado `precisa_julgamento`: repetição também é anáfora ("com um sistema impecável" / "Um sistema eficiente"), e separar as duas é significado, não string — é o único ponto do pipeline onde julgar é o trabalho certo.
 - **`perguntar.py <edit> [--contexto NOME] [--teto N]`** — o que perguntar ao usuário, e o que NÃO perguntar. **A pergunta nunca mostra um número** ("hesitação de 0,38s abaixo do limiar" descreve o instrumento, não a escolha): mostra o áudio, com timestamp para clicar no editor que já está no ar, e a consequência. **Uma pergunta por classe, não por ocorrência** — sete respiros viram uma pergunta com três exemplos. Consulta o `preferencias.py`: confiança alta aplica calado, média aplica e informa, baixa pergunta.
 - **`preferencias.py [--mostrar|--aprender <edit>|--consultar F C|--reset]`** — o que ESTE usuário costuma querer, aprendido das decisões dele. Mora em `~/.avelin/preferencias.json`, **fora do clone** (preferência de meses não pode morrer num `git clean`). O limiar é o ponto médio entre o maior vão que ele MANTEVE e o menor que ele REMOVEU; faixas que se cruzam derrubam a confiança em vez de inventar um número. `--aprender` lê o `preview_edits.json` — o que ele corrigiu à mão depois da entrega, que é o sinal mais forte que existe e estava sendo descartado. Confiança governa autonomia (<5 pergunta, 5–15 informa, >15 calado), e contradizer um limiar confiante derruba a confiança: discordar do usuário custa autonomia à ferramenta, nunca o contrário.
 - **A ABA ESTILO LEMBRA.** As escolhas do último envio (formato do corte, headline, estilo de legenda, elementos ligados, deslocamento da legenda) ficam em `~/.avelin/estilo.json`, escritas pelo servidor no mesmo ato do envio — fora do clone, como o `brand.json` e o `preferencias.json`. O editor empilha quatro camadas nesta ordem: padrão de fábrica → escolhas da última vez → marca (cor e letra) → **o que o projeto gravou, que vence sempre**. Reabrir um vídeo entregue tem de mostrar como ele foi entregue, não o gosto de hoje.
@@ -164,7 +180,7 @@ Phase 1:
 - **`verify_takes.py <edit> [--video preview_proxy.mp4]`** — **OUVE o corte pronto** e acusa frase repetida, sem confiar em transcrito nenhum. Existe porque o `detect_restarts.py` lê o TEXTO e o Whisper **engole a segunda passada**: quatro repetições chegaram ao usuário num corte cujo `takes_packed.md` mostrava duas frases emendando perfeitamente, enquanto o áudio dizia *"Isso explica muito, isso explica muito, porque você ganha"*. Re-transcrever o corte inteiro NÃO resolve — com contexto o modelo suaviza de novo (verificado: a passada completa sobre o render saiu limpa). O que funciona é **janela curta e ISOLADA**, em várias larguras (2,4/4,0/6,0s), ficando com a menor em que cada achado apareceu. Roda local com mlx-whisper — grátis, offline, ~1min num corte de 40s. Exit 1 se achar algo.
 
 - **`portao_fase1.py <edit> [--pular-render]`** — **O PORTÃO. Exit 1 = o corte não vai para aprovação.** Checa, nesta ordem: `spacing` medido (sem ele a seleção de tomada foi às cegas e o resto é teatro), reinício sobrevivente, `quote` × conteúdo real do range, e `verify_cut` sobre o render. Existe porque os auditores já existiam quando dez defeitos de fala chegaram ao usuário — não faltava ferramenta, faltava obrigação. A diferença entre recomendação e portão é o exit code.
-- **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is.
+- **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is. **`--noise` é `auto` por padrão**: o limiar sai do próprio material (o ponto médio entre piso de ruído e voz mediana, `cut_words.noise_floor_for`) e o cabeçalho do relatório DIZ qual foi, com as duas populações que o produziram. O `-33dB` fixo de antes era a régua errada para metade do material — medido: uma fonte desta série calibra em −37dB, e a −33 o detector chama voz de silêncio. Valor fixo ainda se passa, mas **com `=`** (`--noise=-33dB`): começando com `-`, o argparse o lê como outra flag.
 - **`voice_levels.py <video> [--edit-dir <dir>] [--edl edl.json] [--drop-db 5]`** — the source of truth for speech LEVEL. Learns the noise floor (Ridler-Calvard intermeans, not a percentile) and the speaker's own median from the recording itself, then flags every phrase, sub-phrase run, and EDL range sitting ≥5 dB under that median and sizes a `gain_db` for each. Catches the failure nothing else sees: a whispered aside or a trailing-off sentence where every word is present, the transcript is perfect, `speech_regions` says "speech", `verify_cut` finds no pop and no dead air — and the viewer still hits a passage they cannot hear. **Run it in Phase 1 before writing the EDL.**
 - **`detect_color.py <video> [--json]`** — resolves NORMAL vs LOG from the file instead of asking. Tier 1 metadata (HLG/PQ declare themselves; Apple Log's signature is ProRes 10-bit 4:2:2 + BT.2020 primaries + EMPTY transfer; vendor tags when present), Tier 2 image statistics when the metadata is silent — which is common, since a Sony shooting S-Log3 to H.264 often declares plain bt709 and any transcode drops the tags. Returns the profile, a **confidence**, the evidence, and the `grade` to apply (measured from the footage for non-Apple LOG). Only `confidence: low` should send you back to the user.
 - **`render.py <edl.json> -o preview_proxy.mp4 --proxy --no-subtitles [--voice-master] [--keep-resolution] [--jobs N] [--no-jcut] [--jcut-lead N] [--jcut-tail-trim N]`** — per-segment extract (grade + fades, **parallel**) → **J-cut overlap assembly (default)** or lossless concat → optional voice master → loudnorm. Writes `jcut_timeline` into the EDL: the real output positions, which is what everything downstream must index off. Short-form fps is automatic: **30fps for 30fps+ sources, else 24** (longform keeps source fps via `--keep-resolution`). Set `edit-data.json` `fps` to match the resulting `preview.mp4`.
@@ -176,7 +192,11 @@ Phase 1:
 
 Phase 2/3 (see the track references for usage):
 - **`phase2.py`** (Fase 2 inteira, um comando) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor)
+- **CORRIGIR O TEXTO DA LEGENDA — 2 cliques na palavra, na aba de transcrição.** O usuário conserta o que o Whisper ESCREVEU sem tocar em imagem nem som: o campo abre na própria palavra, Enter confirma, campo vazio desfaz, e o botão "todas" aplica em toda ocorrência daquela palavra na fonte (nome próprio, marca, jargão — o caso mais comum). O `apply_edits.py` funde em `transcripts/corrections.json`, **não refaz o corte**, e invalida `cut_mapped.json` + `captions.json` — que são gerados com guarda `if not exists` e sem isso a correção seria ignorada em silêncio. **Se a Fase 2 já rodou, o texto novo só aparece depois de `phase2.py` de novo**, porque a legenda é queimada quadro a quadro; por isso **mostre a aba de transcrição ANTES da Fase 2**, não depois — ler 60 palavras leva 20s e economiza um render inteiro. O painel e a legenda leem o MESMO texto corrigido (`fix_for`, em `cut_transcript.py`), que é a Regra 14 valendo de fato.
+- **REUSO DE SEGMENTOS — o render só reextrai o que mudou.** O nome de cada segmento carrega uma chave de conteúdo (fonte + entrada/saída + grade declarado + ganho + tier + fps), então mexer em 1 trecho de 10 reextrai 1, e remover um trecho reextrai ZERO. Medido: apagar um trecho de 5 caiu de 14,5s para 1,6s, com a saída **idêntica pixel a pixel** (SSIM 1,000) à do render completo. O resumo do J-cut diz quantos foram reaproveitados e quantos obsoletos foram podados. **Suba `SEG_VERSAO` no `render.py` ao alterar `extract_segment` ou `video_encoder_args`** — sem isso os segmentos antigos sobrevivem à mudança. `AVELIN_SEM_CACHE=1` apaga tudo e reextrai.
+- **`derivado.py`** — cache de análise por fonte (`~/.avelin/derivados`), chaveado por conteúdo + parâmetros + versão do produtor. É por que o painel de transcrição abre em 0,1s em vez de 2s. `derivado.py` lista, `derivado.py --limpar` apaga, e **`AVELIN_SEM_CACHE=1` desliga tudo** — use ao investigar qualquer suspeita de dado velho, em vez de sair apagando arquivo.
 - **`captions_words.py`** (legendas palavra a palavra, a base de todos os estilos) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`hook_finder.py <edit> [--top 8] [--fonte X] [--json]`** — **o garimpo do gancho**: corta o transcrito de cada fonte de fala em frases e janelas de 1–2 frases e MEDE o que o texto não mostra — borda limpa para cold open (silêncio medido dos dois lados), energia e ritmo contra o próprio falante, conector no começo (depende do anterior), sinais das 6 anatomias, retomada dentro do trecho, repetição confirmada no `defeitos_audio.json`. A nota só ORDENA a leitura; o julgamento (aponta para a tese? fica de pé sozinho?) é seu, e a escolha é do usuário. Grava `hook_candidatos.json`. Método completo em `references/hooks.md`.
 
 Interface:
 - **`preview_server.py [--root <edit>] [--port 4820]`** — serves the standard preview interface (see the Preview interface section). App code lives at `assets/preview/` and is IMMUTABLE. **`--root` is optional**: without it the editor opens on its home screen (dropzone + recent/found projects) and the project is chosen on screen; with it, the session opens straight into that project.
@@ -397,10 +417,22 @@ The cut is approved and nothing about the LOOK of Fase 2 is decided yet. **Do no
 ask the style questions in chat** — set `"awaitingStyle": true` in `state.json`
 and the UI opens its own tab, sitting between FASE 1 and FASE 2:
 
-- **Tipo de edição** — `limpa` ("Nenhum": no split inserts, full frame throughout —
-  **the default**, and the right pick for a talking-head cut or when the user will
+- **Formato — um por vídeo** — um RADIO de seis, não três mais três caixas de
+  marcar: `limpa` ("Nenhum": no split inserts, full frame throughout — **the
+  default**, and the right pick for a talking-head cut or when the user will
   place images by hand later), `split` ("Dividida ↑", art on top), `split2`
-  ("Dividida ↓", art on the bottom).
+  ("Dividida ↓", art on the bottom), mais **Caixinha de perguntas**, **Broll
+  Overlay** e **Notícia**. Os seis são exclusivos entre si por decisão do
+  usuário (2026-08-26): um vídeo tem UM formato.
+  **O dado continua em dois lugares, e é de propósito**: os três primeiros
+  viajam em `edit` (→ `editStyle`) e os três últimos em `elements` (→
+  `questionBox`, `brollOverlays[]`, `hook.style`), porque são contratos
+  diferentes com o compositor. Escolher um dos três últimos **zera os outros
+  dois e devolve `edit` a `limpa`** — `editStyle: "split"` junto de
+  `questionBox` mandaria os dois ao render, que é a combinação que o radio
+  nega. Por isso o pedido também carrega `formato`/`formatoName`, que é o que
+  o `watch_edits.py` mostra: lido sozinho, `editName` diz "Nenhum" para um
+  vídeo que tem adesivo na tela.
 - **Cor de destaque** — `accent`, a hex. Sits BEFORE the text styles, because it
   is what they paint with. One spectral swatch (the OS picker) plus a hex field,
   synced both ways — no preset row. Only `realce`/`misto` headlines and the
@@ -448,10 +480,13 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   `scatter`/"Disperso"), three static (`simples`, `serifada`, `classica`), and
   the editorial pair (`editorial`, `dinamico`/"Dinâmico" — the accumulative,
   centre-anchored cousin).
-- **Elementos da edição** — checkboxes: `tracking` (movimento de tracking),
-  `zoomAuto` (automação de zoom in), `zoomCuts` (zoom in/out nos cortes),
-  `flashCut` (flash na transição), `musicAI` (trilha sonora com IA), plus a
-  free-text observation field.
+- **Elementos da edição** — checkboxes, e agora só o que é liga/desliga de
+  verdade: `tracking` (movimento de tracking), `zoomAuto` (automação de zoom
+  in), `zoomCuts` (zoom in/out nos cortes),
+  `sfx` (efeitos sonoros), `musicAI` (trilha sonora com IA), mais o campo de
+  observação livre. Caixinha, Broll Overlay e Notícia **não estão mais aqui** —
+  viraram opções do radio de Formato acima; continuam gravadas em `elements`
+  no pedido, mas escolher uma delas é escolher o formato do vídeo.
 
 **O servidor DISPARA a Fase 2 sozinho no salvar** (`--auto` é o padrão do
 `preview_server.py`) — então quando o `watch_edits.py` te avisar de um estilo
@@ -611,7 +646,7 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
    | na transcrição | prompt de disfluência (Groq, pt) | viés a favor de manter gaguejo no texto |
    | antes do EDL | `verify_takes --fonte` | repetição que o texto NÃO tem (áudio) |
    | antes do EDL | `detect_restarts` | repetição que o texto TEM |
-   | antes do EDL | `transcript_audit` | fala sem texto (densidade) |
+   | antes do EDL | `transcript_audit` | fala sem texto (densidade) — **e ele está DENTRO do portão** |
    | no EDL | `portao` × `defeitos_audio.json` | range em cima de defeito conhecido |
    | no render | `portao` → `verify_takes` no corte | o que ainda assim passou |
 
@@ -621,6 +656,7 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
 
    Os dois juntos cobrem o buraco que derrubou o #29 — três gaguejadas foram para o vídeo entregue porque nada olhava para "há fala aqui que ninguém transcreveu".
 3. **Converse.** Describe what you see; ask questions shaped by the material (content type, target length/aspect, pacing, must-keep/must-cut). No fixed checklist.
+3b. **SHORT-FORM: GANCHO ANTES DA ESTRATÉGIA — leia `references/hooks.md`.** O gancho muda o corte (a frase mais forte quase nunca é a primeira gravada), então ele se decide aqui, não na Fase 2. Perfil do criador em `~/.avelin/hook_perfil.json` (pergunte uma vez na vida, nunca de novo); **objetivo + tese numa pergunta só** (`AskUserQuestion`, o objetivo nunca se infere); `hook_finder.py <edit>` e julgue o top-N contra a tese. Saem daqui: o gancho falado (natural ou cold open), a anatomia/frame zero, onde vira o riser e a direção da trilha — tudo em uma linha cada na proposta do passo 5.
 4. **Detect the colour profile — do NOT ask.** Run `detect_color.py <source>`.
    The answer is in the file; asking put a measurable question on the user.
    - **`rec709` (normal)** → no grade. `"grade": ""`. A standard profile already
@@ -633,7 +669,7 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
      a LOG curve. Show what was measured, then ask.
    Still show the `--candidates` montage before committing a LOG grade: detection
    picks the curve, the user picks the look.
-5. **Propose the cut strategy** (4–8 sentences: shape, takes, cut direction, grade direction, length estimate). **Wait for confirmation.**
+5. **Propose the cut strategy** (4–8 sentences: shape, takes, cut direction, grade direction, length estimate — and, in short-form, the hook from 3b: which line opens and from where). **Wait for confirmation.** A cold-open range goes FIRST in the EDL with `"beat": "HOOK"` and leaves its original position.
 6. **Escreva o EDL.** `edl.json` (schema below; editor sub-agent brief for multi-take). Set cut edges from `speech_regions.py`, not raw Whisper times.
 6b. **PASSE PELO PORTÃO antes de mostrar qualquer corte.** Não é sugestão:
 
@@ -651,6 +687,25 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
    emenda — teria reprovado aquele corte sozinho. Recomendação que se pode pular
    é recomendação que se pula.
 
+   **E O PORTÃO AGORA RODA SOZINHO NA APROVAÇÃO** (2026-08-27). Ele tinha o
+   mesmo defeito que existia para curar: `grep` no repo inteiro mostrava que
+   NINGUÉM o chamava — nem helper, nem servidor. Clicar em "Aprovar corte"
+   disparava direto o encode pleno e a aba Estilo, e todas estas checagens
+   dependiam de uma sessão minha lembrar de rodá-las. A diferença entre
+   recomendação e portão é o exit code, e o exit code só vale se alguém o LER.
+   Agora o `preview_server.py` roda o portão ANTES das duas consequências:
+   reprovado, não há encode nem aba Estilo, os defeitos vão para `state.gate` e
+   o botão vira **"Aprovar mesmo assim"** (âmbar, não o verde de aprovar). A
+   porta existe porque a palavra final é de quem gravou (Hard Rule 18) — e
+   `state.gate.forced` registra que aquele corte passou por cima, porque um
+   corte forçado não pode ficar indistinguível de um conferido. Uma correção
+   nova zera o parecer: ele descreve um render que vai deixar de existir.
+
+   **O portão quebrado não vira portão aberto NEM parede**: não conseguir
+   CONFERIR é diferente de reprovar, então a aprovação passa e a tela diz que
+   não conferiu — em vez de travar o trabalho do usuário por um bug nosso, ou
+   de deixar passar calado como se tivesse conferido.
+
    Depois do portão, `perguntar.py` decide o que ainda merece uma pergunta ao
    usuário e o que a preferência dele já responde.
 
@@ -660,6 +715,17 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
       Todas as outras checagens leem texto, e o texto é justamente onde a
       repetição não está — o Whisper a apaga do transcrito sem apagá-la do áudio.
       Nunca mostre um corte que não passou por essa passada.
+
+      **E ela só se pula quando NÃO HÁ EMENDA.** Uma versão desta skill pulava a
+      escuta quando o mapa da fonte (`defeitos_audio.json`) cobria todas as
+      fontes e estava limpo — raciocínio com um buraco: o mapa prova que o EDL
+      DESVIOU das repetições do material bruto, e não sabe nada das que a
+      MONTAGEM cria. Duas ocorrências distantes na fonte não são repetição lá;
+      emendadas lado a lado, viram — que é o caso das várias tomadas da mesma
+      CTA gravadas em sequência. Medido no projeto "Matriz de Prioridades": mapa
+      cobrindo as duas fontes, limpo, EDL de 9 trechos, e a escuta do render
+      achou `"um incêndio" ×2` aos 22,80s. Sob a regra antiga aquilo teria sido
+      entregue. Só um EDL de trecho ÚNICO autoriza pular.
 
    2. **Um reinício SEMÂNTICO nunca é descartado pelo modelo.** O
       `detect_restarts.py` marcou "com um sistema impecável" / "Um sistema
@@ -1257,7 +1323,7 @@ starts sounding like a different microphone.
 The cut is approved and the user picked the style in the UI (`preview_style.json`)
 → load **one** file and build exactly what was picked:
 
-- **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, hook headline (band or full-screen cartela), dynamic camera, inserts, behind-the-subject, SFX, soundtrack.
+- **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, hook headline (band or full-screen cartela), dynamic camera, inserts, behind-the-subject, SFX, soundtrack. **`hook.lines`, o frame zero, a virada do riser e o prompt da trilha saem de `references/hooks.md`** (lote de 4 com a regra 3-2-1, diferenciação forçada, CTA por objetivo).
 - **Horizontal / YouTube / tutorial / vlog → read `references/longform.md`.** Retention cut is there too (read it BEFORE Phase 1 on longform jobs), B-roll, lower-thirds, chapter cards, callouts, .srt + chapters, soundtrack.
 
 Both tracks: `helpers/phase2.py <edit>` faz tudo — aplica a escolha da aba Estilo, monta o projeto, compõe, roda o `check`, renderiza, normaliza a loudness e devolve os caminhos ao editor. A edição inteira é o `edit-data.json`; nada de código por sessão fora dos gráficos sob medida em `compositions/`. **Não carregue a skill `remotion-best-practices`.** Não é o motor desta skill.

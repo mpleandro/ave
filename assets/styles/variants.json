@@ -1876,7 +1876,7 @@
           "ease": "cubic-bezier(.2,.8,.2,1)"
         }
       },
-      "_note": "Not\u00edcia — a captura de um app de not\u00edcia colada sobre o v\u00eddeo: barra do topo na cor de destaque com hamb\u00farguer, r\u00f3tulo em caixa alta e lupa, e a manchete em preto sobre folha branca. A PRIMEIRA linha do texto \u00e9 o r\u00f3tulo da barra (mesma conven\u00e7\u00e3o da etiqueta e do jornal) — sem ela a barra fica s\u00f3 com os \u00edcones. A cor de DESTAQUE \u00e9 a barra, e \u00e9 o que o usu\u00e1rio troca na aba Estilo. Quebra por `encher`: a manchete enche a largura da folha em N linhas, como manchete de verdade, em vez das duas equilibradas — a barra do autor continua vencendo."
+      "_note": "Notícia — a captura de um app de notícia colada sobre o vídeo: barra do topo na cor de destaque com hambúrguer, rótulo em caixa alta e lupa, e a manchete em preto sobre folha branca. A PRIMEIRA linha do texto é o rótulo da barra (mesma convenção da etiqueta e do jornal) — sem ela a barra fica só com os ícones. A cor de DESTAQUE é a barra, e é o que o usuário troca na aba Estilo. Quebra por `encher`: a manchete enche a largura da folha em N linhas, como manchete de verdade, em vez das duas equilibradas — a barra do autor continua vencendo."
     },
     "capa": {
       "motor": "cartela",
@@ -2324,23 +2324,49 @@
     "targetX": 0.5,
     "targetY": 0.4
   },
-  "flash": {
-    "durationFrames": 7,
-    "blur": 16,
-    "intensity": 1.0
-  },
   "transicoes": {
-    "_note": "Motor de transições em `transitions[].tipo` — candidatas de ~/.avelin/propostas/transicoes-10.html, aplicadas em 2026-08-23. `flash` continua com config própria acima, por compatibilidade com todo edit-data já salvo. `chama`/`tranco`/`estouro`/`zoomBlur` animam o vídeo já cortado direto (filtro/transform no elemento — nada de painel escondendo a emenda); `deslize`/`cortina`/`iris`/`falha` usam um painel por cima para esconder o instante do corte, porque o preview.mp4 é UM arquivo já cortado — não são crossfade real entre duas tomadas. Números aqui são ponto de partida, não lei — ajuste igual se ajusta o `flash`.",
+    "_note": "Motor de transições em `transitions[].tipo` — candidatas de ~/.avelin/propostas/transicoes-10.html, aplicadas em 2026-08-23. O `flash` (feixe varrendo o quadro) FOI REMOVIDO do produto em 2026-09-16 a pedido do usuário, e com ele o default: `tipo` ausente ou desconhecido agora AVISA pelo nome e não desenha nada, em vez de cair numa transição parecida. `chama`/`tranco`/`estouro`/`zoomBlur` animam o vídeo já cortado direto (filtro/transform no elemento — nada de painel escondendo a emenda); `deslize`/`cortina`/`iris`/`falha` usam um painel por cima para esconder o instante do corte, porque o preview.mp4 é UM arquivo já cortado — não são crossfade real entre duas tomadas. Números aqui são ponto de partida, não lei.",
     "chama": {
       "attackFrames": 2,
       "holdFrames": 1,
       "releaseFrames": 2,
       "intensity": 0.88,
-      "_note": "Flash de cor sólida no accent do projeto — mais barato que o `flash` (sem feixe, sem blur)."
+      "_note": "Estouro de cor sólida no accent do projeto, dois quadros — a mais barata do conjunto: sem feixe, sem blur, sem painel."
     },
     "tranco": {
       "stepFrames": 1,
-      "keyframes": [[-3, 0, 0], [-2, 9, -6], [-1, -10, 5], [0, 7, -5], [1, -5, 3], [2, 0, 0]],
+      "keyframes": [
+        [
+          -3,
+          0,
+          0
+        ],
+        [
+          -2,
+          9,
+          -6
+        ],
+        [
+          -1,
+          -10,
+          5
+        ],
+        [
+          0,
+          7,
+          -5
+        ],
+        [
+          1,
+          -5,
+          3
+        ],
+        [
+          2,
+          0,
+          0
+        ]
+      ],
       "_note": "Shake de câmera em torno do corte. `keyframes` é [passo relativo ao corte, x, y] em px — anima `#a-roll` diretamente; seguro porque a câmera (`camera.js`) só toca `scale`, nunca x/y."
     },
     "estouro": {
@@ -2382,9 +2408,21 @@
     "falha": {
       "windowFrames": 7,
       "tiras": [
-        {"top": 18, "height": 11, "cor": "rgba(255,0,80,.55)"},
-        {"top": 44, "height": 9, "cor": "rgba(0,220,255,.5)"},
-        {"top": 66, "height": 13, "cor": "rgba(255,214,0,.4)"}
+        {
+          "top": 18,
+          "height": 11,
+          "cor": "rgba(255,0,80,.55)"
+        },
+        {
+          "top": 44,
+          "height": 9,
+          "cor": "rgba(0,220,255,.5)"
+        },
+        {
+          "top": 66,
+          "height": 13,
+          "cor": "rgba(255,214,0,.4)"
+        }
       ],
       "_note": "RGB split — três tiras coloridas saltando horizontalmente em torno do corte. Pontua uma virada grande (capítulo, insert) sem a chapa opaca da cortina/íris."
     }
@@ -2422,10 +2460,6 @@
     "hook": {
       "file": "whoosh.mp3",
       "volume": 0.1
-    },
-    "flash": {
-      "file": "cut-click.mp3",
-      "volume": 0.35
     },
     "soloWord": {
       "file": "caption-click.mp3",

@@ -166,7 +166,12 @@ def style_digest(p: Path) -> str:
     ).format(d.get("savedAt", ""))
     out = [
         head,
-        f'  · tipo de edição: {d.get("editName") or d.get("edit")}',
+        # FORMATO, não "tipo de edição": Caixinha, Broll Overlay e Notícia
+        # entraram no mesmo radio que limpa/split/split2 (um formato por
+        # vídeo), e como elas viajam em `elements` o `editName` sozinho diz
+        # "Nenhum" para um vídeo que tem adesivo na tela. `formatoName` é
+        # escrito pelo editor; o fallback atende arquivo salvo antes disso.
+        f'  · formato: {d.get("formatoName") or d.get("editName") or d.get("edit")}',
         f'  · headline: {d.get("headlineName") or d.get("headline")}',
         f'  · legenda: {d.get("captionsName") or d.get("captions")}',
     ]

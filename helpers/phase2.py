@@ -126,6 +126,26 @@ def balance_two_lines(text: str) -> list[str]:
     return [" ".join(w[:best]), " ".join(w[best:])]
 
 
+# Caracteres por segundo de leitura confortável — o mesmo padrão usado em
+# legendagem profissional (~15-17 cps). Abaixo do piso de 3s um texto curto
+# ("Responde aí") passaria rápido demais para ser lido, mesmo sozinho.
+CPS_LEITURA = 16.0
+DURACAO_MINIMA_LEITURA = 3.0
+
+
+def tempo_leitura(texto: str) -> float:
+    """Quanto tempo este texto precisa ficar na tela para ser lido.
+
+    Existe porque nem headline nem Caixinha/Notícia tinham duração PADRÃO
+    ligada ao próprio texto — a Caixinha sem `end` ficava "até o fim do
+    vídeo" (medido: um projeto real saiu com a caixinha cobrindo os 2min17
+    inteiros porque ninguém perguntou por quanto tempo ela devia durar, e o
+    portão só exigia o TEXTO, nunca o TEMPO). Um piso de 3s existe pelo
+    mesmo motivo: "Responde aí" sozinho passaria rápido demais mesmo lido.
+    """
+    return max(DURACAO_MINIMA_LEITURA, len(texto) / CPS_LEITURA)
+
+
 def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     """Traz o que o usuário escolheu na aba Estilo para dentro do edit-data."""
     pick = load(edit / "preview_style.json")
@@ -168,7 +188,8 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         hook = data.setdefault("hook", {})
         hook["lines"] = balance_two_lines(txt)
         hook["enabled"] = True
-        hook.setdefault("endSec", 4.0)
+        # Tempo de leitura do texto, não um número fixo — ver tempo_leitura().
+        hook.setdefault("endSec", round(tempo_leitura(txt), 2))
     if pick.get("edit"):
         data["editStyle"] = pick["edit"]
     # CAIXINHA DE PERGUNTAS: liga por `elements.caixinha`, não pela presença
@@ -187,6 +208,15 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         if chamada:
             cx["chamada"] = chamada
         cx.setdefault("start", 0.0)
+        # SEM `end` explícito, `caixinha_markup()` (compose_shortform.py) usa
+        # "fica até o fim do vídeo" — o padrão documentado ali, e o que
+        # cobriu um vídeo inteiro de 2min17 num projeto real porque a
+        # duração nunca foi perguntada nem calculada. Tempo de leitura do
+        # texto completo (pergunta + chamada) substitui esse padrão por um
+        # que sempre existe, sem depender de alguém lembrar de perguntar.
+        if "end" not in cx and (cx.get("pergunta") or cx.get("chamada")):
+            texto_completo = f"{cx.get('chamada', '')} {cx.get('pergunta', '')}".strip()
+            cx["end"] = round(cx.get("start", 0.0) + tempo_leitura(texto_completo), 2)
     else:
         data.pop("questionBox", None)
     if pick.get("observation"):
@@ -434,6 +464,24 @@ def main() -> None:
         run([sys.executable, str(SKILL / "helpers" / "caption_safe.py"), str(edit), "--aplicar"],
             allow_fail=True)
         # relê o arquivo: quem escreveu a medida foi o helper, noutro processo
+        data = load(data_path, data) or data
+
+    # A CAIXINHA TAMBÉM NÃO PODE CAIR SOBRE O ROSTO — mesma regra da legenda,
+    # mesma medição (`caption_safe.py` — Haar frontal, `caixa_bate_no_rosto`),
+    # aplicada à testa em vez do queixo. Faltava esta chamada: a função já
+    # existia no arquivo desde antes, sem nunca ser invocada — um projeto
+    # real saiu com a caixinha em cima do rosto porque a posição de fábrica
+    # (`topoPadrao`) nunca foi checada contra o vídeo, e menos ainda contra
+    # a câmera dinâmica (`zoomAuto`/`zoomCuts`) que aperta o enquadramento
+    # ao longo do corte. `start`/`end` escopam a medição para a JANELA em
+    # que a caixinha aparece, não o vídeo inteiro. Valor de `top` posto à
+    # mão vence a medição, como em toda regra desta família.
+    qb = data.get("questionBox") or {}
+    if (data.get("elements") or {}).get("caixinha") and qb.get("pergunta") and "top" not in qb:
+        print("  checando se a caixinha bate no rosto…")
+        progress.step(edit, detail="checando a caixinha contra o rosto")
+        run([sys.executable, str(SKILL / "helpers" / "caption_safe.py"), str(edit),
+             "--caixinha", "--aplicar"], allow_fail=True)
         data = load(data_path, data) or data
 
     if data.get("captions", {}).get("style") == "stacked":

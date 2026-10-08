@@ -54,8 +54,7 @@ the Estilo tab at the end of Fase 1; every key maps to something here:
 | `elements.tracking` | `face_track.py` + `track.json`; OFF → skip it, fixed frame |
 | `elements.zoomAuto` | the slow push-in inside each segment (`+0.04/segment`) |
 | `elements.zoomCuts` | the hard zoom change ON each cut (~1.10–1.22, cycles) |
-| `elements.flashCut` | `transitions[]` in edit-data.json — see "Flash na transição" and "Motor de transições" for the other 8 `tipo`s |
-| `elements.sfx` | **"Aplicar efeitos sonoros"** — os efeitos LOCAIS de `assets/sfx/`, disparados pelos eventos da composição (entrada de cartão, flash, deixa em destaque). Ligado por padrão. OFF → nenhum efeito entra, mesmo havendo evento. Não custa token nem espera: é o caminho barato, e vem antes da geração por IA na lista por isso |
+| `elements.sfx` | **"Aplicar efeitos sonoros"** — os efeitos LOCAIS de `assets/sfx/`, disparados pelos eventos da composição (entrada de cartão, transição, deixa em destaque). Ligado por padrão. OFF → nenhum efeito entra, mesmo havendo evento. Não custa token nem espera: é o caminho barato, e vem antes da geração por IA na lista por isso |
 | `elements.musicAI` | **"Gerar com IA"** — Phase 3 via `treblo_music.py`; OFF → deliver with voice only. Custa token e minutos |
 | `note` | free text — read it, it overrides the defaults above |
 
@@ -468,12 +467,12 @@ each other in `elLocked()` (app.js). If either is on, skip this whole section;
 don't ask for headline text that will never render.
 
 **There is no text field on the Estilo screen for this** — the tab only picks
-`hook.style` (the layout). The first 1–2 seconds decide the swipe. Write
-`hook.lines` like a social-media/copywriting/virality specialist, not a
-summarizer: read the cut transcript, find the core promise/tension, and craft
-a scroll-stopper. Levers: **curiosity gap · high stakes/bold claim ·
-specificity/number · urgency · pattern interrupt**. Match the video's
-language; never clickbait it can't pay off.
+`hook.style` (the layout). The first 1–2 seconds decide the swipe. **Write
+`hook.lines` with the method in `references/hooks.md`** — the gancho falado,
+o objetivo e a tese já foram decididos na Fase 1 (passo 3b); aqui sai o TEXTO
+que complementa o falado: lote de 4, regra 3-2-1, no máximo 6 palavras, uma
+anatomia diferente por candidato e nenhuma repetida dos 2 últimos vídeos do
+`historico`. Match the video's language; never clickbait it can't pay off.
 
 **Two locked styles via `hook.style`** (both user-approved, encoded in the
 template):
@@ -492,9 +491,12 @@ template):
 Both are static hold, fade+rise at the edges, soft whoosh.
 
 Example (Claude Fable video): "A IA MAIS / PERIGOSA DO MUNDO / ACABOU DE SER
-LIBERADA". Draft 2–3 copy candidates and ask with `AskUserQuestion` (options =
-the candidates, text — no renders; Other lets the user dictate their own),
-then render ONE still for design approval before the full render.
+LIBERADA". Ask with `AskUserQuestion`: 4 options, the TEXT as `label` and the
+full hook card (anatomia, gatilho, frame zero, som, CTA, por quê) in `preview`
+— no renders; Other lets the user dictate their own. The anatomia-6 candidate
+maps to a full-screen `cartela` style, so picking it can change `hook.style`
+too. Then render ONE still for design approval before the full render, and
+append the pick to `~/.avelin/hook_perfil.json → historico`.
 
 **De-conflict:** the hook owns the upper zone for its window — push any insert
 that wants the same zone to after `hook.endSec` (e.g. move a 2.5s cutaway to
@@ -515,7 +517,10 @@ Protocolo (decidido pelo usuário em 2026-08-18):
    `"sempre"` → aplica sem perguntar. Ausente → **pergunte** (AskUserQuestion)
    com as opções **sim / não / sempre**; resposta "sempre" grava a chave (edite
    o JSON preservando o resto) e aplica.
-2. A **virada** é onde o riser crava o pico. Candidatos, do mais sutil ao mais
+2. A **virada** é onde o riser crava o pico. **A anatomia do gancho escolhido
+   já diz qual é** (tabela "Som do gancho" em `references/hooks.md`: anatomia 6
+   → saída da cartela + `impact`; loop aberto → fim da frase, sem impacto).
+   Sem anatomia decidida, candidatos do mais sutil ao mais
    forte: primeiro corte de take dentro do hook · saída da headline
    (`hook.endSec`) · primeiro acento pós-hook (flash/split/gráfico). Se houver
    mais de um candidato plausível, pergunte junto. (Este usuário escolheu o
@@ -540,40 +545,40 @@ Protocolo (decidido pelo usuário em 2026-08-18):
 4. Confira no render: energia subindo nas janelas anteriores à virada
    (`volumedetect` em janelas de 0,3s) e pico dentro de ±2 frames dela.
 
-## Flash na transição (`elements.flashCut`)
+## Zoom in/out — o ritmo é da FALA, não da emenda
 
-A light beam whips across the frame with a bloom and a dry click. Data-driven:
-one entry per cut in `transitions[]`, `at` being the cut time **exactly as
-segments.json states it** — `VIDEO_LAG` lines it up with the frame the picture
-changes on, same as the split windows. Never index it off its own clock.
+`zoomCuts`/`zoomAuto` animam a escala do `#a-roll` por SEGMENTO, e o segmento
+saía das junções do corte (`jcut_timeline`). Isso é o mínimo garantido e quase
+sempre é pouco: um corte de 3 trechos dá **2 trocas de plano em 41s**, que lê
+como câmera parada — exatamente o que o `camera_parts` existe para evitar. O
+ritmo da câmera é o do RACIOCÍNIO: uma tomada única pode ter cinco mudanças de
+contexto e nenhuma emenda.
 
-```json
-"transitions": [{"at": 11.7}]
-```
+**`segments[]` no `edit-data.json` vence as junções do EDL.** Monte-o das pausas
+REAIS do corte (`captions.json`, que já está no relógio do corte):
 
-Default placement when the element is ON: **one per split-insert entry, not per
-cut.** The video has ~27 cuts; a flash on each one stops reading as an accent and
-starts reading as a strobe. Put it where the layout changes, which is where the
-transition means something. Optional per entry: `intensity` (default 1), `sfx`,
-`volume`.
+1. Nova fronteira onde a folga entre palavras é **≥ 0,42s** — é a respiração
+   entre grupos de frase, e é onde o espectador aceita a troca de plano.
+2. **Piso de 2,0s** por plano: abaixo disso a troca pisca e lê como falha.
+3. Plano acima de **~5,2s** é quebrado na MAIOR pausa interna dele, repetindo
+   até caber. Sem este passo sobram planos de 8s no meio de um corte já rápido.
+4. Bordas encostadas: o primeiro começa em 0, cada um termina onde o próximo
+   começa, o último fecha na duração.
 
-- **The beam LEADS the cut by 2 frames.** Starting it on the cut frame reads as a
-  flash after the fact — the eye sees the picture change, then the light. Leading
-  it makes the light look like the cause.
-- **Blur is what separates a beam from a wash.** At 26px it read as a general
-  brightening; 16px reads as a beam. Raise opacity and lower blur together.
-- **CHECK THE SFX FILE BEFORE TRUSTING IT.** The pack's `click2.mp3` peaks at
-  −25 dB — it is inaudible under speech at any sane volume, and the mix looks
-  fine while nothing is heard. `ffmpeg -i <sfx> -af volumedetect -f null -` is
-  the check. `cut-click.mp3` (−2 dB, 57ms) is the one that reads.
-- **And check WHERE the transient sits inside the file.** The source this click
-  came from had 180ms of silence before the hit; delayed to the cut it would have
-  landed 180ms late — after a 230ms effect had already finished. Trim the lead-in
-  so the transient is at t=0, then delay by the cut time.
-- **O clique vive na composição, e é entregue de lá.** No motor antigo ele
-  tinha de ser remixado no ffmpeg, porque a cura do drift jogava fora o áudio do
-  render. Sem drift, o efeito fica onde foi autorado e chega inteiro na entrega —
-  `sfx_blocks()` já compensa o silêncio inicial MEDIDO de cada arquivo.
+Medido no projeto Carrossel: 3 junções de corte → **12 planos**, um a cada
+~3,5s, num vídeo de 41,5s.
+
+**A supressão da tela dividida é por JANELA, nunca global.** A câmera e a tela
+dividida brigam pelo mesmo transform, então os planos que caem DENTRO de uma
+janela de split saem. O código desligava a câmera no vídeo inteiro só por
+existir um `splitInserts`: uma janela de 8s deixava **33 segundos parados**, e o
+custo só aparecia assistindo.
+
+**Toda virada de plano leva som**, senão o zoom lê como instabilidade e não como
+corte. Uma deixa em `sfxCues` por fronteira: `kind: "camera"` (vol ~0,17) na
+virada comum, e o acento forte reservado para a virada de estrutura — a saída da
+tela dividida, a entrada do gancho. Dentro do split, onde a câmera está parada,
+o som cai para um toque (`element`, ~0,10) ou sai.
 
 ## Motor de transições (`transitions[].tipo`)
 
@@ -600,10 +605,12 @@ na direção de `direcao`: `cima|baixo|esquerda|direita`), `cortina` (chapa no
 accent sobe cobrindo e some, um sentido só), `iris` (mesma mecânica, recorte
 circular, fecha e abre no MESMO ponto), `falha` (RGB split, três tiras).
 
-Regra do lote: **use `flash`/`chama`/`tranco`/`estouro` livremente onde a
-`flashCut` já mandava** (uma por troca de layout); as médias/pesadas são para
-o que raramente acontece no vídeo — mudar de capítulo, entrar um insert grande
-— nunca uma por corte, ou viram estroboscópio como o próprio flash já avisa.
+Regra do lote: **use `chama`/`tranco`/`estouro` livremente, uma por troca de
+layout**; as médias/pesadas são para o que raramente acontece no vídeo — mudar
+de capítulo, entrar um insert grande — nunca uma por corte, ou viram
+estroboscópio. (O `flash` — feixe varrendo o quadro — foi removido do produto em
+2026-09-16 a pedido do usuário: `tipo` ausente ou desconhecido avisa pelo nome e
+não desenha nada, em vez de cair numa transição parecida.)
 
 **Duas famílias de implementação, e isso importa para calibrar expectativa:**
 
@@ -989,8 +996,10 @@ Trilha que veio do usuário: ofereça guardá-la depois da entrega
 `--usar` quando a que entrou veio do acervo.
 
 **Writing the Treblo prompt — derive it from the video's context, and ask for
-MUSIC, not a texture.** Read the cut transcript: what's the topic, energy and
-emotional arc? Then describe a real **composed instrumental piece** — name a
+MUSIC, not a texture.** Start from the **objetivo and the hook's emotion**
+captured in Fase 1 (`references/hooks.md` → "Som do gancho e trilha": tabela
+por objetivo/funil; anatomia 6 = trilha entra NA virada, não no frame 0). Then
+read the cut transcript: what's the topic, energy and emotional arc? Then describe a real **composed instrumental piece** — name a
 **genre + key instruments + tempo/BPM + mood**, and (optionally) a reference
 artist/style. Match the content: a hype tech/AI reel wants upbeat modern
 electronic with a catchy synth melody; a calm tutorial wants warm lo-fi keys; a
