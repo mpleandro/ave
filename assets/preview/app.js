@@ -1547,6 +1547,8 @@ let S = {
   editingNote: null, // id of the note the editor is bound to
   style: null, // current picks {edit, captions, elements:{…}, note}
   prefs: null, // as escolhas da última vez (~/.avelin/estilo.json)
+  salvos: [],   // os estilos com nome (~/.avelin/estilos_salvos.json)
+  salvosAt: 0,
   jcut: null, // jcut_timeline from edl.json — real output positions per take
   // A1/A2 live folded inside the audio track. They answer "where is the J-cut",
   // which is a question you ask once — so the default is closed, and the choice
@@ -1818,6 +1820,10 @@ function styleState() {
     && same('capColor', def.capColor)
     && same('capDy', 0)
     && same('hookDx', 0) && same('hookDy', 0) && same('hookScale', 1)
+    /* escolher um ESTILO SALVO é mudança mesmo quando ele difere só em fonte
+       ou cor, que não estão nesta lista — sem isto o botão ficava travado */
+    && JSON.stringify((S.style.estiloSalvo || {}).id || null)
+       === JSON.stringify((cur.estiloSalvo || {}).id || null)
     /* `elements` compara CHAVE A CHAVE, não como objeto inteiro.
      *
      * O JSON do objeto todo repete, um nível mais fundo, o mesmo defeito que
@@ -2607,6 +2613,33 @@ async function loadBrand() {
    é trabalho que a ferramenta pode poupar. E vale a MESMA ordem: o que o
    projeto gravou continua vencendo, senão reabrir um vídeo entregue mostraria
    o gosto de hoje no lugar do que foi entregue. */
+/* ESTILOS SALVOS — vários, com nome, escritos pela IA depois de perguntar
+   (helpers/estilos_salvos.py). Relidos a cada poucos segundos enquanto a aba
+   está aberta: o salvar acontece no chat, com a tela já no ar, e um cartão que
+   só aparecesse depois de recarregar a página pareceria não ter sido salvo. */
+async function loadEstilosSalvos() {
+  try {
+    const d = await (await fetch('/api/estilos-salvos')).json();
+    const novos = (d && d.estilos) || [];
+    const mudou = JSON.stringify(novos) !== JSON.stringify(S.salvos);
+    S.salvos = novos;
+    S.salvosAt = Date.now();
+    return mudou;
+  } catch (e) { S.salvosAt = Date.now(); return false; }
+}
+
+/* Aplicar um salvo = trocar as escolhas da aba pelas dele, inteiras. Texto
+   (headline, caixinha) NÃO vem junto: é conteúdo do vídeo, não estilo. */
+function aplicaEstiloSalvo(id) {
+  const e = S.salvos.find((x) => x.id === id);
+  if (!e) return;
+  const st = e.style || {};
+  S.style = { ...S.style, ...st,
+              elements: { ...defaultStyle().elements, ...(st.elements || {}) },
+              explicativo: e.explicativo || null,
+              estiloSalvo: { id: e.id, nome: e.nome } };
+}
+
 async function loadEstilo() {
   try {
     const d = await (await fetch('/api/estilo')).json();
@@ -2685,6 +2718,9 @@ const onProxy = () => /(^|\/)preview_proxy\.mp4$/.test(S.state.video || '');
 const setupApplies = () => !!(S.state.awaitingStyle || S.state.style) && !onProxy();
 
 function renderSetup() {
+  if (Date.now() - (S.salvosAt || 0) > 5000) {
+    loadEstilosSalvos().then((mudou) => { if (mudou) renderSetup(); });
+  }
   // o tamanho do cartão é o do quadro, e tem de estar escrito ANTES de os
   // construtores medirem `clientWidth` para calcular a escala
   aplicarQuadro();
@@ -2765,6 +2801,30 @@ function renderSetup() {
     const opts = group === 'edits' ? editOptions() : STYLE_CATALOG[group];
     const elAtivo = formatoEl();
     host.innerHTML = '';
+    /* OS SALVOS VÊM PRIMEIRO, com borda laranja e o NOME que o usuário deu:
+       são o padrão dele, e o padrão é a primeira coisa que se procura. */
+    if (group === 'edits') {
+      for (const e of S.salvos) {
+        const st = e.style || {};
+        const on = !!(S.style.estiloSalvo && S.style.estiloSalvo.id === e.id);
+        const card = el('div', `opt salvo${on ? ' on' : ''}`, host);
+        card.dataset.group = 'salvo';
+        card.dataset.id = e.id;
+        const els = st.elements || {};
+        const fmt = EDIT_ELEMENTS.find((k) => els[k]);
+        const fmtNome = fmt ? ((STYLE_CATALOG.elements.find((x) => x.id === fmt) || {}).name || fmt)
+                            : styleName('edits', st.edit);
+        card.title = `${e.nome} — ${fmtNome} · headline ${styleName('headlines', st.headline)}`
+          + ` · legenda ${styleName('captions', st.captions)}${e.criado ? ' · salvo em ' + e.criado : ''}`;
+        const prev = el('div', 'opt-preview frame salvo-mock', card);
+        el('div', 'salvo-cor', prev).style.background = st.accent || ACCENT_DEFAULT;
+        el('div', 'salvo-fmt', prev).textContent = fmtNome;
+        el('div', 'salvo-det', prev).textContent =
+          `${styleName('headlines', st.headline)} · ${styleName('captions', st.captions)}`;
+        el('div', 'opt-name salvo-nome', card).textContent = e.nome;
+        el('div', 'opt-mark', card);
+      }
+    }
     for (const o of opts) {
       // Estilos ainda não portados para o HyperFrames aparecem apagados e não
       // clicáveis, em vez de sumirem: esconder faria a aba mentir sobre o que o
@@ -2973,6 +3033,14 @@ $('layersPanel').addEventListener('click', (e) => {
   }
 
   const opt = e.target.closest('.opt:not(.ghost):not(.unavailable)');
+  if (opt && opt.dataset.group === 'salvo') {
+    aplicaEstiloSalvo(opt.dataset.id);
+    LIVE.hookKey = null;
+    renderSetup();
+    return;
+  }
+  // qualquer escolha à mão depois de um salvo já não é mais ELE
+  if (opt) delete S.style.estiloSalvo;
   if (opt) {
     /* FORMATO: um só, sempre. Zerar os três ANTES de ligar o escolhido é o que
        faz o radio ser radio — e é por isso que a escolha passa por aqui em vez
@@ -3050,6 +3118,11 @@ async function sendStyle() {
     // pick — the skill has to know which of the two it is looking at
     type: 'style-setup',
     rerender,
+    /* ESTILO SALVO escolhido: o phase2.py aplica também fonte e cor dele (o
+       envio comum não aplica — quem muda fonte e cor é o chat) e as opções da
+       moldura explicativa. Mexer em qualquer cartão depois apaga a marca. */
+    estiloSalvo: S.style.estiloSalvo || null,
+    explicativoOpcoes: (S.style.estiloSalvo && S.style.explicativo) || null,
     edit: S.style.edit,
     editName: styleName('edits', S.style.edit),
     /* O FORMATO como UMA coisa, para quem LÊ o pedido. `edit`/`elements`
@@ -4460,7 +4533,7 @@ $('jcutToggle').addEventListener('click', () => {
 
 // a marca ANTES do primeiro poll: ela entra na montagem do estilo, e chegando
 // depois o painel abriria no laranja de fábrica e trocaria de cor sozinho
-Promise.all([loadBrand(), loadEstilo(), loadLocalFonts()]).then(poll);
+Promise.all([loadBrand(), loadEstilo(), loadEstilosSalvos(), loadLocalFonts()]).then(poll);
 rafLoop();
 // the headline fit is MEASURED, so it is wrong until Poppins is actually
 // loaded — rebuild once the fonts land

@@ -294,6 +294,28 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
             cx["end"] = round(cx.get("start", 0.0) + tempo_leitura(texto_completo), 2)
     else:
         data.pop("questionBox", None)
+    # ESTILO SALVO escolhido (helpers/estilos_salvos.py): fonte e cor dele
+    # também valem. O envio comum não as aplica — a aba manda as de fábrica e
+    # quem muda fonte e cor é o chat —, mas escolher "Reels Vértuz" é pedir
+    # o pacote inteiro, letra e cor inclusas.
+    if pick.get("estiloSalvo"):
+        hook = data.setdefault("hook", {})
+        for de, para in (("fontMain", "fontMain"), ("fontAccent", "fontAccent"),
+                         ("textColor", "color")):
+            if pick.get(de):
+                hook[para] = pick[de]
+        if pick.get("capFont"):
+            data.setdefault("captions", {})["fontMain"] = pick["capFont"]
+        data["estiloSalvo"] = pick["estiloSalvo"]
+    else:
+        # escolha feita à mão depois de um salvo: o vídeo já não é mais ele
+        data.pop("estiloSalvo", None)
+    op = pick.get("explicativoOpcoes")
+    if op and elements.get("explicativo"):
+        ex = data.setdefault("explicativo", {})
+        for k in ("base", "cabecaVaza", "fundo"):
+            if k in op:
+                ex[k] = op[k]
     if pick.get("observation"):
         data["observation"] = pick["observation"]
     return data, True
@@ -830,6 +852,7 @@ def gravar_estado(edit: Path, data: dict, extra: dict) -> None:
         "hookDx": pick.get("hookDx", 0), "hookDy": pick.get("hookDy", 0),
         "hookScale": pick.get("hookScale", 1),
         "elements": data.get("elements") or pick.get("elements") or {},
+        "estiloSalvo": data.get("estiloSalvo"),
     }
     state["awaitingStyle"] = False
     (edit / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2))

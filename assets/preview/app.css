@@ -2290,3 +2290,14 @@ button.tl-chip:disabled { cursor: default; }
 .chip.cena-quadrado { background:rgb(160 100 255 / .5); }
 .chip.cena-oculto { background:rgb(30 190 170 / .5); }
 .chip.cena-cheia:not(.base), .chip.cena-card:not(.base) { background:rgb(255 255 255 / .18); }
+
+/* ESTILO SALVO — o padrão do usuário, com o nome que ele deu. Borda laranja
+   sempre (não só quando escolhido): é o que separa "meu estilo" do catálogo. */
+.opt.salvo { border:2px solid #FF522D; box-shadow:0 0 0 1px rgb(255 82 45 / .25), 0 6px 18px rgb(255 82 45 / .18); }
+.opt.salvo.on { box-shadow:0 0 0 3px rgb(255 82 45 / .45), 0 6px 18px rgb(255 82 45 / .28); }
+.opt.salvo .salvo-nome { color:#FF8A6B; font-weight:700; }
+.salvo-mock { display:flex; flex-direction:column; justify-content:center; gap:6px;
+              padding:10px; background:linear-gradient(160deg, rgb(255 82 45 / .14), rgb(255 255 255 / .02)); }
+.salvo-cor { width:22px; height:22px; border-radius:50%; border:2px solid rgb(255 255 255 / .6); }
+.salvo-fmt { font-weight:700; font-size:12px; color:#fff; line-height:1.15; }
+.salvo-det { font-size:10.5px; color:rgb(255 255 255 / .62); line-height:1.25; }

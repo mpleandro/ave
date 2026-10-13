@@ -20,6 +20,7 @@ Routes:
   /gen/words.json       transcrito DO CORTE com a folga medida de cada fronteira
   /gen/thumbs/<n>.jpg   timeline filmstrip thumbs (auto-generated, 1 per 2s)
   /api/state    GET     state.json + mtimes (UI polls this to hot-reload)
+  /api/estilos-salvos GET  os estilos com nome (~/.avelin/estilos_salvos.json)
   /api/save     POST    body → <edit>/preview_edits.json (atomic), or
                         <edit>/preview_style.json when body.type=="style-setup",
                         <edit>/preview_amostra.json when body.type=="approve-amostra"
@@ -236,6 +237,7 @@ BRAND_KEYS = ("accent", "textColor", "capColor", "fontMain", "fontAccent", "capF
 # de meses não pode morrer num `git clean` nem subir para um repositório que
 # outros clonam.
 ESTILO = Path.home() / ".avelin" / "estilo.json"
+ESTILOS_SALVOS = Path.home() / ".avelin" / "estilos_salvos.json"
 ESTILO_KEYS = ("edit", "headline", "captions", "elements", "capDy",
                "hookDx", "hookDy", "hookScale")
 
@@ -715,6 +717,8 @@ class Handler(BaseHTTPRequestHandler):
             self._brand_get()
         elif path == "/api/estilo":
             self._estilo_get()
+        elif path == "/api/estilos-salvos":
+            self._estilos_salvos()
         elif path == "/api/localfonts":
             self._localfonts()
         elif path == "/download":
@@ -1098,6 +1102,16 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, json.JSONDecodeError):
             d = {}
         self._json({k: d[k] for k in ESTILO_KEYS if k in d})
+
+    def _estilos_salvos(self) -> None:
+        """Os estilos com nome (`helpers/estilos_salvos.py`) — a aba Estilo os
+        mostra como os primeiros cartões da seção Formato. Só leitura: quem
+        salva é a IA, depois de perguntar ao usuário."""
+        try:
+            d = json.loads(ESTILOS_SALVOS.read_text())
+        except (OSError, json.JSONDecodeError):
+            d = {}
+        self._json({"estilos": d.get("estilos", []) if isinstance(d, dict) else []})
 
     def _estilo_lembrar(self, body: dict) -> None:
         """Guarda as escolhas do envio de estilo para o PRÓXIMO projeto.

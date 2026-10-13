@@ -203,7 +203,7 @@ Phase 1:
 - **`watch_video.py <video> [--mode scene|keyframe|uniform] [--times t1 t2 …] [--start/--end] [--max-frames 24]`** — "what is IN this footage?" when you *don't* know where to look: scene-change detection (auto-fallback to uniform sampling on static/talking-head sources) + perceptual dedup (near-identical frames collapse — a held take becomes a handful of tiles) → labeled contact sheets in `edit/verify/watch_<stem>/`, one Read per sheet. Use for visual inventory of unknown material, eyeballing takes across sources, and surveying `preview.mp4` beyond verify_cut's numbers. `--times` pins transcript-cue frames: deictic moments from `takes_packed.md` ("olha isso", "como você pode ver") are LOW visual change and invisible to scene detection — pin them to decide B-roll/callout/zoom placement in Phase 2.
 
 Phase 2/3 (see the track references for usage):
-- **`phase2.py`** (Fase 2 inteira, um comando — amostra primeiro, `--completo` depois) · **`amostra.py`** (janela, composição deslocada e costura da amostra) · **`recorte.py`** (teste de 5s do recorte, aprovação, alfa reaproveitado) · **`explicativo.py`** (moldura explicativa: preferências, fala, roteiro de cenas) · **`explicativo_compose.py`** (o roteiro dentro da composição) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor)
+- **`phase2.py`** (Fase 2 inteira, um comando — amostra primeiro, `--completo` depois) · **`amostra.py`** (janela, composição deslocada e costura da amostra) · **`recorte.py`** (teste de 5s do recorte, aprovação, alfa reaproveitado) · **`explicativo.py`** (moldura explicativa: preferências, fala, roteiro de cenas) · **`explicativo_compose.py`** (o roteiro dentro da composição) · **`estilos_salvos.py`** (estilos com nome, mostrados primeiro no Formato) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor)
 - **CORRIGIR O TEXTO DA LEGENDA — 2 cliques na palavra, na aba de transcrição.** O usuário conserta o que o Whisper ESCREVEU sem tocar em imagem nem som: o campo abre na própria palavra, Enter confirma, campo vazio desfaz, e o botão "todas" aplica em toda ocorrência daquela palavra na fonte (nome próprio, marca, jargão — o caso mais comum). O `apply_edits.py` funde em `transcripts/corrections.json`, **não refaz o corte**, e invalida `cut_mapped.json` + `captions.json` — que são gerados com guarda `if not exists` e sem isso a correção seria ignorada em silêncio. **Se a Fase 2 já rodou, o texto novo só aparece depois de `phase2.py` de novo**, porque a legenda é queimada quadro a quadro; por isso **mostre a aba de transcrição ANTES da Fase 2**, não depois — ler 60 palavras leva 20s e economiza um render inteiro. O painel e a legenda leem o MESMO texto corrigido (`fix_for`, em `cut_transcript.py`), que é a Regra 14 valendo de fato.
 - **REUSO DE SEGMENTOS — o render só reextrai o que mudou.** O nome de cada segmento carrega uma chave de conteúdo (fonte + entrada/saída + grade declarado + ganho + tier + fps), então mexer em 1 trecho de 10 reextrai 1, e remover um trecho reextrai ZERO. Medido: apagar um trecho de 5 caiu de 14,5s para 1,6s, com a saída **idêntica pixel a pixel** (SSIM 1,000) à do render completo. O resumo do J-cut diz quantos foram reaproveitados e quantos obsoletos foram podados. **Suba `SEG_VERSAO` no `render.py` ao alterar `extract_segment` ou `video_encoder_args`** — sem isso os segmentos antigos sobrevivem à mudança. `AVELIN_SEM_CACHE=1` apaga tudo e reextrai.
 - **`derivado.py`** — cache de análise por fonte (`~/.avelin/derivados`), chaveado por conteúdo + parâmetros + versão do produtor. É por que o painel de transcrição abre em 0,1s em vez de 2s. `derivado.py` lista, `derivado.py --limpar` apaga, e **`AVELIN_SEM_CACHE=1` desliga tudo** — use ao investigar qualquer suspeita de dado velho, em vez de sair apagando arquivo.
@@ -1186,6 +1186,37 @@ rode `biblioteca.py --candidatos <edit>` e, se sobrar algo, faça UMA pergunta
 sobre guardar o que o usuário trouxe (logo, trilha, efeito, LUT) — e um `--usar`
 para cada item do acervo que entrou neste vídeo. Veja a seção da biblioteca de
 assets.
+
+**E pergunte se quer SALVAR O ESTILO** — depois que o usuário aprovou o vídeo
+entregue, com `AskUserQuestion` (header `Estilo`), uma vez por entrega:
+
+> *"Quer salvar este estilo para os próximos vídeos? Ele aparece primeiro na
+> aba Estilo, com o nome que você der."*
+> · **Salvar como "<sugestão>"** (Recomendado) — sugestão tirada do projeto ou
+>   da série ("Reels Vértuz", "Aulas do curso X"), nunca um nome técnico
+> · **Não salvar**
+> (o **Other** é onde ele digita o próprio nome)
+
+```bash
+uv run python helpers/estilos_salvos.py igual <edit>     # exit 0 = já existe idêntico
+uv run python helpers/estilos_salvos.py salvar <edit> --nome "Reels Vértuz"
+```
+
+- **Não pergunte** se o vídeo saiu de um estilo salvo sem mudança
+  (`edit-data.estiloSalvo`) ou se `igual` achar um idêntico — diga em uma linha
+  que ele já está salvo com aquele nome.
+- **O que vai junto:** formato, headline, legenda, destaque e cores, fontes,
+  posições arrastadas, elementos ligados, as opções da moldura explicativa
+  (base, cabeça vazando, fundo) e o ritmo. **O que não vai:** texto da
+  headline, pergunta da caixinha, roteiro de cenas — é conteúdo deste vídeo.
+- **Mesmo nome = atualização** (o usuário refinou o padrão), não duplicata.
+  Remover: `estilos_salvos.py remover --nome "…"`.
+- **Na aba**: os salvos são os primeiros cartões de **Formato**, com borda
+  laranja e o nome. O clique aplica o pacote inteiro; o envio leva
+  `estiloSalvo`, e só então o `phase2.py` aplica também fonte e cor (o envio
+  comum não aplica — fonte e cor mudam pelo chat). Mexer em qualquer cartão
+  depois desmarca o salvo. Mora em `~/.avelin/estilos_salvos.json`, fora do
+  projeto, como a marca.
 
 
 ## Papel de cada fonte — e o tempo RESERVADO
