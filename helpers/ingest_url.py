@@ -81,15 +81,24 @@ def main() -> None:
                     help="print title/duration/resolution without downloading")
     args = ap.parse_args()
 
-    if shutil.which("yt-dlp") is None:
-        sys.exit("yt-dlp not on PATH — install with: brew install yt-dlp")
+    # INSTALAÇÃO GRADUAL: o yt-dlp mora no ambiente da skill (recurso `link`),
+    # instalado na primeira vez em que alguém edita a partir de um link.
+    ytdlp = shutil.which("yt-dlp")
+    if ytdlp is None:
+        venv_bin = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "yt-dlp"
+        if not venv_bin.exists():
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import instalar
+            if not instalar.garantir("link"):
+                sys.exit("não consegui instalar o yt-dlp — rode: uv run python helpers/instalar.py link")
+        ytdlp = str(venv_bin)
 
     h = args.max_height
     fmt = (f"bv*[height<={h}][ext=mp4]+ba[ext=m4a]/bv*[height<={h}]+ba"
            f"/b[height<={h}]/bv+ba/b")
 
     if args.simulate:
-        cmd = ["yt-dlp", "-f", fmt, "--no-playlist", "--skip-download",
+        cmd = [ytdlp, "-f", fmt, "--no-playlist", "--skip-download",
                "--print", "%(title)s | %(uploader)s | %(duration_string)s | "
                           "%(width)sx%(height)s | %(webpage_url)s",
                "--", args.url]
@@ -99,7 +108,7 @@ def main() -> None:
     dest.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "yt-dlp",
+        ytdlp,
         "-N", "8",
         "-f", fmt,
         "--merge-output-format", "mp4",

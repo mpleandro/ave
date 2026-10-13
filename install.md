@@ -114,9 +114,27 @@ If `uv` is missing: `brew install uv` (macOS), `winget install astral-sh.uv` (Wi
 
 `pyproject.toml` lists `requests`, `pillow`, `numpy`, and `opencv-python-headless==4.10.0.84` (the last one powers the Phase-2 dynamic-camera face/eye tracking in `face_track.py` — keep it pinned to the 4.10 line; 5.x dropped `CascadeClassifier` and breaks Haar detection). No console scripts — helpers are invoked directly as `python helpers/<name>.py`.
 
+#### Optional features install themselves (gradual install)
+
+The base install above stays light. Heavy or niche features are **resources**
+that `helpers/instalar.py` installs the first time the user asks for the
+effect that needs them — never during setup, and never requiring a terminal:
+
+| Resource | Size | Installed when the user asks for |
+|---|---|---|
+| `recorte` (torch + Robust Video Matting) | ~2 GB | head over the card border, the 5s cutout test, element behind the presenter |
+| `anim3d` (MediaPipe + Depth Anything) | ~2.5 GB | the "Animação em 3D" format |
+| `escuta` (mlx-whisper + turbo model, Apple Silicon only) | ~1.6 GB | listening to the cut for repeated takes (Phase-1 gate) |
+| `link` (yt-dlp, inside the venv) | ~10 MB | editing from a URL |
+
+Do **not** pre-install them. `uv run python helpers/instalar.py status` shows
+what this machine has. Each one is a `pyproject.toml` extra installed with
+`uv sync --extra <x> --inexact` — `--inexact` matters: a plain `uv sync --extra`
+uninstalls the other extras.
+
 ### 3. Install ffmpeg (+ optional yt-dlp)
 
-`ffmpeg` and `ffprobe` are hard requirements for Phase 1. `yt-dlp` is only needed if the user wants to pull sources from URLs. Phase 2 uses HyperFrames (Node.js) — set up in step 6.
+`ffmpeg` and `ffprobe` are hard requirements for Phase 1. `yt-dlp` is only needed if the user wants to pull sources from URLs — and the `link` resource installs it inside the venv on first use, so the system install below is optional. Phase 2 uses HyperFrames (Node.js) — set up in step 6.
 
 ```bash
 # macOS
