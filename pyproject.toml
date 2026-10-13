@@ -29,6 +29,14 @@ matting = ["torch", "torchvision"]
 # acima — conferido (2026-10-12): a versão contrib TEM o CascadeClassifier e o
 # face_track.py segue achando o rosto (117/122 quadros num teste de 4s).
 anim3d = ["mediapipe>=0.10.14", "transformers>=4.45", "torch", "torchvision"]
+# Escuta local do corte (verify_takes.py, dentro do portão da Fase 1): mlx-whisper
+# roda na máquina, grátis e offline — mas só em Apple Silicon. Antes deste extra
+# ele era instalado à mão e um `uv sync` comum o apagava sem aviso.
+escuta = ["mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'"]
+# Baixar de link (ingest_url.py): yt-dlp dentro do ambiente, sem pedir brew.
+link = ["yt-dlp"]
+# Todos os recursos acima são instalados SOB DEMANDA por helpers/instalar.py, na
+# primeira vez em que o usuário pede o efeito — ninguém precisa citá-los aqui.
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -33,8 +33,20 @@ import cv2
 import numpy as np
 
 
+def _torch():
+    """torch vem do recurso `recorte` (instalação gradual): falta → instala e
+    reinicia este script num processo novo."""
+    try:
+        import torch
+        return torch
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import instalar
+        instalar.reexecutar_com("recorte")
+
+
 def pick_device(requested: str) -> str:
-    import torch
+    torch = _torch()
     if requested != "auto":
         return requested
     if torch.backends.mps.is_available():
@@ -68,7 +80,7 @@ def main() -> None:
                          "halo claro sobre fundo escuro (medido)")
     args = ap.parse_args()
 
-    import torch
+    torch = _torch()
 
     device = pick_device(args.device)
     print(f"device: {device} | model: {args.model}")

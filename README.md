@@ -39,14 +39,27 @@ para de ser opcional no dia em que você aprovar o primeiro corte.
 
 | Item | Sem ele | Vale a pena quando |
 |---|---|---|
-| `yt-dlp` | não dá para puxar material de uma URL | você edita coisa que está no YouTube/Drive |
+| `yt-dlp` | — instala sozinho (recurso `link`, ~10 MB) na primeira vez que você manda um link | você edita coisa que está no YouTube/Drive |
 | `ELEVENLABS_API_KEY` | fontes longas transcrevem no Groq, em pedaços | você edita aulas e vídeos de mais de 5 min |
 | `PEXELS_API_KEY` | as imagens vêm só da Wikimedia | você usa muito B-roll e imagem ilustrativa |
 | `TREBLO_API_KEY` | a trilha tem de ser um arquivo seu | você quer trilha gerada por IA |
 | `GOOGLE_API_KEY` + `GOOGLE_CSE_ID` | marcas e pessoas vêm da Wikimedia | a Wikimedia não achou a marca que você precisa |
 
 Nenhuma chave opcional é pedida na instalação: a IA pede cada uma **na primeira
-vez que o recurso for usado**, e você decide na hora. O editor também mostra
+vez que o recurso for usado**, e você decide na hora.
+
+**Instalação gradual.** O mesmo vale para os efeitos pesados: nada deles vem na
+instalação base. Pediu o efeito, ele instala o que precisa — uma vez só, avisando
+o tamanho:
+
+| Recurso | Tamanho | Instala quando você pede |
+|---|---|---|
+| recorte | ~2 GB | a cabeça vazando o card, o teste de recorte, o elemento atrás de você |
+| anim3d | ~2,5 GB | o formato Animação em 3D |
+| escuta | ~1,6 GB | a conferência que ouve o corte atrás de frase repetida (só Mac Apple Silicon) |
+| link | ~10 MB | editar a partir de um link |
+
+`uv run python helpers/instalar.py status` mostra o que esta máquina já tem. O editor também mostra
 essa mesma checklist na tela inicial, com ✓ e ✗ do que esta máquina tem.
 
 ---

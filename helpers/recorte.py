@@ -142,6 +142,14 @@ def escolher_janela(video: Path, dur: float = 5.0) -> tuple[float, str]:
 
 def recortar(motor: str, video: Path, S: float, dur: float, out: Path,
              fgr: bool = False) -> float:
+    if motor in ("rvm", "rvm-hq"):
+        # INSTALAÇÃO GRADUAL: o recorte precisa do torch + RVM (~2 GB), que não
+        # vêm na base. Instala aqui, na primeira vez em que alguém o pede.
+        sys.path.insert(0, str(HELPERS))
+        import instalar
+        if not instalar.garantir("recorte"):
+            sys.exit("o recurso de recorte não ficou pronto — "
+                     "rode: uv run python helpers/instalar.py recorte")
     t0 = time.time()
     if motor in ("rvm", "rvm-hq"):
         # rvm-hq = RVM resnet50: a "correção pequena" quando o rvm sai com atenção

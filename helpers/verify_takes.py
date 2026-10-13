@@ -110,9 +110,15 @@ def varrer(video: Path, modelo: str = MODELO) -> list[dict]:
         import mlx_whisper
         from mlx_whisper.audio import load_audio
     except ImportError:
-        raise SystemExit(
-            "mlx-whisper não está instalado — é ele que ouve o corte.\n"
-            "  uv pip install mlx-whisper   (Apple Silicon; local, grátis, offline)")
+        # INSTALAÇÃO GRADUAL: o recurso `escuta` instala na primeira vez e este
+        # script se reinicia num processo novo. Fora do Apple Silicon ele não
+        # existe — e aí a resposta é dizer, não fingir que ouviu.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import instalar
+        if not instalar.disponivel("escuta")[0]:
+            raise SystemExit("a escuta local (mlx-whisper) só roda em Mac com Apple "
+                             "Silicon — este corte não foi ouvido")
+        instalar.reexecutar_com("escuta")
 
     # UMA decodificação só, do arquivo inteiro (`load_audio` já roda o ffmpeg
     # dela, mono 16kHz) — cada janela abaixo é uma FATIA EM MEMÓRIA desse

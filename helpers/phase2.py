@@ -428,6 +428,13 @@ def preparar_cabeca_vaza(edit: Path, data: dict, cenas: list, X) -> None:
             "Pergunte com AskUserQuestion se o usuário quer o teste de 5s (SKILL.md,\n"
             "'Recorte de fundo'): recorte.py teste <edit>  → mostre a folha →\n"
             "recorte.py aprovar <edit> --motor rvm   (ou aprove direto, se ele dispensar)\n")
+    # INSTALAÇÃO GRADUAL: o recorte (torch + RVM, ~2 GB) entra agora, na
+    # primeira vez — com a etapa na tela de carregamento, que é o que separa
+    # "instalando" de "travou" num download desse tamanho.
+    import instalar
+    if not instalar.garantir("recorte", progresso=lambda t: progress.step(edit, detail=t)):
+        sys.exit("o recurso de recorte não ficou pronto — rode: "
+                 "uv run python helpers/instalar.py recorte")
     duracao = X.sonda(edit / "preview.mp4")[2]
     janelas = [(b["start"], b["end"]) for b in X.blocos(cenas, duracao, base)
                if b["layout"] == "card"]
@@ -467,12 +474,10 @@ def check_animacao(data: dict, edit: Path) -> None:
             continue
         if fid == "anim3d":
             # quem escolhe na tela não abre terminal: instala aqui, na primeira vez
-            sys.path.insert(0, str(HELPERS))
-            import instalar_anim3d
-            progress.step(edit, detail="instalando MediaPipe + Depth Anything (primeira vez)")
-            if not instalar_anim3d.garantir():
+            import instalar
+            if not instalar.garantir("anim3d", progresso=lambda t: progress.step(edit, detail=t)):
                 sys.exit("\nA instalação das bibliotecas da Animação em 3D falhou — "
-                         "rode helpers/instalar_anim3d.py e veja o erro.\n")
+                         "rode helpers/instalar.py anim3d e veja o erro.\n")
         if not data.get("brollGraphics"):
             spec = HELPERS.parent / "assets" / "estilos-animacao" / pasta / "ESTILO.md"
             roteiro = ("\nNa Animação em 3D: leia o ASSUNTO do vídeo e proponha um roteiro "
