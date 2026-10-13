@@ -295,3 +295,31 @@
   -webkit-text-stroke: calc(var(--hl-stroke) * var(--hl-scale) * 1px) var(--hl-main);
   paint-order: stroke fill;
 }
+
+/* ---------- tarjas ---------- */
+/* Cada linha na sua tarja retangular, empilhadas e centradas: as de fora numa
+   tarja CLARA (a cor principal) com texto escuro, a do MEIO maior numa tarja no
+   destaque com o texto na principal. É o gancho "A Igreja odeia os /
+   Legendários? / Assista até o final!" que o usuário trouxe de referência.
+   Cantos retos e tarjas encostadas umas nas outras: o que se lê é UM bloco
+   escalonado, não três etiquetas soltas. O texto escuro é literal pelo mesmo
+   motivo do cinza do cartão — é a tinta da tarja clara, não uma cor da marca. */
+.ave-hook.tarjas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  letter-spacing: calc(-1.5px * var(--hl-scale));
+  filter: drop-shadow(0 calc(8px * var(--hl-scale)) calc(20px * var(--hl-scale)) rgba(0, 0, 0, 0.4));
+}
+
+.ave-hook.tarjas .hl-line {
+  background: var(--hl-main);
+  color: #1d1d1f;
+  padding: 0.04em 0.34em 0.1em;
+}
+
+.ave-hook.tarjas .hl-line.hl-hero {
+  background: var(--hl-accent);
+  color: var(--hl-main);
+  padding: 0.02em 0.3em 0.08em;
+}

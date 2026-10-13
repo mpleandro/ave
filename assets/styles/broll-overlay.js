@@ -39,6 +39,13 @@
         }
       }
 
+      var blurPx = parseFloat(el.getAttribute('data-bo-blur')) || 0;
+      var vw = blurPx ? rootEl.querySelector('#vidwin') : null;
+      if (vw) {
+        tl.fromTo(vw, { filter: 'blur(0px)' }, { filter: 'blur(' + blurPx + 'px)', duration: IN, ease: 'power2.out' }, s);
+        tl.to(vw, { filter: 'blur(0px)', duration: OUT, ease: 'power2.in' }, end - OUT);
+      }
+
       tl.fromTo(el, { opacity: 0 }, { opacity: 1, duration: IN / 2, ease: 'none' }, s);
       tl.to(el, { opacity: 0, duration: OUT, ease: 'none' }, end - OUT);
 

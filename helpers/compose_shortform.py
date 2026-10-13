@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from text_measure import measure  # noqa: E402
+import area_segura  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 STYLES_DIR = SKILL_DIR / "assets" / "styles"
@@ -78,6 +79,8 @@ TRACK = {
     # áudio do a-roll ocupa a duração inteira: dividir track com um efeito curto
     # daria "overlapping_clips_same_track" em todo projeto com som.
     "audio": 16,
+    # Fade-in do preto: cobre TUDO (legenda e headline inclusas) no começo.
+    "fadein": 17,
 }
 
 # Camadas de efeito. Com um índice só os efeitos eram obrigados a NUNCA se
@@ -557,20 +560,27 @@ def caixinha_markup(data: dict, duration: float, events: list, accent: str) -> t
                         int(cx0.get("limiteChamada", 60)), "a chamada da caixinha"))
 
     events.append((s, "element"))   # som de entrada, mesmo sem tween visual
+    # `escala` (opcional, por projeto): encolhe/aumenta a caixa inteira — largura,
+    # raio, faixa, corpo e padding juntos — sem mexer nos números do catálogo.
+    k = float(q.get("escala", 1.0))
+    # ÁREA SEGURA: o adesivo tem 1040px de fábrica; a área útil é 840
+    if area_segura.vale(data):
+        k = min(k, area_segura.largura_util(int(data.get("width", 1080)))
+                / float(cx.get("largura", 1040)))
     estilo = (f'--cx-top:{q.get("top", cx.get("topoPadrao", 300))}px;'
-              f' --cx-w:{cx.get("largura", 1040)}px; --cx-radius:{cx.get("raio", 46)}px;'
+              f' --cx-w:{cx.get("largura", 1040) * k:.0f}px; --cx-radius:{cx.get("raio", 46) * k:.0f}px;'
               f' --cx-tilt:{cx.get("inclinacao", 0)}deg;'
-              f' --cx-bar-h:{cx.get("faixaAltura", 132)}px;'
+              f' --cx-bar-h:{cx.get("faixaAltura", 132) * k:.0f}px;'
               f' --cx-bar-bg:{cx.get("faixaFundo", "#20252b")};'
               f' --cx-bar-fg:{cx.get("faixaCor", "#ffffff")};'
-              f' --cx-bar-size:{cx.get("faixaTamanho", 39)}px;'
+              f' --cx-bar-size:{cx.get("faixaTamanho", 39) * k:.1f}px;'
               f' --cx-bar-weight:{cx.get("faixaPeso", 700)};'
               f' --cx-body-bg:{cx.get("corpoFundo", "#fff")};'
               f' --cx-body-fg:{cx.get("corpoCor", "#111111")};'
-              f' --cx-body-size:{cx.get("corpoTamanho", 47)}px;'
+              f' --cx-body-size:{cx.get("corpoTamanho", 47) * k:.1f}px;'
               f' --cx-body-weight:{cx.get("corpoPeso", 400)};'
               f' --cx-body-lh:{cx.get("corpoEntrelinha", 1.28)};'
-              f' --cx-body-pad:{cx.get("corpoPadding", 44)}px;'
+              f' --cx-body-pad:{cx.get("corpoPadding", 44) * k:.0f}px;'
               f' --cx-shadow:{cx.get("sombra", "0 3px 14px rgba(0,0,0,.18)")};'
               f' --cx-accent:{accent};'
               f' --cx-font:{VARIANTS["styles"]["karaoke"]["cssFamily"]}')
@@ -631,6 +641,12 @@ def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
             pos = "full"
         dim = o.get("dim")
         dim_val = 0.9 if dim is True else (float(dim) if dim else 0.0)
+        # `blur` (px): o vídeo atrás da janela fica DESFOCADO em vez de só escuro
+        # — "vídeo com blur ao fundo e animação à frente". Sem `dim`, um véu leve
+        # (0,3) segura o contraste do texto sobre o a-roll claro.
+        blur_px = float(o.get("blur") or 0)
+        if blur_px > 0 and dim_val == 0:
+            dim_val = 0.3
         vin, stag = _bo_ritmo(d)
         # override por janela: quando a cadência precisa casar com a FALA
         # (etiquetas entrando no ritmo da enumeração falada), o autor manda
@@ -641,6 +657,10 @@ def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
             blocks.append(f'  <div id="boscrim{i}" class="ave-bo-scrim" '
                           f'data-dim="{dim_val:.2f}"></div>')
             scrim_attr = f' data-bo-scrim="boscrim{i}"'
+            if blur_px > 0:
+                # `backdrop-filter` NÃO sai no render do motor: o desfoque vai no
+                # próprio vídeo (#vidwin), tweenado pelo JS da janela.
+                scrim_attr += f' data-bo-blur="{blur_px:g}"'
         kind = o.get("kind", "words")
         inner = ""
         if kind == "words":
@@ -707,7 +727,11 @@ def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
             print(f"  aviso: brollOverlay #{i} de kind '{kind}' desconhecido — pulado",
                   file=sys.stderr)
             continue
-        events.append((s, "hook" if dim_val > 0 else "element"))
+        # `sfx: false` na janela cala só o whoosh de entrada: quando uma deixa
+        # escrita à mão já marca o instante (o rewind da virada no "OAB"), os
+        # dois juntos viram um borrão em vez de um acento
+        if o.get("sfx", True):
+            events.append((s, "hook" if dim_val > 0 else "element"))
         # O CENÁRIO vem do kit: glow radial + anéis girando nas janelas cheias
         # (o hero das LPs); painel-cartão nas de faixa (o sticky card). Eyebrow
         # e linha-legenda são a assinatura editorial — entram quando fazem
@@ -974,7 +998,7 @@ def build_cues(words: list[dict], st: dict, budget: float) -> list[list[dict]]:
     cues, cur = [], []
     for w in words:
         trial = cur + [w]
-        if cur and (len(trial) > st["maxWords"]
+        if cur and (w.get("_quebra") or len(trial) > st["maxWords"]
                     or width_of([x["text"] for x in trial], st) > limit):
             cues.append(cur)
             cur = [w]
@@ -996,6 +1020,9 @@ def cola_cues(words: list[dict], minimo: int) -> list[list[dict]]:
     out: list[list[dict]] = []
     cur: list[dict] = []
     for w in words:
+        if w.get("_quebra") and cur:
+            out.append(cur)
+            cur = []
         cur.append(w)
         if len(w["text"].strip(".,!?;:\u2014-")) > minimo:
             out.append(cur)
@@ -1252,8 +1279,31 @@ def hl_is_upper(i: int, n: int, h: dict) -> bool:
     return False
 
 
+def hl_hero_index(lines: list[str], h: dict) -> int:
+    """A linha herói dos layouts `heroMid` (hoje as `tarjas`): a do MEIO, n//2 —
+    em duas linhas, a segunda. `heroIndex` (vindo de `hook.hero`) troca qual é."""
+    i = h.get("heroIndex")
+    if i is not None and 0 <= int(i) < len(lines):
+        return int(i)
+    return len(lines) // 2
+
+
 def hl_ks(lines: list[str], h: dict) -> list[float]:
     """Multiplicador de corpo por linha; a última entrada vale para as extras."""
+    # A herói pelo ÍNDICE e não por posição fixa em `sizes`: com o meio como
+    # herói, `[0.6, 1.0, 0.6]` só acerta em três linhas — em duas ou quatro a
+    # lista posicional poria a linha grande no lugar errado.
+    if h.get("heroMid"):
+        hero = hl_hero_index(lines, h)
+        minor = float(h.get("minorK", 0.6))
+        ks = [1.0 if i == hero else minor for i in range(len(lines))]
+        # `hook.lineK` ({"índice": k}) é o ajuste POR PROJETO do corpo de uma
+        # linha — "faça o VOCÊ maior só neste vídeo" — sem trocar a herói nem
+        # mexer no catálogo. Entra aqui para o `hl_fit` medir com ele também.
+        for k, v in (h.get("lineK") or {}).items():
+            if 0 <= int(k) < len(ks):
+                ks[int(k)] = float(v)
+        return ks
     sizes = h.get("sizes")
     if not sizes:
         return [1.0] * len(lines)
@@ -1306,6 +1356,51 @@ def hl_hero_size(lines: list[str], h: dict, fonts: dict) -> float:
     return min(s, h["cap"])
 
 
+def perspectiva_markup(data: dict, duration: float, events: list) -> tuple[str, list]:
+    """Vídeo INCLINADO em perspectiva, com opacidade — `perspectiveVideos[]`.
+
+    {"src": "tela.mp4", "start": 5, "end": 10, "aspect": 0.46, "width": 560,
+     "left": 470, "top": 330, "opacity": 0.78, "rotY": -26, "rotX": 8, "rotZ": 2}
+
+    O vídeo mora no composto PRINCIPAL, nunca numa sub-composição (um <video>
+    ali entrega ~0,5s e some). Quem se inclina é o INVÓLUCRO; o <video> fica
+    parado dentro dele. O invólucro NÃO pode ter data-start: o `check` barra
+    <video> temporizado dentro de elemento temporizado (congelaria no render);
+    a visibilidade vem da opacidade do cartão, tweenada na timeline. A velocidade é do ARQUIVO: acelere com ffmpeg antes.
+    Devolve (html, linhas de tween para a timeline).
+    """
+    html, js = [], []
+    for i, v in enumerate(data.get("perspectiveVideos") or []):
+        st_, en = float(v.get("start", 0)), min(float(v.get("end", 0)), duration)
+        if st_ >= duration or en <= st_ or not v.get("src"):
+            continue
+        d = en - st_
+        w = float(v.get("width", 560))
+        h = w / float(v.get("aspect", 0.46))
+        op = float(v.get("opacity", 0.78))
+        ry, rx, rz = (float(v.get(k, dflt)) for k, dflt in (("rotY", -26), ("rotX", 8), ("rotZ", 2)))
+        x0 = float(v.get("slide", 280))
+        html.append(
+            f'  <div id="persp{i}" style="position:absolute;inset:0;perspective:1700px">'
+            f'<div id="perspcard{i}" style="position:absolute;left:{float(v.get("left", 470)):.0f}px;'
+            f'top:{float(v.get("top", 330)):.0f}px;width:{w:.0f}px;height:{h:.0f}px;border-radius:58px;'
+            f'overflow:hidden;opacity:0;transform-style:preserve-3d;background:#000;'
+            f'box-shadow:0 40px 90px rgba(0,0,0,.55),0 0 0 3px rgba(255,255,255,.35)">'
+            f'<video id="perspvid{i}" class="clip" src="{v["src"]}" muted playsinline '
+            f'data-start="{st_:.3f}" data-duration="{d:.3f}" data-media-start="0" '
+            f'data-track-index="{TRACK["splitmedia"]}" '
+            f'style="width:100%;height:100%;object-fit:cover;display:block"></video>'
+            f'</div></div>')
+        rel = f"{st_:.3f}"
+        e_in, e_out = 0.45, 0.35
+        js.append(f"  tl.fromTo('#perspcard{i}', {{opacity:0, x:{x0}, rotationY:{ry - 38}, rotationX:{rx}, rotationZ:{rz}}}, "
+                  f"{{opacity:{op}, x:0, rotationY:{ry}, rotationX:{rx}, rotationZ:{rz}, duration:{e_in}, ease:'power3.out'}}, {rel});")
+        js.append(f"  tl.to('#perspcard{i}', {{y:-18, rotationZ:{rz - 1.5}, duration:{max(d - e_in - e_out, 0.1):.3f}, ease:'sine.inOut'}}, {st_ + e_in:.3f});")
+        js.append(f"  tl.to('#perspcard{i}', {{opacity:0, x:{x0 * 0.7}, rotationY:{ry - 30}, duration:{e_out}, ease:'power2.in'}}, {en - e_out:.3f});")
+        events.append((st_, "element"))
+    return "\n".join(html), js
+
+
 def cartela_slots(hook: dict, h: dict) -> dict:
     """De onde sai cada pedaço do texto que o usuário digitou.
 
@@ -1323,7 +1418,11 @@ def cartela_slots(hook: dict, h: dict) -> dict:
     O que sobra é o título. Nada é obrigatório: sem barra nenhuma o layout cai
     no bloco de linhas comum, que é o comportamento de todos os outros.
     """
-    slots = h.get("slots") or {}
+    # `hook.slots` no edit-data é o escape por-projeto, mesma razão do
+    # `hook.cap`/`safeW`: quem escreve "Ter OAB não / te faz advogado" quer a
+    # barra como QUEBRA, não como rótulo — e a sobrancelha minúscula partia a
+    # frase ao meio. `{"olho": null}` desliga a sobrancelha só neste vídeo.
+    slots = {**(h.get("slots") or {}), **(hook.get("slots") or {})}
     bruto = [x for x in (hook.get("lines") or []) if x] or [hook.get("text") or ""]
     texto = " / ".join(x.strip() for x in bruto if x.strip())
     partes = [x.strip() for x in texto.split("/") if x.strip()] or [""]
@@ -1448,7 +1547,8 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
                   f'<div class="ct-folha">{corpo_linhas}</div></div>')
 
     fora = ""
-    if h.get("cheia") and "svg" not in pecas and "blur" not in pecas:
+    if (h.get("cheia") and "svg" not in pecas and "blur" not in pecas
+            and not hook.get("semFundo")):
         fora += '<i class="ct-fundo"></i>'
     if "blur" in pecas:
         fora += '<i class="ct-blur"></i>'
@@ -1462,6 +1562,8 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
     deep = data.get("deep") or "#0D2137"
     mo = json.dumps(h.get("motion") or {}, separators=(",", ":"))
     cheia = " cheia" if h.get("cheia") else ""
+    if hook.get("semFundo"):
+        cheia += " ct-semfundo"
     # `--hl-sobre` (o texto POR CIMA do papel/accent nos layouts antigos —
     # fita, balão, adesivo, cortina) nasce fixo em cartela.css (#10202e): é
     # desenho deliberado, não uma cor esquecida. Mas `hook.sobre` no
@@ -1516,6 +1618,15 @@ def cartela_svg(linhas: list[str], size: float, h: dict, fonts: dict) -> str:
         '</svg>')
 
 
+def _hl_seguro(h: dict, data: dict) -> dict:
+    """ÁREA SEGURA: a headline cabe entre as laterais de 120px (x 120…960)."""
+    if area_segura.vale(data) and h.get("safeW"):
+        lim = area_segura.largura_util(int(data.get("width", 1080)))
+        if float(h["safeW"]) > lim:
+            return {**h, "safeW": lim}
+    return h
+
+
 def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tuple[str, str]:
     """(markup, css_extra) do hook. Bloco próprio, id estável, tempo próprio."""
     hook = data.get("hook", {})
@@ -1531,6 +1642,11 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
     # (largura útil do texto). O catálogo dá o default; um vídeo que estreita o
     # card precisa estreitar o texto junto, senão a manchete transborda.
     h = {**h, **{k: hook[k] for k in ("cap", "safeW") if k in hook}}
+    h = _hl_seguro(h, data)
+    if h.get("heroMid") and hook.get("hero") is not None:
+        h["heroIndex"] = hook["hero"]
+    if h.get("heroMid") and hook.get("lineK"):
+        h["lineK"] = hook["lineK"]
     fonts = {
         "main": hook.get("fontMain") or VARIANTS["headlineFamily"],
         "accent": hook.get("fontAccent") or VARIANTS["headlineAccentFamily"],
@@ -1562,17 +1678,41 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
     # gravação que já chega dividida em duas pessoas (OBS/Zoom) pode ter um
     # rosto exatamente onde o default cairia. Vazio, usa o do catálogo.
     top = hook.get("top", h["top"])
+    # ÁREA SEGURA: nada nosso nos 220px de cima (interface do app). Cartela de
+    # tela cheia é a exceção — ela É o quadro; o conteúdo dela tem margens próprias.
+    if area_segura.vale(data) and not h.get("cheia"):
+        top = max(float(top), area_segura.topo_minimo(int(data.get("height", 1920))))
     for w in (splits or []):
         if w["start"] < end and w["end"] > 0:
             top = VARIANTS["split"][w["layout"]]["hookTop"]
             break
 
+    # POSIÇÃO E TAMANHO ARRASTADOS NO EDITOR (`hook.dx/dy/scale`, vindos da
+    # aba Estilo pelo phase2.aplicar_posicoes). A MESMA conta da prévia
+    # (`hookAjuste` no app.js): a escala multiplica `--hl-scale`, que já
+    # atravessa fonte, margem, sombra e altura das duas folhas; a altura é
+    # dividida pelo mesmo fator para crescer não empurrar o bloco para baixo;
+    # o lado vai na propriedade `translate`, que COMPÕE com o `transform` que
+    # algumas folhas e o GSAP usam em vez de sobrescrevê-lo. Cartela de tela
+    # cheia não se move: ela é o quadro.
+    k, dx = 1.0, 0.0
+    if not h.get("cheia"):
+        k = min(1.6, max(0.5, float(hook.get("scale") or 1)))
+        dx = float(hook.get("dx") or 0)
+        top = (float(top) - float(hook.get("dy") or 0)) / k
+
+    def posicionar(b: str) -> str:
+        if k == 1 and not dx:
+            return b
+        return b.replace("--hl-scale:1; ", f"--hl-scale:{k:.4f}; translate:{dx:.1f}px 0; ", 1)
+
     # As headlines com motor `cartela` (as vinte novas) saem por outro caminho:
     # elas têm SLOTS e MOVIMENTO, e forçá-las no bloco de linhas antigo seria
     # perder as duas coisas. Os layouts antigos não têm `motor` e seguem aqui.
     if h.get("motor") == "cartela":
-        return cartela_markup(data, hook, h, style_id, fonts, main_color,
-                              accent, end, top)
+        bloco, css = cartela_markup(data, hook, h, style_id, fonts, main_color,
+                                    accent, end, top)
+        return posicionar(bloco), css
 
     paint = h.get("paint") or {}
     out = []
@@ -1582,6 +1722,8 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
             cls.append("hl-tag")
         if paint.get("hollowLines") and i in paint["hollowLines"]:
             cls.append("hl-hollow")
+        if paint.get("heroBox") and h.get("heroMid") and i == hl_hero_index(raw, h):
+            cls.append("hl-hero")
         wgt = hl_weight_for(hl_line_family(h, i, fonts), hl_line_weight(h, i))
         if paint.get("wordBox"):
             # sem espaço entre as tarjas: o espaço ficaria DENTRO da tarja e as
@@ -1609,6 +1751,7 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
              f'--hl-font-accent:{hl_css_family(fonts["accent"])}; '
              f'--hl-stroke:{h["stroke"]};{extra}">'
              f'{"".join(out)}</div>')
+    block = posicionar(block)
     css = ('<link rel="stylesheet" href="styles/headline.css">'
            + hl_fontface_css([fonts["main"], fonts["accent"]]))
     return block, css
@@ -2040,6 +2183,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     W, H = data.get("width", 1080), data.get("height", 1920)
     cfg = data.get("captions", {})
     bottom = cfg.get("paddingBottom", VARIANTS["bottom"])
+    if area_segura.vale(data):
+        bottom = max(float(bottom), area_segura.base_minima(H))
     size = cfg.get("fontSize") or st["size"]
     # Eventos de efeito: cada um no instante em que a coisa acontece.
     events = []
@@ -2148,6 +2293,26 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         vivos = [g for g in (data.get("_segments") or [])
                  if not any(a < (g["start"] + g["end"]) / 2 < b for a, b in spans)]
         data = {**data, "_segments": vivos, "_camOff": not vivos}
+    # MOLDURA EXPLICATIVA (explicativo_compose.py). A câmera só anima onde o
+    # sujeito está GRANDE (a base): dentro de um PIP ou de uma tela dividida o
+    # enquadramento do rosto já é a moldura, e um zoom por cima o tiraria do
+    # lugar. Mesma supressão por janela da tela dividida.
+    exp = None
+    if (data.get("explicativo") or {}).get("cenas"):
+        import explicativo_compose
+        exp = explicativo_compose.montar(data, duration, accent, cap_color)
+        if exp:
+            vivos = [g for g in (data.get("_segments") or [])
+                     if not any(a < (g["start"] + g["end"]) / 2 < b for a, b in exp["fora"])]
+            data = {**data, "_segments": vivos,
+                    "_camOff": data.get("_camOff") or not vivos or exp.get("camOff", False)}
+            if track_js:
+                print("  aviso: perseguição do olhar ignorada — a moldura explicativa "
+                      "enquadra o rosto por conta própria", file=sys.stderr)
+                track_js = ""
+                # a perseguição tinha desligado a câmera; sem ela, a câmera volta
+                # a valer nos trechos de base
+                data = {**data, "_camOff": not vivos}
     cam_js, cam_style, trans_blocks = camera_parts(data, duration)
 
     # A FAMÍLIA ESCOLHIDA NA ABA ESTILO, com o padrão sendo a do próprio
@@ -2195,6 +2360,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         # levando junto a fonte da LEGENDA, que não tem nada a ver com isso.
         if q:
             gfont = f"{gfont}&{q}"
+    if exp:
+        gfont = f"{gfont}&{exp['gfont']}"
 
     if style_id == "stacked":
         cap_css = ('<link rel="stylesheet" href="styles/stacked.css">\n'
@@ -2245,6 +2412,10 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         # a GEOMETRIA é do estilo (o cinema senta a 230px do fundo, a barra a
         # 360): o padrão global só vale para quem não declara o seu
         pal_bottom = cfg.get("paddingBottom", st.get("bottom", VARIANTS["bottom"]))
+        # ÁREA SEGURA: o `cinema` nascia a 290px do fundo — dentro da faixa do
+        # perfil e do texto do post
+        if area_segura.vale(data):
+            pal_bottom = max(float(pal_bottom), area_segura.base_minima(H))
         # As variáveis do `pal` (raio da tarja, margem esquerda, placa do vidro)
         # são aplicadas pelo MOTOR a partir do `data-pal`, não traduzidas aqui:
         # o mesmo mapa em Python e em JS divergiria no primeiro ajuste.
@@ -2330,6 +2501,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         parts.append(track_js)
     if cam_js:
         parts.append(cam_js)
+    if exp:
+        parts.append(exp["js"])
     needs_tl = bool(parts)
     track_tag = '<script src="styles/tracking.js"></script>' if track_js else ""
 
@@ -2466,6 +2639,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         print(f"  aviso: gráfico sob medida '{gid}' sem arquivo em "
               f"compositions/{gid}.html — não vai aparecer", file=sys.stderr)
 
+    persp_html, persp_js = perspectiva_markup(data, duration, events)
+
     # Broll Overlay ANTES do corte de efeitos: as janelas emitem os próprios
     # eventos de som, e eles têm de existir quando sfx_blocks olhar a lista.
     bo_html = broll_markup(data, duration, events, bo_kit)
@@ -2554,6 +2729,17 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     cam_tag = '<script src="styles/camera.js"></script>' if cam_js else ""
     gsap_tag = ('<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>'
                 if needs_tl else "")
+    if persp_js:
+        parts.extend(persp_js)
+        needs_tl = True
+    fade_html = ""
+    _fi = float(data.get("fadeIn") or 0)
+    if _fi > 0:
+        fade_html = (f'  <div id="fade-in" class="clip" data-start="0" data-duration="{_fi:.3f}" '
+                     f'data-track-index="{TRACK["fadein"]}" '
+                     f'style="position:absolute;inset:0;background:#000;z-index:9999;opacity:1"></div>')
+        parts.append(f"  tl.fromTo('#fade-in', {{opacity: 1}}, {{opacity: 0, duration: {_fi:.3f}, ease: 'none'}}, 0);")
+        needs_tl = True
     no_tl = "" if needs_tl else " data-no-timeline"
     timeline = ("  var tl = gsap.timeline({ paused: true });\n"
                 + "\n".join(parts) + '\n  window.__timelines["main"] = tl;'
@@ -2566,6 +2752,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 <meta name="viewport" content="width={W}, height={H}" />
 <link href="https://fonts.googleapis.com/css2?{gfont}&display=swap" rel="stylesheet">
 {gsap_tag}
+{exp["tag"] if exp else ""}
 {cam_tag}
 {track_tag}
 {split_tag}
@@ -2576,6 +2763,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 {cap_css}
 {hook_css}
 {extra_css}
+{exp["css"] if exp else ""}
 {split_css}
 {bo_css}
 {cx_css}
@@ -2598,6 +2786,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 <div id="root" data-composition-id="main" data-start="0" data-duration="{duration:.3f}"
      data-width="{W}" data-height="{H}"{no_tl}>
 
+{exp["antes"] if exp else ""}
   <div id="vidwin">
     <video id="a-roll" class="clip" src="{video}" muted playsinline
            data-start="0" data-duration="{vdur:.3f}" data-track-index="{TRACK['aroll']}"></video>
@@ -2608,7 +2797,10 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
   <audio id="a-roll-audio" src="{video}" data-start="0" data-duration="{vdur:.3f}"
          data-track-index="{TRACK['audio']}" data-volume="1"></audio>
 
+{exp["depois"] if exp else ""}
+{persp_html}
 {hook_block}
+{fade_html}
 {cx_html}
 {split_block}
 {bo_html}
@@ -2689,6 +2881,8 @@ def main() -> None:
         files += ["tracking.js"]
     if data.get("wordAccents"):
         files += ["wordaccent.css", "wordaccent.js"]
+    if (data.get("explicativo") or {}).get("cenas"):
+        files += ["explicativo.css", "explicativo.js"]
 
     # os efeitos vão para o projeto: o renderer resolve caminho relativo a ele
     sfxdir = proj / "sfx"
@@ -2758,8 +2952,10 @@ def main() -> None:
     # 2026-08-19): o overlay já é o texto do momento, e os dois juntos
     # disputavam a mesma tela. Filtrado pelo PONTO MÉDIO da deixa — uma deixa
     # que só encosta na borda da janela continua existindo fora dela.
+    # `keepCaptions: true` na janela mantém a legenda (overlay que não toca a
+    # faixa baixa, como o contador que fica acima dela).
     bo_spans = [(float(o.get("start", 0)), float(o.get("end", 0)))
-                for o in (data.get("brollOverlays") or [])]
+                for o in (data.get("brollOverlays") or []) if not o.get("keepCaptions")]
     # gráfico sob medida que ESCURECE a tela também cala a legenda: os dois
     # disputariam o mesmo quadro. Explícito por entrada (`muteCaptions`) —
     # um gráfico de canto não tem por que silenciar nada.
@@ -2791,9 +2987,22 @@ def main() -> None:
         mid = (ms_a + ms_b) / 2000.0
         return all(not (a <= mid <= b) for a, b in bo_spans)
 
-    words = [w for w in json.loads(args.captions.read_text())
-             if w["startMs"] / 1000 < duration
-             and fora_broll(w["startMs"], w.get("endMs", w["startMs"]))]
+    # A PRIMEIRA PALAVRA DEPOIS DE UMA JANELA CALADA ABRE DEIXA NOVA. Sem a
+    # marca, o agrupamento colava as sobreviventes dos dois lados do overlay
+    # numa deixa só: medido no "OAB", aparecia "será? sabe aquela" enquanto ele
+    # dizia "só que não" — palavras de antes e de depois, juntas, sobre a fala
+    # errada.
+    words, _calou = [], False
+    for w in json.loads(args.captions.read_text()):
+        if w["startMs"] / 1000 >= duration:
+            continue
+        if not fora_broll(w["startMs"], w.get("endMs", w["startMs"])):
+            _calou = True
+            continue
+        if _calou and words:
+            w = {**w, "_quebra": True}
+        _calou = False
+        words.append(w)
 
     timed = []
     if style_id == "stacked":
@@ -2853,10 +3062,28 @@ def main() -> None:
             if c.get("figure") and c["figure"]["fromMs"] / 1000 < duration]
     elif cfg.get("enabled", True):
         budget = (cfg.get("safeWidth") if tuned_for else None) or st["maxW"]
+        # ÁREA SEGURA: nunca mais larga que a área útil (x 120…960); e a legenda
+        # ancorada embaixo cai na altura da coluna de ícones (x ≥ 848, y ≥ 1152).
+        # Centrada, ali ela só cabe com 2·(838−540) = 596px — os estilos de
+        # 720–900 passavam por cima do coração.
+        if area_segura.vale(data):
+            budget = min(float(budget), area_segura.largura_util(int(data.get("width", 1080))))
+            _H = int(data.get("height", 1920))
+            _b = float(cfg.get("paddingBottom", st.get("bottom", VARIANTS["bottom"])))
+            _alt = float(st.get("size", 80)) * float(st.get("lines", 1) or 1) * 1.3
+            if area_segura.na_faixa_dos_icones(_H - _b - _alt, _H - _b, _H):
+                budget = min(float(budget), area_segura.largura_centrada_icones(
+                    int(data.get("width", 1080))))
         _pal = st.get("pal") or {}
         cues = (cola_cues(words, int(_pal["cola"])) if _pal.get("cola")
                 else build_cues(words, st, budget))
         timed = time_cues(cues, fps, duration)
+        # o HOLD da última deixa antes do overlay não invade a janela calada
+        for t in timed:
+            for a, _b in bo_spans:
+                if t["start"] < a < t["end"]:
+                    t["end"] = a - 1 / fps
+        timed = [t for t in timed if t["end"] > t["start"]]
 
     orphans = set(VARIANTS["orphansPt"])
     penalty = VARIANTS["orphanPenalty"]

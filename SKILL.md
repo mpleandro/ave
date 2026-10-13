@@ -13,8 +13,8 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
 > from a template.
 >
 > Still missing, and say so rather than faking: the behind-the-subject layer
-> (the cutout tool is validated — `hyperframes remove-background` — but the
-> effect is not assembled).
+> (the cutout is validated and tested — `helpers/recorte.py`, RVM by default —
+> but the effect is not assembled).
 >
 > Fork of [edvid](https://github.com/fillrochaa/edvid) (MIT, Creator Factory) —
 > see `LICENSE`. Upstream is tracked as the `upstream` remote; keep the diff
@@ -57,6 +57,18 @@ description: Avelin — edit any video by conversation, in phases. Two tracks �
     Pular esse passo entrega gaguejo no vídeo e legenda fora do tempo, e o usuário descobre assistindo.
 16. **Pediu vídeo "transparente"? AVALIE O OVERLAY ANTES DE ESCOLHER.** Toda vez que o usuário quiser um vídeo transparente, ou tirar o fundo de uma gravação de tela, decida entre `mix-blend-mode: screen` (o escuro some de graça — só serve para arte CLARA) e alfa de verdade em VP9 `yuva420p` (a arte tem escuro que importa: texto escuro, sombra, contorno). **Olhe a arte e prove antes de renderizar** — compor `1-(1-a)*(1-b)` sobre um quadro real do corte custa segundos e responde o que uma render responderia em minutos. Screen apaga TODO pixel escuro, não só o fundo. A tabela de decisão, as armadilhas e a receita da matte estão em `references/shortform.md`, seção "Quero o vídeo transparente".
 
+
+16a. **ÁREA SEGURA NO VERTICAL — nada nosso onde a interface do app mora.**
+    Regra do usuário (2026-10-13), medidas em 1080×1920: topo 250px, base
+    320px, laterais 120px (área útil x 120…960) e a coluna dos ícones à direita
+    (x ≥ 848 nos 768px de baixo, y ≥ 1152). O VÍDEO pode passar por ali; texto,
+    legenda, cartão, ícone e headline não. Os números moram em
+    `helpers/area_segura.py` e o compositor os aplica sozinho: topo da headline
+    ≥ 260, largura da headline e da legenda ≤ 840, caixinha escalada para 840,
+    legenda ancorada embaixo ≤ 596 de largura (é o que cabe centrado à esquerda
+    dos ícones) e nunca a menos de 330px do fundo. Só o usuário desliga, e
+    pedindo com todas as letras: `"forcarAreaInsegura": true` no edit-data.
+    Elemento novo nasce dentro dessas margens — não espere o compositor cortar.
 
 16b. **UMA RÉGUA SÓ PARA O SILÊNCIO, E ELA É MEDIDA NA FONTE.** O limiar do
     `silencedetect` não é uma preferência: é a linha entre sala e voz, e ela
@@ -191,11 +203,12 @@ Phase 1:
 - **`watch_video.py <video> [--mode scene|keyframe|uniform] [--times t1 t2 …] [--start/--end] [--max-frames 24]`** — "what is IN this footage?" when you *don't* know where to look: scene-change detection (auto-fallback to uniform sampling on static/talking-head sources) + perceptual dedup (near-identical frames collapse — a held take becomes a handful of tiles) → labeled contact sheets in `edit/verify/watch_<stem>/`, one Read per sheet. Use for visual inventory of unknown material, eyeballing takes across sources, and surveying `preview.mp4` beyond verify_cut's numbers. `--times` pins transcript-cue frames: deictic moments from `takes_packed.md` ("olha isso", "como você pode ver") are LOW visual change and invisible to scene detection — pin them to decide B-roll/callout/zoom placement in Phase 2.
 
 Phase 2/3 (see the track references for usage):
-- **`phase2.py`** (Fase 2 inteira, um comando) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor)
+- **`phase2.py`** (Fase 2 inteira, um comando — amostra primeiro, `--completo` depois) · **`amostra.py`** (janela, composição deslocada e costura da amostra) · **`recorte.py`** (teste de 5s do recorte, aprovação, alfa reaproveitado) · **`explicativo.py`** (moldura explicativa: preferências, fala, roteiro de cenas) · **`explicativo_compose.py`** (o roteiro dentro da composição) · **`compose_shortform.py`** / **`compose_longform.py`** (a composição) · **`text_measure.py`** (largura com a fonte REAL do render) · **`backdrop_luma.py`** (variante de accent medindo o fundo) · **`sfx.py`** (confere nível e ataque de um efeito) · **`apply_edits.py`** (aplica os cortes salvos no editor)
 - **CORRIGIR O TEXTO DA LEGENDA — 2 cliques na palavra, na aba de transcrição.** O usuário conserta o que o Whisper ESCREVEU sem tocar em imagem nem som: o campo abre na própria palavra, Enter confirma, campo vazio desfaz, e o botão "todas" aplica em toda ocorrência daquela palavra na fonte (nome próprio, marca, jargão — o caso mais comum). O `apply_edits.py` funde em `transcripts/corrections.json`, **não refaz o corte**, e invalida `cut_mapped.json` + `captions.json` — que são gerados com guarda `if not exists` e sem isso a correção seria ignorada em silêncio. **Se a Fase 2 já rodou, o texto novo só aparece depois de `phase2.py` de novo**, porque a legenda é queimada quadro a quadro; por isso **mostre a aba de transcrição ANTES da Fase 2**, não depois — ler 60 palavras leva 20s e economiza um render inteiro. O painel e a legenda leem o MESMO texto corrigido (`fix_for`, em `cut_transcript.py`), que é a Regra 14 valendo de fato.
 - **REUSO DE SEGMENTOS — o render só reextrai o que mudou.** O nome de cada segmento carrega uma chave de conteúdo (fonte + entrada/saída + grade declarado + ganho + tier + fps), então mexer em 1 trecho de 10 reextrai 1, e remover um trecho reextrai ZERO. Medido: apagar um trecho de 5 caiu de 14,5s para 1,6s, com a saída **idêntica pixel a pixel** (SSIM 1,000) à do render completo. O resumo do J-cut diz quantos foram reaproveitados e quantos obsoletos foram podados. **Suba `SEG_VERSAO` no `render.py` ao alterar `extract_segment` ou `video_encoder_args`** — sem isso os segmentos antigos sobrevivem à mudança. `AVELIN_SEM_CACHE=1` apaga tudo e reextrai.
 - **`derivado.py`** — cache de análise por fonte (`~/.avelin/derivados`), chaveado por conteúdo + parâmetros + versão do produtor. É por que o painel de transcrição abre em 0,1s em vez de 2s. `derivado.py` lista, `derivado.py --limpar` apaga, e **`AVELIN_SEM_CACHE=1` desliga tudo** — use ao investigar qualquer suspeita de dado velho, em vez de sair apagando arquivo.
 - **`captions_words.py`** (legendas palavra a palavra, a base de todos os estilos) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`instalar_anim3d.py [--check]`** — instala o extra `anim3d` (MediaPipe + Depth Anything V2) com `uv sync --inexact` (não derruba o `matting`), baixa os modelos do MediaPipe para `~/.avelin/modelos/` e confere num processo novo. O `phase2.py` chama sozinho quando o formato é "Animação em 3D".
 - **`hook_finder.py <edit> [--top 8] [--fonte X] [--json]`** — **o garimpo do gancho**: corta o transcrito de cada fonte de fala em frases e janelas de 1–2 frases e MEDE o que o texto não mostra — borda limpa para cold open (silêncio medido dos dois lados), energia e ritmo contra o próprio falante, conector no começo (depende do anterior), sinais das 6 anatomias, retomada dentro do trecho, repetição confirmada no `defeitos_audio.json`. A nota só ORDENA a leitura; o julgamento (aponta para a tese? fica de pé sozinho?) é seu, e a escolha é do usuário. Grava `hook_candidatos.json`. Método completo em `references/hooks.md`.
 
 Interface:
@@ -424,6 +437,13 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   ("Dividida ↓", art on the bottom), mais **Caixinha de perguntas**, **Broll
   Overlay** e **Notícia**. Os seis são exclusivos entre si por decisão do
   usuário (2026-08-26): um vídeo tem UM formato.
+  **Mais dois desde 2026-10-12: "Animação em Texto" (`animTexto`) e "Animação
+  em 3D" (`anim3d`)**, no mesmo radio e pelo mesmo caminho (`elements`). O
+  render dos dois é SOB MEDIDA: leia `assets/estilos-animacao/text-anim/` ou
+  `edit-3d/ESTILO.md`, monte as cenas em `compositions/` sincronizadas pelo
+  `cut_mapped.json` e liste-as em `brollGraphics[]` — até lá o `phase2.py`
+  recusa pelo nome. A 3D instala MediaPipe + Depth Anything sozinha na
+  primeira escolha (`helpers/instalar_anim3d.py`, extra `anim3d`).
   **O dado continua em dois lugares, e é de propósito**: os três primeiros
   viajam em `edit` (→ `editStyle`) e os três últimos em `elements` (→
   `questionBox`, `brollOverlays[]`, `hook.style`), porque são contratos
@@ -441,7 +461,7 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   instruction to invent a place for one.
 - **Estilo de headline** — os onze clássicos (`outline`, `card`, `realce`,
   `misto`, `bloco`, `etiqueta`, `manuscrito`, `gigante`, `relevo`, `grifo`,
-  `contorno_duplo`) mais os do motor `cartela`, banda e tela cheia (a tabela do
+  `contorno_duplo`, `tarjas`) mais os do motor `cartela`, banda e tela cheia (a tabela do
   catálogo tem a lista inteira). **N linhas**, corpo ajustado à largura segura
   (não mais "sempre duas"). A quebra é do autor: **" / " no texto quebra a
   linha ali**; sem barra, a divisão em duas é equilibrada pela largura MEDIDA —
@@ -457,6 +477,16 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   reabrir a tela. **Caixinha e Notícia NÃO têm headline** (mesma zona alta,
   travada em `elLocked()` no app.js) — com qualquer um dos dois ligado, pule a
   pergunta em vez de oferecer um headline que nunca vai renderizar.
+- **A headline se ARRASTA e se REDIMENSIONA no vídeo** (2026-10-12), como a
+  legenda já se arrastava: o corpo move, o canto inferior direito muda o
+  tamanho, duplo clique volta ao padrão. Viaja como `hookDx`/`hookDy`/
+  `hookScale` (px de referência 1080, dy positivo = para cima) →
+  `phase2.aplicar_posicoes` → `hook.dx/dy/scale` → o compositor multiplica
+  `--hl-scale`, divide o `--hl-top` pelo mesmo fator e põe o lado em
+  `translate` — a MESMA conta da prévia. Cartela de tela cheia não se move.
+  **O arraste da LEGENDA (`capDy`) não chegava ao render até esta data**: ia
+  para o state.json e parava. Hoje vira `captions.paddingBottom`/`offsetY`
+  pela régua de cada estilo.
 - **As fontes do PRÓPRIO USUÁRIO entram no seletor** (`local_fonts.py` indexa
   as instaladas — 617 nesta máquina — e o servidor as publica em
   `/api/localfonts`). É o que permite usar a tipografia da MARCA, que o Google
@@ -850,6 +880,151 @@ uv run python helpers/phase2.py <videos_dir>/edit
 
 Everything below is what that command does, and what to do when it stops.
 
+### A amostra vem antes do vídeo inteiro
+
+**Corte com 20s ou mais: o `phase2.py` renderiza primeiro uma AMOSTRA de 8–15s**
+(`helpers/amostra.py`), não o vídeo todo. O render da Fase 2 é o passo caro, e
+o que mais custa refazer — gráfico sob medida, tela dividida, B-roll, Animação
+em Texto/3D — é justamente o que a aba Estilo não mostra ao vivo.
+
+- **A janela se escolhe sozinha**: a que mais mostra do estilo (gráfico sob
+  medida > inserção/tela dividida > efeito > legenda), bordas em fim de fala,
+  alinhada ao quadro. Gráfico sob medida nunca é cortado pela esquerda (a cena
+  dele recomeçaria do zero). Diga em uma linha qual trecho e por quê.
+- **Ela é COSTURADA sobre o corte**, na mesma posição: `edit/amostra.mp4` tem a
+  duração do corte, Fase 2 dentro da janela e corte limpo fora. O editor a toca
+  na aba Fase 2, leva o ponteiro ao começo da janela, marca a janela na linha
+  do tempo e o botão vira **"Aprovar amostra"**.
+- **Aprovar** grava `preview_amostra.json` e o servidor dispara
+  `phase2.py --completo` sozinho — você acompanha o `progress.json`, não roda
+  outro. Discordar é o caminho de sempre: pedido em texto ou nova escolha na
+  aba Estilo, que gera uma amostra nova.
+- `state.json.amostra` = `{video, inicio, fim, motivo, status}`
+  (`aguardando` → `aprovada`). `--completo` pula a amostra; `--amostra 12-24`
+  força uma janela; `"semAmostra": true` no `state.json` desliga para o projeto.
+- **Como funciona por dentro** (o renderizador não tem "renderize de S a E"):
+  `amostra.html` é a composição com os `data-start` deslocados, e os
+  construtores de estilo — que leem `data-start` em tempo absoluto — veem os
+  tempos originais só enquanto montam a timeline, embrulhada num
+  `tweenFromTo(S, E)`. Clipe fora da janela vai para DEPOIS do fim (`data-start`
+  negativo o runtime não esconde: as legendas apareciam empilhadas). O som é
+  emendado com `atrim` e fades de 10ms, nunca mixado (pico 1,0 na emenda).
+  Medido no Carrossel: 14,7s renderizados em 28s contra ~90s do completo, e
+  quadro a quadro igual ao render completo (SSIM 0,95–0,98, diferença de encode).
+
+### Moldura explicativa — o sujeito muda de formato quando a fala pede
+
+Formato da aba Estilo (`elements.explicativo`). Sem nada a explicar, o sujeito
+fica GRANDE (a `base`: card com borda, ou tela cheia). Quando a fala cita uma
+lista, um exemplo, uma comparação, um número, ele vai para o formato que serve
+ao trecho — **PIP** circular, **dividida**, **quadrado**, ou **oculto** (some, a
+explicação toma a tela e a voz continua) — e o espaço livre recebe o elemento
+(lista, checklist, título, comparação, número, imagem). Terminou a ideia, volta.
+**A animação segue a leitura do vídeo, nunca o relógio.**
+
+1. **Preferências — uma vez na vida**, com `AskUserQuestion` (as três numa
+   chamada só), enquanto `explicativo.py prefs` disser `"perguntado": false`:
+   - *Quais formatos posso usar?* (multiSelect) PIP circular · tela dividida ·
+     quadrado · explicação em tela cheia
+   - *Quanto movimento?* Sóbrio (só listas e exemplos) · Equilibrado
+     (Recomendado) · Intenso
+   - *Quando não há o que explicar, o sujeito fica…* num card com borda
+     (Recomendado) · em tela cheia
+
+   Grave: `explicativo.py prefs --formatos pip,dividida --intensidade equilibrado --base card`.
+   Nunca pergunte de novo; ele muda dizendo no chat.
+2. **Leia a fala**: `explicativo.py fala <edit>` — frases com tempo e gatilhos
+   prováveis (`← lista`, `exemplo`, `comparacao`…). O gatilho marcado é
+   sugestão de string; **quem decide é o sentido**.
+3. **Escreva o roteiro** em `edit-data.json → explicativo.cenas` — por FRASE da
+   fala (`de`/`ate`, e `palavra` em cada item), não por segundo:
+   ```json
+   {"layout": "pip", "pos": "esq", "fundo": "escuro", "de": "Ter um foco", "ate": "seu propósito",
+    "elemento": {"tipo": "lista", "tag": "3 pilares", "itens": [
+      {"texto": "Foco", "icone": "alvo", "palavra": "foco"}, …]}}
+   ```
+   Regras: só formatos liberados · cena ≥ o mínimo da intensidade (4/3/2,5s) ·
+   no máximo 3–4 itens, rótulo de 2–3 palavras · título com `*ênfase*` (vira
+   serifada itálica) e `" / "` quebrando linha · fundo claro OU escuro por cena,
+   no máximo uma troca por bloco · **na dúvida entre mexer e não mexer, o
+   sujeito fica grande** · CTA e gancho ficam na base.
+4. **Valide e mostre**: `explicativo.py validar <edit> --gravar` resolve frase →
+   tempo, absorve vão < 1s entre cenas, e imprime a TABELA. Ela vai para o chat
+   como está; a pista **Cenas** do editor mostra os mesmos blocos coloridos por
+   formato. **Uma aprovação**, não uma pergunta por cena; o usuário corrige
+   marcando o trecho ("aqui deixa grande", "aqui dividida").
+5. **Fase 2** — a amostra (seção anterior) já cai num trecho com cena.
+
+Medido no Carrossel: PIP com título, dividida com comparação Lula × direita e
+PIP com lista de 3 itens entrando cada um na sua palavra. Duas lições que
+viraram número: na dividida o rosto mora a 25% da moldura (a 40%, a legenda
+caía na boca) e título sozinho na cena sobe para 124px. **Ainda não existe**: a versão 16:9 (recusada pelo nome no compose).
+
+**Cabeça vazando a borda do card** (`explicativo.cabecaVaza: true`, só com base
+`card`): o rosto sobe no card até a testa de cabelo passar da borda, e uma
+camada com a pessoa RECORTADA, alinhada pixel a pixel com o vídeo, aparece só
+ACIMA da borda — entra 0,25s depois de a moldura assentar e sai antes de ela
+andar. Exige recorte aprovado (pergunta do teste de 5s, seção seguinte); o
+`phase2.py` recorta sozinho cada trecho de card (`recorte.py processar
+--fundo-novo`) e reaproveita entre renders. Três coisas medidas:
+- **cor descontaminada** (`person_matte.py --fgr`): com a cor da fonte, a borda
+  do cabelo carregava a parede clara e virava halo sobre o fundo escuro;
+- **cobertura até a borda do QUADRO, não do card**: o card sangra além de 1920
+  e a exigência antiga empurrava o rosto para baixo (só 35px de cabelo vazavam);
+- **câmera desligada** no vídeo todo: o zoom escalaria o vídeo e deixaria a
+  cabeça recortada no lugar.
+Limite conhecido: objeto claro encostado na cabeça (borda de prateleira no
+Carrossel) entra no recorte como cabelo — é o caso que o teste de 5s mostra;
+o conserto é fundo limpo atrás da cabeça na gravação, não filtro. Detalhes em
+`references/shortform.md`, seção "Moldura explicativa".
+
+### Recorte de fundo — o teste de 5s é uma PERGUNTA
+
+Todo efeito que recorta a pessoa do fundo (atrás do apresentador, cabeça
+vazando a moldura, texto passando atrás do ombro) **pergunta antes, com
+`AskUserQuestion`, se o usuário quer um teste de 5s**. Uma pergunta por projeto,
+no momento em que o efeito é decidido — não antes, não em todo render:
+
+> **Header:** `Recorte` · *"Este efeito precisa recortar você do fundo. Quer um
+> teste de 5 segundos antes (cerca de 1 minuto) para conferir cabelo, mãos e
+> ombros?"*
+> · **Sim, testar antes (Recomendado)** — 5s do trecho com mais movimento,
+>   sobre fundo claro e escuro
+> · **Comparar os dois motores** — o mesmo teste com o RVM e o do HyperFrames,
+>   lado a lado (~2 min)
+> · **Não, pode seguir** — recorta direto; o resultado aparece na amostra da Fase 2
+
+```bash
+uv run python helpers/recorte.py teste <edit> [--motor rvm|rvm-hq|hyperframes|ambos]
+```
+
+Mostre a folha (`recorte/teste_<motor>_folha.png`: três instantes, claro|escuro,
+com a cabeça ampliada) num Read só, diga o veredito em palavras — "cabelo e
+mãos limpos, leve tremulação no ombro" —, aponte o vídeo de revisão, e pergunte
+de novo com `AskUserQuestion` (header `Recorte`): **Aprovar** · **Tentar o
+modelo mais pesado** (`rvm-hq`) · **Usar moldura com fundo, sem recorte** ·
+**Vou regravar**. Aprovado: `recorte.py aprovar <edit> --motor <m>`.
+
+- **O veredito sai de cabeça, ombros e mãos**, onde o efeito vive. O corpo
+  inteiro é medido à parte: o RVM deixou cabeça e mãos limpas e SUMIU com as
+  pernas no primeiro teste real. Enquadramento até a cintura → irrelevante,
+  diga isso; corpo inteiro na tela → reprovado de fato.
+- **Os números ordenam, quem decide é quem assiste.** Tremulação (alfa mudando
+  onde a imagem não mudou), corpo sumindo (pessoa perdida SEM movimento — queda
+  de área dava falso alarme a cada gesto), manchas soltas, borda larga.
+- **Reprovado não se disfarça**: nada de brilho em cima do halo, nada de
+  retângulo fingindo silhueta. As saídas honestas são as três da pergunta.
+- **O alfa aprovado é reaproveitado.** `recorte.py processar <edit> --inicio S
+  --fim E` usa o motor aprovado e guarda `recorte/fg_<motor>_<S>_<E>.mov`;
+  mudar texto, posição ou tempo do lettering NUNCA reprocessa. Só um corte
+  refeito (fonte mais nova que o arquivo) invalida.
+- **Medido (Carrossel, pessoa sentada gesticulando, 5s):** RVM 14s, atenção
+  (leve tremulação no cabelo/ombro, cabeça limpa) · RVM resnet50 19s, não
+  melhorou · HyperFrames 56s, reprovado (recortou a CADEIRA junto, que entrava
+  e saía do alfa). Por isso o padrão é o RVM.
+- A Animação em 3D recorta com MediaPipe dentro do próprio efeito — para ela,
+  o teste é a amostra da Fase 2 (seção anterior), não este.
+
 ### The check is a gate, not a formality
 
 `hyperframes check` runs before every render and BLOCKS on errors. It has
@@ -872,7 +1047,7 @@ not — verified in the render. Any other error still blocks.
 |---|---|
 | Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` `pop` `popLinha` `popBloco` `revelar` `editorial` `dinamico` |
 | Legendas · motor `palavra` | `marcador` `marcadorDuplo` `marcaTexto` `sublinhado` `progressivo` · `foco` `focoBlur` `contorno` `neon` · `chapa` `chips` `vidro` · `onda` `rotativo` `maquina` `rolagem` · `cinema` `manchete` `barra` |
-| Headlines | `outline` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` |
+| Headlines | `outline` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` `tarjas` |
 | Headlines · motor `cartela` (banda) | `fita` `jornal` `terminal` `alerta` `placar` `sombra_longa` `neon` `balao` `filete` `adesivo` `noticia` |
 | Headlines · motor `cartela` (TELA CHEIA) | `capa` `capa_blur` `cortina` `meia_tela` `moldura` `contagem` `knockout` `poster` `aspas` `ficha` |
 | Edição | `limpa` `split` `split2` |

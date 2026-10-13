@@ -12,9 +12,16 @@ O que ele faz, em ordem:
   3. compõe a partir dos dados
   4. roda o `check` e PARA se houver erro — o linter já pegou coisas que sairiam
      em produção sem aviso nenhum (áudio mudo, 45s perdidos por render)
-  5. renderiza
+  5. renderiza — PRIMEIRO UMA AMOSTRA de 8–15s (`amostra.py`), costurada sobre
+     o corte limpo na mesma posição; o vídeo inteiro só depois que o usuário
+     aprovar a amostra (`--completo`, que o botão "Aprovar amostra" dispara)
   6. normaliza a loudness da entrega
   7. escreve os caminhos no state.json, que é como o editor descobre a Fase 2
+
+A amostra existe porque o render da Fase 2 é o passo caro e o primeiro lugar
+onde o estilo sob medida aparecia era o vídeo completo. Corte com menos de 20s
+renderiza inteiro direto (a amostra seria quase o vídeo todo); `--completo`
+pula a amostra; `--amostra 12.5-24` força uma janela.
 """
 from __future__ import annotations
 
@@ -29,6 +36,7 @@ from pathlib import Path
 HELPERS = Path(__file__).resolve().parent
 sys.path.insert(0, str(HELPERS))
 import progress  # noqa: E402
+import amostra  # noqa: E402
 
 # Para onde reportar falha. Um canal de progresso que só sabe reportar
 # sucesso deixa a tela em "processando…" para sempre quando o processo morre
@@ -45,7 +53,7 @@ PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica", "scatter", "sta
                    "pop", "popLinha", "popBloco", "revelar", "editorial", "dinamico"}
 PORTED_HEADLINES = {"outline", "card", "realce", "misto",
                     "bloco", "etiqueta", "manuscrito", "gigante",
-                    "relevo", "grifo", "contorno_duplo"}
+                    "relevo", "grifo", "contorno_duplo", "tarjas"}
 
 LOUDNORM = "loudnorm=I=-14:TP=-1:LRA=11"
 
@@ -99,6 +107,28 @@ def run(cmd, cwd=None, quiet=False, allow_fail=False):
     return r
 
 
+def render(cmd: list, cwd: Path) -> None:
+    """O render, com a saída lida. O HyperFrames é "best-effort": um script de
+    estilo que não carrega vira AVISO e o vídeo sai inteiro, só que sem a
+    animação — medido: `explicativo.js` faltando no projeto, "Render complete",
+    e a moldura parada no primeiro quadro. Erro de página é falha, não aviso."""
+    proc = subprocess.Popen(cmd, cwd=cwd, env=ENV, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True)
+    ruins = []
+    for linha in proc.stdout:
+        sys.stdout.write(linha)
+        if "PAGEERROR" in linha or "script_failure" in linha:
+            ruins.append(linha.strip())
+    proc.wait()
+    if proc.returncode != 0 or ruins:
+        msg = ("o render acusou erro de script na página — a animação não rodou:\n  "
+               + "\n  ".join(dict.fromkeys(ruins))) if ruins else \
+              f"o render falhou (código {proc.returncode})"
+        if _EDIT:
+            progress.fail(_EDIT, msg[:300])
+        sys.exit(msg)
+
+
 def load(p: Path, default=None):
     return json.loads(p.read_text()) if p.exists() else default
 
@@ -146,6 +176,50 @@ def tempo_leitura(texto: str) -> float:
     return max(DURACAO_MINIMA_LEITURA, len(texto) / CPS_LEITURA)
 
 
+def aplicar_posicoes(pick: dict, data: dict) -> None:
+    """Posição da LEGENDA e posição + tamanho da HEADLINE, arrastados no vídeo.
+
+    A legenda era arrastável desde 2026-08-15, e o número (`capDy`) viajava até
+    aqui e PARAVA: ia para o state.json e nunca para o edit-data, então o
+    render ignorava o arraste. A conversão espelha `CAP_ANCHOR`/`applyCapDy` do
+    app.js, que é a prévia: estilos de rodapé medem da BASE em px (mais = mais
+    alto), empilhado e disperso medem do CENTRO por fração (mais = mais baixo),
+    o rotativo pela fração do centro. A régua tem quatro significados; usar um
+    só mandaria metade dos estilos para o lado errado.
+
+    A headline (`hookDx`/`hookDy`/`hookScale`) vai como `hook.dx/dy/scale`, e
+    o `compose_shortform.py` aplica a mesma conta da prévia (ver
+    `hook_posicao`). Voltar ao padrão LIMPA o que um arraste anterior gravou —
+    senão o zero nunca chegaria ao vídeo.
+    """
+    caps = data.setdefault("captions", {})
+    dy = float(pick.get("capDy") or 0)
+    if dy:
+        V = json.loads((SKILL / "assets" / "styles" / "variants.json").read_text())
+        sid = caps.get("style") or "karaoke"
+        st = (V.get("styles") or {}).get(sid) or {}
+        if sid in ("stacked", "scatter"):
+            caps["offsetY"] = round(float(st.get("offsetY", 0.5)) - dy / 1920, 4)
+        elif sid == "rotativo":
+            caps["offsetY"] = round(float((st.get("pal") or {}).get("centro", 0.5)) + dy / 1920, 4)
+        elif sid not in ("editorial", "dinamico"):   # esses dois não se arrastam na prévia
+            caps["paddingBottom"] = round(float(st.get("bottom") or V.get("bottom", 430)) + dy)
+        caps["capDy"] = dy
+    elif caps.pop("capDy", None):
+        caps.pop("offsetY", None)
+        caps.pop("paddingBottom", None)
+
+    hook = data.get("hook")
+    hx, hy = float(pick.get("hookDx") or 0), float(pick.get("hookDy") or 0)
+    hk = float(pick.get("hookScale") or 1)
+    if hx or hy or hk != 1:
+        hook = data.setdefault("hook", {})
+        hook.update({"dx": hx, "dy": hy, "scale": hk})
+    elif hook:
+        for k in ("dx", "dy", "scale"):
+            hook.pop(k, None)
+
+
 def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     """Traz o que o usuário escolheu na aba Estilo para dentro do edit-data."""
     pick = load(edit / "preview_style.json")
@@ -162,6 +236,7 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     # controle: o que responde ao clique e nao ao resultado.
     if pick.get("capColor"):
         data.setdefault("captions", {})["color"] = pick["capColor"]
+    aplicar_posicoes(pick, data)
     elements = pick.get("elements") or {}
     for k, v in elements.items():
         data.setdefault("elements", {})[k] = v
@@ -297,6 +372,99 @@ def check_elements_filled(data: dict) -> None:
         )
 
 
+# ANIMAÇÃO EM TEXTO / EM 3D — formatos da aba Estilo cujo render é SOB MEDIDA.
+# A especificação de cada um (o que o espectador vê, ritmo, paleta, peças) mora
+# em assets/estilos-animacao/<pasta>/ESTILO.md; as cenas nascem como gráficos
+# próprios em `compositions/` montados por `brollGraphics[]`, sincronizados
+# pelos carimbos de `transcripts/cut_mapped.json`. Enquanto elas não existirem
+# a Fase 2 RECUSA PELO NOME (Hard Rule 10) — renderizar o vídeo "limpo" no
+# lugar entregaria outro formato com o nome deste.
+ANIMACOES = {
+    "animTexto": ("Animação em Texto", "text-anim"),
+    "anim3d": ("Animação em 3D", "edit-3d"),
+}
+
+
+def preparar_cabeca_vaza(edit: Path, data: dict, cenas: list, X) -> None:
+    """CABEÇA VAZANDO A BORDA DO CARD — recorta os trechos de card.
+
+    Só com recorte APROVADO (`recorte.py aprovar`, depois do teste de 5s ou da
+    dispensa dele — a pergunta do SKILL.md). Cada trecho é recortado uma vez e
+    reaproveitado: mudar texto ou cena não recorta de novo."""
+    ex = data.get("explicativo") or {}
+    if not ex.get("cabecaVaza"):
+        return
+    base = ex.get("base") or X.prefs().get("base", "card")
+    if base != "card":
+        print("  aviso: cabeça vazando só existe com a base em card — ignorada")
+        return
+    man = edit / "recorte" / "recorte.json"
+    aprovado = (json.loads(man.read_text()) if man.exists() else {}).get("aprovado")
+    if not aprovado:
+        sys.exit(
+            "\nCabeça vazando pedida, e o recorte ainda não foi aprovado.\n"
+            "Pergunte com AskUserQuestion se o usuário quer o teste de 5s (SKILL.md,\n"
+            "'Recorte de fundo'): recorte.py teste <edit>  → mostre a folha →\n"
+            "recorte.py aprovar <edit> --motor rvm   (ou aprove direto, se ele dispensar)\n")
+    duracao = X.sonda(edit / "preview.mp4")[2]
+    janelas = [(b["start"], b["end"]) for b in X.blocos(cenas, duracao, base)
+               if b["layout"] == "card"]
+    for i, (a, b) in enumerate(janelas, 1):
+        progress.step(edit, detail=f"recortando a cabeça — trecho {i} de {len(janelas)}")
+        run([sys.executable, str(HELPERS / "recorte.py"), "processar", str(edit),
+             "--inicio", f"{a:.3f}", "--fim", f"{b:.3f}", "--fundo-novo"])
+    # o renderer resolve `src` a partir da raiz do projeto
+    link = edit / "hyperframes" / "recorte"
+    if not link.exists():
+        link.symlink_to(edit / "recorte")
+
+
+def check_explicativo(data: dict, edit: Path) -> None:
+    """Moldura explicativa escolhida e sem roteiro: recusa pelo nome, com o
+    caminho. O roteiro sai da LEITURA da fala — não há padrão que o substitua."""
+    if not (data.get("elements") or {}).get("explicativo"):
+        return
+    if (data.get("explicativo") or {}).get("cenas"):
+        return
+    sys.exit(
+        "\nO formato 'Moldura explicativa' foi escolhido — o roteiro de cenas é "
+        "escrito lendo a fala.\n"
+        "  1. preferências (perguntar UMA vez na vida, com AskUserQuestion):\n"
+        "     explicativo.py prefs  → formatos liberados e intensidade\n"
+        "  2. explicativo.py fala <edit>  → a fala em frases, com gatilhos\n"
+        "  3. escreva edit-data.json → explicativo.cenas e rode\n"
+        "     explicativo.py validar <edit> --gravar  (mostre a tabela ao usuário)\n"
+        "  4. rode a Fase 2 de novo — a amostra mostra as transições reais.\n")
+
+
+def check_animacao(data: dict, edit: Path) -> None:
+    check_explicativo(data, edit)
+    els = data.get("elements") or {}
+    for fid, (nome, pasta) in ANIMACOES.items():
+        if not els.get(fid):
+            continue
+        if fid == "anim3d":
+            # quem escolhe na tela não abre terminal: instala aqui, na primeira vez
+            sys.path.insert(0, str(HELPERS))
+            import instalar_anim3d
+            progress.step(edit, detail="instalando MediaPipe + Depth Anything (primeira vez)")
+            if not instalar_anim3d.garantir():
+                sys.exit("\nA instalação das bibliotecas da Animação em 3D falhou — "
+                         "rode helpers/instalar_anim3d.py e veja o erro.\n")
+        if not data.get("brollGraphics"):
+            spec = HELPERS.parent / "assets" / "estilos-animacao" / pasta / "ESTILO.md"
+            roteiro = ("\nNa Animação em 3D: leia o ASSUNTO do vídeo e proponha um roteiro "
+                       "visual de 4–6 momentos (instante, frase, elemento) — NÃO copie os "
+                       "efeitos técnicos da referência. Na primeira vez do usuário, o "
+                       "roteiro vai para aprovação antes do render.\n") if fid == "anim3d" else ""
+            sys.exit(
+                f"\nO formato '{nome}' foi escolhido — as cenas dele são sob medida.{roteiro}\n"
+                f"Leia {spec}, monte as cenas em <projeto>/compositions/<id>.html "
+                f"sincronizadas com transcripts/cut_mapped.json, liste-as em "
+                f"edit-data.json → brollGraphics[] e rode a Fase 2 de novo.\n"
+            )
+
+
 def scaffold(proj: Path, cut: Path) -> None:
     proj.mkdir(parents=True, exist_ok=True)
     (proj / "package.json").write_text(
@@ -331,6 +499,11 @@ def main() -> None:
     ap.add_argument("edit", type=Path, help="<videos_dir>/edit")
     ap.add_argument("--style", help="força um estilo de legenda (ignora a aba)")
     ap.add_argument("--end", type=float, help="compõe só os N primeiros segundos")
+    ap.add_argument("--amostra", nargs="?", const="auto", metavar="S-E",
+                    help="renderiza só uma amostra (padrão em cortes ≥ 20s); "
+                         "sem valor escolhe a janela, `12.5-24` força uma")
+    ap.add_argument("--completo", action="store_true",
+                    help="renderiza o vídeo inteiro (amostra aprovada ou dispensada)")
     args = ap.parse_args()
 
     edit = args.edit.resolve()
@@ -403,13 +576,37 @@ def main() -> None:
         data.setdefault("captions", {})["style"] = args.style
     check_supported(data)
     check_elements_filled(data)
+    # roteiro da moldura explicativa: os tempos resolvidos (frase → segundo)
+    # ficam GRAVADOS — é o que a pista "Cenas" do editor desenha
+    if (data.get("explicativo") or {}).get("cenas"):
+        import explicativo as _X
+        _cenas, _erros, _ = _X.resolver(data, _X.palavras(edit), 1e9, _X.prefs())
+        if _erros:
+            sys.exit("roteiro da moldura explicativa com erro:\n  " + "\n  ".join(_erros)
+                     + "\n(explicativo.py validar <edit> mostra a tabela)")
+        data["explicativo"]["cenas"] = _cenas
+        preparar_cabeca_vaza(edit, data, _cenas, _X)
     data_path.parent.mkdir(parents=True, exist_ok=True)
     data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    # depois de gravar: a escolha do formato tem de sobreviver à recusa, senão
+    # o agente que vai montar as cenas não sabe qual formato foi pedido
+    check_animacao(data, edit)
     if picked:
         print("  escolhas da aba Estilo aplicadas")
         progress.step(edit, detail="escolhas da aba Estilo aplicadas")
 
-    scaffold(proj, cut)
+    # VÍDEO BASE ALTERNATIVO (`baseVideo` no edit-data, relativo ao edit/): a
+    # cópia do corte com os efeitos de pixel da Animação em 3D já gravados
+    # (helpers/anim3d_fx.py → preview_fx.mp4). Só a COMPOSIÇÃO a usa — rosto,
+    # faixa segura da legenda e caixinha continuam medidos no corte original,
+    # que é onde o rosto existe em todo quadro (no efeito "nuvem" ele vira
+    # pontos e o detector se perderia).
+    base_alt = data.get("baseVideo")
+    if base_alt and (edit / base_alt).exists():
+        print(f"  vídeo base: {base_alt} (efeitos gravados)")
+        scaffold(proj, edit / base_alt)
+    else:
+        scaffold(proj, cut)
 
     compose = [sys.executable, str(SKILL / "helpers" / "compose_shortform.py"),
                str(data_path), "--captions", str(caps_path),
@@ -536,6 +733,10 @@ def main() -> None:
         compose += ["--end", str(args.end)]
     run(compose)
 
+    # Sobra de uma amostra interrompida: dois HTML de entrada na raiz o `check`
+    # recusa (`multiple_root_compositions`) — e com razão, o runtime poderia
+    # tocar o áudio dos dois.
+    (proj / "amostra.html").unlink(missing_ok=True)
     progress.step(edit, detail="conferindo a composição")
     print("  verificando…")
     r = run(HF + ["check"], cwd=proj, quiet=True, allow_fail=True)
@@ -554,9 +755,19 @@ def main() -> None:
         print("  (sobreposição nominal entre as linhas da headline — "
               "conferida no render, sai correta)")
 
+    html = (proj / "index.html").read_text()
+    total = amostra.duracao(html)
+    state0 = load(edit / "state.json", {})
+    quer_amostra = (args.amostra is not None) or (
+        not args.completo and not args.end and not state0.get("semAmostra")
+        and total >= amostra.VALE_A_PENA)
+    if quer_amostra and not args.completo:
+        fazer_amostra(edit, proj, cut, data, html, total, args.amostra)
+        return
+
     progress.step(edit, pct=15, detail="renderizando quadro a quadro — é o passo longo")
     print("  renderizando…")
-    run(HF + ["render"], cwd=proj)
+    render(HF + ["render"], cwd=proj)
     renders = sorted((proj / "renders").glob("*.mp4"), key=lambda p: p.stat().st_mtime)
     if not renders:
         sys.exit("o render não produziu arquivo")
@@ -565,14 +776,31 @@ def main() -> None:
     progress.step(edit, pct=92, detail="normalizando a loudness da entrega")
     deliver(renders[-1], final)
 
+    amostra_st = load(edit / "state.json", {}).get("amostra")
+    if isinstance(amostra_st, dict):
+        amostra_st["status"] = "aprovada"
+    gravar_estado(edit, data, {
+        "finalVideo": "final.mp4",
+        "message": f"Fase 2 pronta — legenda {data.get('captions', {}).get('style', 'karaoke')}",
+        **({"amostra": amostra_st} if isinstance(amostra_st, dict) else {}),
+    })
+    (edit / "preview_amostra.json").unlink(missing_ok=True)
+
+    size = final.stat().st_size / 1e6
+    print(f"\n  entregue: {final}  ({size:.1f} MB)")
+    progress.done(edit, "Fase 2 pronta — o editor já mostra o resultado")
+    print("  o editor já mostra na aba Fase 2")
+
+
+def gravar_estado(edit: Path, data: dict, extra: dict) -> None:
+    """O state.json depois de um render da Fase 2 — amostra ou completo."""
     state = load(edit / "state.json", {})
     state.update({
         "phase": 2,
         "captions": "hyperframes/captions.json",
         "editData": "hyperframes/edit-data.json",
-        "finalVideo": "final.mp4",
-        "message": f"Fase 2 pronta — legenda {data.get('captions', {}).get('style', 'karaoke')}",
     })
+    state.update(extra)
     # A ESCOLHA VAI PARA O state.json ANTES DE SER APAGADA.
     # Apagar sem guardar deixava o render seguinte CEGO: o `apply_style_pick`
     # não achava nada, e tudo que só existia no pick — o texto da headline, por
@@ -599,16 +827,54 @@ def main() -> None:
         "accent": data.get("accent") or pick.get("accent"),
         "capColor": (data.get("captions") or {}).get("color") or pick.get("capColor"),
         "capDy": pick.get("capDy", 0),
+        "hookDx": pick.get("hookDx", 0), "hookDy": pick.get("hookDy", 0),
+        "hookScale": pick.get("hookScale", 1),
         "elements": data.get("elements") or pick.get("elements") or {},
     }
     state["awaitingStyle"] = False
     (edit / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2))
     (edit / "preview_style.json").unlink(missing_ok=True)
 
-    size = final.stat().st_size / 1e6
-    print(f"\n  entregue: {final}  ({size:.1f} MB)")
-    progress.done(edit, "Fase 2 pronta — o editor já mostra o resultado")
-    print("  o editor já mostra na aba Fase 2")
+
+def _mmss(t: float) -> str:
+    return f"{int(t // 60)}:{t % 60:04.1f}"
+
+
+def fazer_amostra(edit: Path, proj: Path, cut: Path, data: dict, html: str,
+                  total: float, pedido: str | None) -> None:
+    """Renderiza só a janela e a costura sobre o corte, na mesma posição."""
+    if pedido and pedido != "auto":
+        S, E = (float(x) for x in pedido.split("-"))
+        motivo = "janela pedida"
+    else:
+        S, E, motivo = amostra.escolher_janela(html, total)
+    S, E = amostra.alinhar(S, E, float(data.get("fps") or amostra.fps_de(html)))
+    print(f"  amostra {_mmss(S)}–{_mmss(E)} ({E - S:.1f}s de {total:.1f}s) — {motivo}")
+    (proj / "amostra.html").write_text(amostra.gerar_html(html, S, E))
+    saida = proj / "renders" / "amostra.mp4"
+    saida.unlink(missing_ok=True)
+    progress.step(edit, pct=15, detail=f"renderizando a amostra ({E - S:.0f}s)")
+    try:
+        render(HF + ["render", "-c", "amostra.html", "-o", str(saida.relative_to(proj))], cwd=proj)
+    finally:
+        # só existe durante o render: deixado na raiz, reprova o `check` seguinte
+        (proj / "amostra.html").unlink(missing_ok=True)
+    if not saida.exists():
+        sys.exit("o render da amostra não produziu arquivo")
+    progress.step(edit, pct=85, detail="costurando a amostra no corte")
+    costurado = edit / "amostra.mp4"
+    tmp = edit / "amostra.tmp.mp4"
+    amostra.costurar(cut, saida, S, E, tmp)
+    tmp.replace(costurado)
+
+    gravar_estado(edit, data, {
+        "amostra": {"video": "amostra.mp4", "inicio": round(S, 3), "fim": round(E, 3),
+                    "motivo": motivo, "status": "aguardando"},
+        "message": f"Amostra da Fase 2 pronta ({_mmss(S)}–{_mmss(E)}) — "
+                   f"aprove para renderizar o vídeo inteiro",
+    })
+    print(f"\n  amostra: {costurado}  (Fase 2 entre {_mmss(S)} e {_mmss(E)}; fora disso, o corte)")
+    progress.done(edit, "Amostra pronta — aprove para renderizar o vídeo inteiro")
 
 
 if __name__ == "__main__":

@@ -525,6 +525,21 @@ input[type="range"]::-webkit-slider-thumb {
   border-right: 1px solid rgb(var(--mark-rgb) / .55);
 }
 
+/* A JANELA DA AMOSTRA DA FASE 2 — moldura laranja (accent da marca), sem
+   hachura: não é algo que vai SAIR, é o trecho que já está pronto para ver. */
+.amostra-band {
+  position: absolute; top: 0; bottom: 0;
+  background: rgb(255 82 45 / .07);
+  border-left: 2px solid rgb(255 82 45 / .85);
+  border-right: 2px solid rgb(255 82 45 / .85);
+}
+.amostra-tag {
+  position: absolute; top: 2px; left: 4px;
+  font: 700 9px/1 var(--font-ui, system-ui); letter-spacing: .08em;
+  color: #fff; background: rgb(255 82 45 / .9);
+  padding: 2px 5px; border-radius: 3px;
+}
+
 .track { display: flex; align-items: stretch; margin-bottom: 6px; }
 
 .track-label {
@@ -2235,3 +2250,43 @@ button.tl-chip:disabled { cursor: default; }
    ele aparece. */
 #liveOverlay .live-hook { position: absolute; inset: 0; pointer-events: none; transition: opacity .18s linear; }
 #liveOverlay .live-hook.fora { opacity: .3; }
+
+/* POSIÇÃO E TAMANHO DA HEADLINE — a alça sobre o que está desenhado.
+   É o único pedaço do #liveHook que recebe ponteiro: o resto do overlay
+   continua deixando clicar no vídeo. Tracejado só no hover, para não sujar a
+   prévia de quem está só olhando. */
+.hook-alca {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  border: 1.5px dashed transparent;
+  border-radius: 8px;
+  transition: border-color .15s, background-color .15s;
+  touch-action: none;
+}
+.hook-alca:hover { border-color: rgb(var(--orange-rgb) / .85); background: rgb(var(--orange-rgb) / .06); }
+.hook-alca:active { cursor: grabbing; }
+.hook-canto {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: rgb(var(--orange-rgb));
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .55);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.hook-alca:hover .hook-canto { opacity: 1; }
+
+/* CENAS DA MOLDURA EXPLICATIVA — cor pelo formato; a base (sujeito grande)
+   fica neutra, porque é o "nada acontecendo" do roteiro. */
+.chip.cena { color:#fff; font-weight:600; border:1px solid rgb(255 255 255 / .14); }
+.chip.cena.base { background:rgb(255 255 255 / .06); color:rgb(255 255 255 / .55); }
+.chip.cena-pip { background:rgb(255 82 45 / .55); }
+.chip.cena-dividida { background:rgb(64 140 255 / .5); }
+.chip.cena-quadrado { background:rgb(160 100 255 / .5); }
+.chip.cena-oculto { background:rgb(30 190 170 / .5); }
+.chip.cena-cheia:not(.base), .chip.cena-card:not(.base) { background:rgb(255 255 255 / .18); }

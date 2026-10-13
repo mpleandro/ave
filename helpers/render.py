@@ -1459,22 +1459,36 @@ VOICE_MASTER_CHAIN = (
 )
 
 
-def apply_voice_master(input_path: Path, output_path: Path) -> None:
+def apply_voice_master(
+    input_path: Path,
+    output_path: Path,
+    chain: str | None = None,
+) -> None:
     """Run the spoken-word EQ + mastering chain, video copied untouched.
 
     Runs before loudnorm; loudnorm then normalizes the mastered signal to the
     social target. Audio re-encoded to AAC 192k/48k, video stream copied.
+
+    `chain` overrides VOICE_MASTER_CHAIN (EDL field `voice_master_chain`) — the
+    chain's own comment says every value is a starting point, and a room that
+    the default chain makes WORSE is not hypothetical. Measured on a talking
+    head with a -46 dBFS floor: the default chain's compressor lifted the room
+    tone to -36.4 dBFS while raising the voice only 3.8 dB, so the SNR FELL
+    from 27.3 to 21.3 dB — "mastering" made the noise the user complained about
+    more audible, not less. A denoise placed BEFORE the compressor is the fix,
+    and it has to be per-project because the noise floor is per-room.
     """
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-nostats",
         "-i", str(input_path),
         "-c:v", "copy",
-        "-af", VOICE_MASTER_CHAIN,
+        "-af", chain or VOICE_MASTER_CHAIN,
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-movflags", "+faststart",
         str(output_path),
     ]
-    print(f"  voice master: EQ + compression + de-ess → {output_path.name}")
+    print(f"  voice master: {'corrente do projeto' if chain else 'EQ + compression + de-ess'}"
+          f" → {output_path.name}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
 
@@ -1838,9 +1852,12 @@ def main() -> None:
 
         norm_input = tmp_composite
         if voice_master:
-            print("voice mastering → EQ + compression + de-ess (spoken word)")
+            chain = (edl.get("voice_master_chain") or "").strip() or None
+            print("voice mastering → "
+                  + ("corrente do projeto (voice_master_chain)" if chain
+                     else "EQ + compression + de-ess (spoken word)"))
             voiced = out_path.with_suffix(".voiced.mp4")
-            apply_voice_master(tmp_composite, voiced)
+            apply_voice_master(tmp_composite, voiced, chain)
             norm_input = voiced
             temps.append(voiced)
 

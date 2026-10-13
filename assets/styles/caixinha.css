@@ -36,6 +36,7 @@
   font-family: var(--cx-font), system-ui, sans-serif;
   font-size: var(--cx-bar-size, 39px); font-weight: var(--cx-bar-weight, 700);
   letter-spacing: .01em;
+  text-align: center; padding: 0 24px; line-height: 1.2;  /* título longo quebra centrado, não colado à esquerda */
 }
 
 .ave-caixa .cx-corpo {

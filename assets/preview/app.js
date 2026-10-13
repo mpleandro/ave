@@ -147,13 +147,14 @@ const PORTED = {
                      ...PAL.map((p) => p[0])]),
   headlines: new Set(['', 'outline', 'card', 'realce', 'misto',
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
-                      'relevo', 'grifo', 'contorno_duplo',
+                      'relevo', 'grifo', 'contorno_duplo', 'tarjas',
                       ...CARTELAS.map((c) => c[0])]),
   // os três de `EDIT_ELEMENTS` entram aqui porque o radio de FORMATO os
   // oferece junto com limpa/split/split2 (ver `radios()`) — e os três têm
   // caminho de render de verdade no compositor (`questionBox`,
   // `brollOverlays[]`, `hook.style="noticia"`).
-  edits: new Set(['limpa', 'split', 'split2', 'caixinha', 'brollOverlay', 'noticia']),
+  edits: new Set(['limpa', 'split', 'split2', 'caixinha', 'brollOverlay', 'noticia',
+                  'animTexto', 'anim3d', 'explicativo']),
 };
 
 /* FORMATO É UMA ESCOLHA SÓ, e ela mora em dois lugares no dado.
@@ -167,7 +168,19 @@ const PORTED = {
  * Escolher um destes três zera os outros dois E devolve `edit` a `limpa` (ver
  * o handler de clique): sem isso, `editStyle: "split"` + `questionBox` sairiam
  * os dois no render, que é exatamente a combinação que o radio nega. */
-const EDIT_ELEMENTS = ['caixinha', 'brollOverlay', 'noticia'];
+/* ANIMAÇÃO EM TEXTO / EM 3D (2026-10-12) entram pelo mesmo caminho: são o
+ * vídeo INTEIRO num estilo, então um formato, não um extra. O render delas é
+ * sob medida (gráficos em `compositions/`, montados a partir da especificação
+ * em `assets/estilos-animacao/<id>/ESTILO.md`) — o `phase2.py` recusa pelo
+ * nome até o agente montar as cenas, nunca substitui por algo parecido. A 3D
+ * instala MediaPipe + Depth Anything sozinha na primeira vez
+ * (`helpers/instalar_anim3d.py`). */
+/* MOLDURA EXPLICATIVA (2026-10-13): o apresentador muda de formato quando a
+ * fala pede — grande quando não há o que explicar; PIP, tela dividida ou
+ * quadrado quando cita lista, exemplo ou comparação. Roteiro de cenas escrito
+ * pela IA lendo a fala (`helpers/explicativo.py`); o `phase2.py` recusa pelo
+ * nome enquanto ele não existir. */
+const EDIT_ELEMENTS = ['caixinha', 'brollOverlay', 'noticia', 'animTexto', 'anim3d', 'explicativo'];
 
 // Quadro de foco de câmera — substitui o "boneco" genérico (círculo+blob) nos
 // mocks de tipo de edição por um vocabulário de editor: cantos em L, ponto de
@@ -265,6 +278,7 @@ const STYLE_CATALOG = {
     {id: 'relevo', name: 'Relevo', hl: 'relevo'},
     {id: 'grifo', name: 'Grifo', hl: 'grifo'},
     {id: 'contorno_duplo', name: 'Contorno duplo', hl: 'contorno_duplo'},
+    {id: 'tarjas', name: 'Tarjas', hl: 'tarjas'},
     // as vinte do motor `cartela`, banda primeiro e tela cheia depois
     ...CARTELAS.map(([id, name]) => ({id, name, ct: id})),
     /* SEM HEADLINE precisa ser uma ESCOLHA, não a ausência de uma.
@@ -434,6 +448,77 @@ const STYLE_CATALOG = {
         <rect x="21" y="23.6" width="13" height="1.8" rx=".9" fill="#fff" opacity=".92"/>
         <rect x="18" y="33" width="36" height="4.6" rx="1" fill="#241f18" opacity=".82"/>
         <rect x="18" y="40" width="28" height="4.6" rx="1" fill="#241f18" opacity=".82"/>
+      </svg>`,
+    },
+    {
+      /* ANIMAÇÃO EM TEXTO — tipografia cinética sobre tela escura: o texto da
+       * fala nasce palavra a palavra no tempo da voz. Spec:
+       * assets/estilos-animacao/text-anim/ESTILO.md. */
+      id: 'animTexto',
+      name: 'Animação em Texto',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><path d="M2.5 3.5h11M8 3.5v9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M11.5 10.5h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".6"/></svg>',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#0b0b0b" stroke="rgba(255,255,255,.12)"/>
+        <g stroke="rgba(255,255,255,.06)" stroke-width=".6">
+          <path d="M3 20h60M3 37h60M3 54h60M3 71h60M3 88h60M3 105h60M14 3v112M30 3v112M46 3v112"/>
+        </g>
+        <rect x="9" y="40" width="22" height="3.2" rx="1.6" fill="rgba(255,255,255,.7)"/>
+        <rect x="9" y="47" width="46" height="9" rx="1.5" fill="#fff" opacity=".92"/>
+        <rect x="9" y="59" width="38" height="9" rx="1.5" fill="rgb(var(--orange-rgb) / .95)"/>
+        <rect x="49" y="59" width="1.6" height="9" fill="rgb(var(--orange-rgb))"/>
+        <rect x="9" y="76" width="14" height="6" rx="1" fill="none" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+        <path d="M23 79h12" stroke="rgb(var(--orange-rgb) / .8)" stroke-width=".8"/>
+        <rect x="35" y="76" width="14" height="6" rx="1" fill="none" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+      </svg>`,
+    },
+    {
+      /* ANIMAÇÃO EM 3D — a fala vira efeito: profundidade, recorte, painel 3D,
+       * rastreio de mãos e objetos que reagem à palavra. Spec:
+       * assets/estilos-animacao/edit-3d/ESTILO.md. Instala MediaPipe + Depth
+       * Anything na primeira escolha (phase2.py → instalar_anim3d.py). */
+      id: 'anim3d',
+      name: 'Animação em 3D',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><path d="M8 1.8l5.4 3.1v6.2L8 14.2 2.6 11.1V4.9z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M2.6 4.9L8 8l5.4-3.1M8 8v6.2" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".7"/></svg>',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <g stroke="rgba(255,255,255,.1)" stroke-width=".6">
+          <path d="M3 96l60 0M3 104h60M3 112h60M18 92l-10 23M33 92v23M48 92l10 23"/>
+        </g>
+        <path d="M14 22l34-6v66l-34-6z" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.28)" stroke-width=".9"/>
+        <circle cx="31" cy="44" r="8" fill="rgba(255,255,255,.16)"/>
+        <path d="M19 76a12 12 0 0124 0" fill="rgba(255,255,255,.16)"/>
+        <path d="M31 36c-6 0-9 4-9 8s3 8 9 8 9-4 9-8-3-8-9-8z" fill="none" stroke="rgb(var(--orange-rgb) / .9)" stroke-width="1"/>
+        <rect x="6" y="6" width="22" height="5" rx="2.5" fill="rgba(0,0,0,.5)" stroke="rgba(255,255,255,.2)" stroke-width=".5"/>
+        <circle cx="9.5" cy="8.5" r="1.2" fill="rgb(var(--orange-rgb))"/>
+        <path d="M49 54l6-3.4 6 3.4v6.8l-6 3.4-6-3.4z" fill="rgb(var(--orange-rgb) / .35)" stroke="rgb(var(--orange-rgb))" stroke-width=".9"/>
+      </svg>`,
+    },
+    {
+      /* MOLDURA EXPLICATIVA — mock: o PIP circular no canto e a lista que a
+       * fala está citando, um item aceso. */
+      id: 'explicativo',
+      name: 'Moldura explicativa',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><circle cx="11.5" cy="4.5" r="2.8" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="12" height="2" rx="1"/><rect x="2" y="12.6" width="8" height="2" rx="1" opacity=".6"/></svg>',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#120b08" stroke="rgba(255,255,255,.12)"/>
+        <circle cx="47" cy="25" r="13.5" fill="url(#expg)"/>
+        <defs><linearGradient id="expg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#FB7C62"/><stop offset="1" stop-color="#F0BE48"/></linearGradient></defs>
+        <circle cx="47" cy="25" r="12" fill="#2a2522"/>
+        <circle cx="47" cy="22" r="4.2" fill="rgba(255,255,255,.22)"/>
+        <path d="M39 33a8 8 0 0116 0z" fill="rgba(255,255,255,.22)"/>
+        <rect x="7" y="50" width="16" height="4.5" rx="2.2" fill="rgb(var(--orange-rgb))"/>
+        <rect x="7" y="58" width="52" height="10" rx="2.5" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.14)" stroke-width=".5"/>
+        <rect x="9" y="60" width="6" height="6" rx="1.5" fill="rgb(var(--orange-rgb))"/>
+        <rect x="18" y="61.8" width="22" height="2.4" rx="1.2" fill="rgba(255,255,255,.85)"/>
+        <rect x="7" y="71" width="52" height="10" rx="2.5" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.14)" stroke-width=".5"/>
+        <rect x="9" y="73" width="6" height="6" rx="1.5" fill="rgb(var(--orange-rgb))"/>
+        <rect x="18" y="74.8" width="28" height="2.4" rx="1.2" fill="rgba(255,255,255,.85)"/>
+        <rect x="7" y="84" width="52" height="10" rx="2.5" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.08)" stroke-width=".5"/>
+        <rect x="18" y="87.8" width="18" height="2.4" rx="1.2" fill="rgba(255,255,255,.3)"/>
       </svg>`,
     },
   ],
@@ -877,7 +962,18 @@ function hlUpper(i, n, S) {
 }
 
 // o multiplicador de corpo de cada linha; a última entrada vale para as extras
+// Espelho de `hl_hero_index`/`hl_ks` do compositor: nos layouts `heroMid` a
+// herói é a linha do MEIO (n//2), escolhida por índice e não por `sizes`.
+function hlHeroIndex(lines, S) {
+  const i = S.heroIndex;
+  return (i != null && i >= 0 && i < lines.length) ? i : Math.floor(lines.length / 2);
+}
+
 function hlKs(lines, S) {
+  if (S.heroMid) {
+    const hero = hlHeroIndex(lines, S);
+    return lines.map((_, i) => (i === hero ? 1 : (S.minorK == null ? 0.6 : S.minorK)));
+  }
   if (!S.sizes) return lines.map(() => 1);
   return lines.map((_, i) => S.sizes[Math.min(i, S.sizes.length - 1)]);
 }
@@ -990,6 +1086,7 @@ function buildHeadline(host, styleId, text, opts) {
     d.dataset.text = l;   // a extrusão do relevo lê daqui
     if (paint.tagBox != null && i === (paint.tag == null ? 0 : paint.tag)) d.classList.add('hl-tag');
     if (paint.hollowLines && paint.hollowLines.includes(i)) d.classList.add('hl-hollow');
+    if (paint.heroBox && S.heroMid && i === hlHeroIndex(lines, S)) d.classList.add('hl-hero');
     if (paint.wordBox) {
       // sem nó de espaço entre as tarjas: o espaço ficaria DENTRO da tarja e as
       // caixas se encostariam. A folga é a margem do .hl-word.
@@ -1527,6 +1624,10 @@ function defaultStyle() {
        então trocar de estilo traz de volta a letra com que ele foi desenhado. */
     capFont: null,
     capDy: 0,   // deslocamento GLOBAL da legenda, em px de referência 1080
+    // POSIÇÃO E TAMANHO DA HEADLINE — arrastada/redimensionada sobre o vídeo
+    // (ver a seção "POSIÇÃO DA HEADLINE"). px de referência 1080, como a
+    // legenda; dy positivo = para CIMA; escala multiplica o layout inteiro.
+    hookDx: 0, hookDy: 0, hookScale: 1,
     elements,
     note: '',
   };
@@ -1716,6 +1817,7 @@ function styleState() {
     && same('captions', def.captions) && same('accent', def.accent)
     && same('capColor', def.capColor)
     && same('capDy', 0)
+    && same('hookDx', 0) && same('hookDy', 0) && same('hookScale', 1)
     /* `elements` compara CHAVE A CHAVE, não como objeto inteiro.
      *
      * O JSON do objeto todo repete, um nível mais fundo, o mesmo defeito que
@@ -1824,6 +1926,20 @@ function refreshActionBar() {
     return;
   }
   go.classList.remove('forcar');
+  /* MODO APROVAR AMOSTRA (Fase 2, nada alterado, amostra na tela). Aprovar
+     dispara o render do vídeo inteiro; discordar é escrever o pedido ou mexer
+     no Estilo, que vira o botão de envio de sempre. */
+  if (!temAlgo && amostraViva()) {
+    const am = S.state.amostra;
+    go.dataset.mode = 'approve-amostra';
+    go.classList.add('aprovar');
+    go.disabled = false;
+    $('actionCount').textContent = `Amostra da Fase 2 · ${fmt(+am.inicio)}–${fmt(+am.fim)}`;
+    go.innerHTML = 'Aprovar amostra';
+    go.title = 'Aprova o estilo e renderiza o vídeo inteiro (leva alguns minutos)';
+    $('actionWhat').textContent = '';
+    return;
+  }
   if (!temAlgo) {
     $('actionCount').textContent = 'Nada a enviar';
 
@@ -2040,6 +2156,21 @@ async function applyState(data) {
   refreshHeader();
 }
 
+/* A AMOSTRA DA FASE 2 — 8 a 15s renderizados antes do vídeo inteiro.
+ *
+ * O arquivo tem a duração do CORTE: fora da janela é o corte limpo, dentro é a
+ * Fase 2, costurada na mesma posição. Por isso ele toca no lugar do final sem
+ * mexer em ponteiro, marcação ou legenda — a linha do tempo continua a mesma.
+ * Viva = esperando aprovação, mais nova que o final e que o corte, e nada
+ * pendente na tela (uma alteração não enviada já a torna velha). */
+function amostraViva() {
+  const am = S.state.amostra, mt = S.mtimes || {};
+  if (!am || am.status !== 'aguardando' || !mt.amostra) return false;
+  if (mt.finalVideo && mt.finalVideo > mt.amostra) return false;
+  if (mt.video && mt.video > mt.amostra) return false;
+  return dirtyCount() === 0;
+}
+
 // Fase 1 plays the clean cut; Fase 2 plays the Phase-2 render (state.finalVideo)
 // when it exists, so captions/inserts are visible. Keeps the playback position.
 function updateVideoSrc() {
@@ -2059,11 +2190,19 @@ function updateVideoSrc() {
   const stale = !S.state.finalVideo
     || (mt.video && mt.finalVideo && mt.video > mt.finalVideo)
     || dirtyCount() > 0;
-  S.showFinal = !stale;
-  const rel = S.showFinal ? S.state.finalVideo : (S.state.video || 'preview.mp4');
-  const vsrc = `/media/${rel}?v=${(S.mtimes && (S.mtimes.finalVideo || S.mtimes.video)) || 0}`;
+  const amostra = amostraViva();
+  S.showFinal = !stale || amostra;
+  const rel = amostra ? S.state.amostra.video
+    : (S.showFinal ? S.state.finalVideo : (S.state.video || 'preview.mp4'));
+  const vsrc = `/media/${rel}?v=${(amostra ? mt.amostra : (mt.finalVideo || mt.video)) || 0}`;
   if (video.dataset.src === vsrc) return;
-  const t = video.currentTime;
+  let t = video.currentTime;
+  /* Amostra NOVA leva o ponteiro para o começo da janela: abrir no segundo 0
+     mostraria o corte limpo, e o usuário concluiria que o estilo não pegou. */
+  if (amostra && video.dataset.amostraVista !== String(mt.amostra)) {
+    video.dataset.amostraVista = String(mt.amostra);
+    t = +S.state.amostra.inicio || 0;
+  }
   const wasPlaying = !video.paused && !video.ended;
   video.dataset.src = vsrc;
   video.src = vsrc;
@@ -2286,6 +2425,17 @@ function renderCutMarks() {
     band.style.width = `${Math.max((s.end - s.start) * S.pps, 2)}px`;
     band.title = `${s.n} palavra(s) marcada(s) para remoção`;
   }
+  /* A JANELA DA AMOSTRA: onde a Fase 2 já existe. Fora dela o vídeo é o corte
+     limpo, e sem a faixa o usuário acharia que o estilo sumiu ali. */
+  if (amostraViva()) {
+    const am = S.state.amostra;
+    const band = el('div', 'amostra-band', host);
+    band.style.left = `${am.inicio * S.pps}px`;
+    band.style.width = `${Math.max((am.fim - am.inicio) * S.pps, 2)}px`;
+    el('span', 'amostra-tag', band).textContent = 'AMOSTRA';
+    band.title = `Amostra da Fase 2 · ${fmt(+am.inicio)}–${fmt(+am.fim)}`
+      + (am.motivo ? ` · ${am.motivo}` : '');
+  }
 }
 
 // ---------- correction markers ----------
@@ -2497,7 +2647,7 @@ const LAYERS = [
   /* Sem `elements`: Caixinha, Broll Overlay e Notícia entram no PRÓPRIO radio
      de `edits` (ver EDIT_ELEMENTS) em vez de virem como checkbox ao lado dele.
      Listá-los aqui também os desenharia duas vezes na mesma camada. */
-  { id: 'elementos', name: 'Formato', sub: 'Um formato por vídeo — layout do corte, caixinha, broll overlay ou notícia',
+  { id: 'elementos', name: 'Formato', sub: 'Um formato por vídeo — layout do corte, caixinha, broll overlay, notícia ou animação',
     ico: 'inserts', groups: ['edits'] },
   { id: 'headline', name: 'Headline', sub: 'Layout — o texto é combinado no chat',
     ico: 'text', groups: ['headlines'] },
@@ -2923,6 +3073,8 @@ async function sendStyle() {
     // não sabe se a fonte de destaque é uma instrução ou um valor sem uso
     fontAccentUsed: !!(hlStyle(S.style.headline) || {}).fontRole,
     capDy: S.style.capDy || 0,   // deslocamento GLOBAL da legenda, px de ref 1080
+    hookDx: S.style.hookDx || 0, hookDy: S.style.hookDy || 0,
+    hookScale: S.style.hookScale || 1,
     // sem campo na tela — passa adiante o que o chat já tiver escrito direto
     // em `preview_style.json`/`edit-data.json`, para não apagar ao reenviar
     headlineText: (S.style.headlineText || '').trim(),
@@ -3149,6 +3301,45 @@ function renderChips() {
     }
   }
 
+  /* CENAS DA MOLDURA EXPLICATIVA — pista só de leitura, um bloco por trecho,
+     colorido pelo FORMATO. Os vãos são a base (o sujeito grande), desenhados
+     também: o roteiro é o vídeo inteiro, não só onde algo acontece. Corrige-se
+     marcando o trecho (M) e escrevendo — "aqui deixa grande", "aqui dividida". */
+  const ex = S.editData && S.editData.explicativo;
+  const cenas = ((ex && ex.cenas) || []).filter((c) => c.start != null && c.end != null);
+  if (cenas.length) {
+    const total = S.editData.durationSec || S.videoDuration || draftTotal();
+    const base = ex.base || 'card';
+    const blocos = [];
+    let cur = 0;
+    for (const c of [...cenas].sort((a, b) => a.start - b.start)) {
+      if (c.start - cur > 0.05) blocos.push({ start: cur, end: c.start, layout: base, base: true });
+      blocos.push(c);
+      cur = c.end;
+    }
+    if (total - cur > 0.05) blocos.push({ start: cur, end: total, layout: base, base: true });
+    const NOME = { card: 'grande', cheia: 'tela cheia', pip: 'PIP', dividida: 'dividida',
+                   quadrado: 'quadrado', oculto: 'só explicação' };
+    const trk = el('div', 'track', insertTracksEl);
+    const lab = el('div', 'track-label', trk);
+    el('span', 'tl-chip orange', lab).innerHTML = ICON.inserts;
+    const txt = el('span', 'tl-text', lab);
+    el('span', 'tl-name', txt).textContent = 'Cenas';
+    el('br', '', txt);
+    el('span', 'tl-count', txt).textContent = `${cenas.length} explicaç${cenas.length === 1 ? 'ão' : 'ões'}`;
+    const lane = el('div', 'lane', trk);
+    for (const b of blocos) {
+      const chip = el('div', `chip cena cena-${b.layout}${b.base ? ' base' : ''}`, lane);
+      chip.style.left = `${b.start * S.pps}px`;
+      chip.style.width = `${Math.max((b.end - b.start) * S.pps, 6)}px`;
+      const elx = b.elemento || {};
+      const oq = (elx.itens || []).map((i) => i.texto).join(' · ')
+        || elx.titulo || elx.valor || elx.tipo || '';
+      chip.textContent = `${NOME[b.layout] || b.layout}${oq ? ' — ' + String(oq).replace(/[*]/g, '') : ''}`;
+      chip.title = `${fmt(b.start)}–${fmt(b.end)} · ${chip.textContent}`;
+    }
+  }
+
   // soundtrack → its own read-only track, one chip spanning the whole video
   const st = S.editData && S.editData.soundtrack;
   if (st && st.enabled) {
@@ -3293,7 +3484,8 @@ function renderLiveHook() {
   const texto = (S.style.headlineText || '').trim() || HEADLINE_TEXT;
   const dentro = renderedToDraft(video.currentTime || 0) <= GANCHO_SEC;
   const key = [id, texto, Math.round(w), dentro, S.style.accent, S.style.textColor,
-               S.style.fontMain, S.style.fontAccent].join('|');
+               S.style.fontMain, S.style.fontAccent,
+               S.style.hookDx || 0, S.style.hookDy || 0, S.style.hookScale || 1].join('|');
   if (key === LIVE.hookKey) return;
   LIVE.hookKey = key;
 
@@ -3308,7 +3500,107 @@ function renderLiveHook() {
       fontMain: S.style.fontMain, fontAccent: S.style.fontAccent,
     });
   }
+  hookAjuste(box, host, h);
 }
+
+/* ---------- POSIÇÃO E TAMANHO DA HEADLINE ----------
+ *
+ * Como a legenda: arrastar move, e vale para o vídeo inteiro (a headline é uma
+ * só). Mais o canto: puxar o canto inferior direito redimensiona.
+ *
+ * A MESMA CONTA DO RENDER, não um transform por cima da prévia. O tamanho
+ * multiplica `--hl-scale` — que já atravessa fonte, margem, sombra, raio e
+ * altura de TODO layout das duas folhas — e a altura é dividida pelo mesmo
+ * fator, senão crescer empurraria a headline para baixo (o `top` também é
+ * multiplicado pela escala). O `compose_shortform.py` escreve exatamente estes
+ * dois números no `#hook`; um `transform: scale` aqui faria a prévia mostrar
+ * uma coisa e o render entregar outra.
+ *
+ * Cartela de TELA CHEIA não se move nem redimensiona: ela É o quadro. */
+const HOOK_LIM = { dx: 540, dyMin: -1500, dyMax: 400, kMin: 0.5, kMax: 1.6 };
+function hookAjuste(box, host, h) {
+  const alvo = host.querySelector('.ave-hook, .ave-cartela');
+  if (!alvo || (h && h.cheia)) return;
+  const sc0 = parseFloat(alvo.style.getPropertyValue('--hl-scale')) || (box.clientWidth / projW());
+  const top0 = parseFloat(alvo.style.getPropertyValue('--hl-top')) || ((h || {}).top || 0);
+  const k = S.style.hookScale || 1;
+  const dx = S.style.hookDx || 0;
+  const dy = S.style.hookDy || 0;
+  alvo.style.setProperty('--hl-scale', sc0 * k);
+  alvo.style.setProperty('--hl-top', (top0 - dy) / k);
+  alvo.style.translate = `${dx * sc0}px 0`;
+  // a ALÇA: um retângulo sobre o que está desenhado, o único pedaço do
+  // overlay que recebe ponteiro (o resto continua deixando clicar no vídeo)
+  requestAnimationFrame(() => {
+    const partes = alvo.querySelectorAll('.hl-line, .ct-bloco');
+    if (!partes.length || !box.isConnected) return;
+    const ref = box.getBoundingClientRect();
+    let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+    partes.forEach((n) => {
+      const q = n.getBoundingClientRect();
+      if (!q.width) return;
+      l = Math.min(l, q.left); t = Math.min(t, q.top);
+      r = Math.max(r, q.right); b = Math.max(b, q.bottom);
+    });
+    if (!isFinite(l)) return;
+    let alca = box.querySelector('.hook-alca');
+    if (!alca) {
+      alca = el('div', 'hook-alca', box);
+      el('div', 'hook-canto', alca);
+      alca.title = 'arraste para mover · canto para redimensionar · duplo clique volta ao padrão';
+    }
+    Object.assign(alca.style, {
+      left: `${l - ref.left - 6}px`, top: `${t - ref.top - 6}px`,
+      width: `${r - l + 12}px`, height: `${b - t + 12}px`,
+    });
+  });
+}
+
+let hookDrag = null;
+document.addEventListener('pointerdown', (e) => {
+  const alca = e.target.closest('.hook-alca');
+  if (!alca) return;
+  const ov = $('liveOverlay');
+  const sc = (ov && ov.clientWidth ? ov.clientWidth : 1) / 1080;
+  const q = alca.getBoundingClientRect();
+  const cx = q.left + q.width / 2, cy = q.top + q.height / 2;
+  hookDrag = {
+    modo: e.target.closest('.hook-canto') ? 'escala' : 'mover',
+    x0: e.clientX, y0: e.clientY, sc,
+    dx0: S.style.hookDx || 0, dy0: S.style.hookDy || 0, k0: S.style.hookScale || 1,
+    cx, cy, d0: Math.max(8, Math.hypot(e.clientX - cx, e.clientY - cy)),
+  };
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
+window.addEventListener('pointermove', (e) => {
+  if (!hookDrag) return;
+  const g = hookDrag;
+  if (g.modo === 'mover') {
+    S.style.hookDx = Math.round(Math.max(-HOOK_LIM.dx, Math.min(HOOK_LIM.dx, g.dx0 + (e.clientX - g.x0) / g.sc)));
+    S.style.hookDy = Math.round(Math.max(HOOK_LIM.dyMin, Math.min(HOOK_LIM.dyMax, g.dy0 + (g.y0 - e.clientY) / g.sc)));
+    showTooltip(e, `headline <b>${S.style.hookDx >= 0 ? '+' : ''}${S.style.hookDx}</b>, <b>${S.style.hookDy >= 0 ? '+' : ''}${S.style.hookDy}</b> px`);
+  } else {
+    const d = Math.hypot(e.clientX - g.cx, e.clientY - g.cy);
+    S.style.hookScale = Math.round(Math.max(HOOK_LIM.kMin, Math.min(HOOK_LIM.kMax, g.k0 * d / g.d0)) * 100) / 100;
+    showTooltip(e, `headline <b>${Math.round(S.style.hookScale * 100)}%</b>`);
+  }
+  LIVE.hookKey = null;
+  renderLiveHook();
+});
+window.addEventListener('pointerup', () => {
+  if (!hookDrag) return;
+  hookDrag = null;
+  hideTooltip();
+  refreshHeader();   // virou uma alteração a enviar
+});
+document.addEventListener('dblclick', (e) => {
+  if (!e.target.closest('.hook-alca')) return;
+  S.style.hookDx = 0; S.style.hookDy = 0; S.style.hookScale = 1;
+  LIVE.hookKey = null;
+  renderLiveHook();
+  refreshHeader();
+});
 
 function renderLive() {
   renderLiveHook();
@@ -4023,6 +4315,29 @@ $('setupGo').addEventListener('click', async () => {
       /* Agora o encode começa JUNTO com a aprovação, então o toast pode
          prometê-lo: nada mais pode recusar o que o usuário acabou de aprovar. */
       toast('Corte aprovado — renderizando o final', 4500);
+    } catch (e) {
+      btn.disabled = false;
+      toast('Não consegui registrar a aprovação — tente de novo', 3000);
+    }
+    return;
+  }
+  /* MODO APROVAR AMOSTRA — arquivo próprio (`preview_amostra.json`); o
+     servidor dispara `phase2.py --completo` no ato. */
+  if ($('setupGo').dataset.mode === 'approve-amostra') {
+    const btn = $('setupGo');
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'approve-amostra',
+                               note: ($('setupNote').value || '').trim(),
+                               amostra: S.state.amostra || null }),
+      });
+      if (!(await r.json()).ok) throw new Error('save');
+      S.state.amostra = { ...S.state.amostra, status: 'aprovada' };
+      $('setupNote').value = '';
+      refreshActionBar();
+      toast('Amostra aprovada — renderizando o vídeo inteiro', 4500);
     } catch (e) {
       btn.disabled = false;
       toast('Não consegui registrar a aprovação — tente de novo', 3000);

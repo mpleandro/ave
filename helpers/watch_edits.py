@@ -3,6 +3,7 @@
 
 Two files, both written by the UI and neither able to reach the chat on its own:
   - preview_edits.json — timeline adjustments and correction markers
+  - preview_amostra.json — a amostra da Fase 2 aprovada (render completo disparado)
   - preview_style.json — the Fase 1 → Fase 2 gate: editing style, caption style,
     edit elements
 
@@ -244,6 +245,25 @@ def approval_digest(p: Path) -> str:
     return "\n".join(out)
 
 
+def amostra_digest(p: Path) -> str:
+    """A AMOSTRA DA FASE 2 APROVADA — libera o render do vídeo inteiro."""
+    try:
+        d = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return f"preview_amostra.json ilegível ({e.__class__.__name__})"
+    nota = (d.get("note") or "").strip()
+    out = [f"✅ AMOSTRA DA FASE 2 APROVADA pelo usuário ({d.get('savedAt', '')}).",
+           "   O SERVIDOR JÁ DISPAROU  phase2.py --completo  (o vídeo inteiro).",
+           "   NÃO rode outro phase2.py: dois no mesmo projeto disputam os mesmos",
+           "   arquivos. Acompanhe progress.json; só se o task 'fase2' falhar,",
+           "   rode você:  phase2.py <edit> --completo",
+           "   O próprio phase2 apaga o preview_amostra.json ao terminar."]
+    if nota:
+        out.insert(1, f'   com observação: "{nota}" — leia ANTES: se pede mudança,')
+        out.insert(2, "   o render completo ainda não deveria sair com o estilo atual.")
+    return "\n".join(out)
+
+
 def targets(root: Path) -> dict:
     return {
         root / "preview_edits.json": digest,
@@ -259,6 +279,8 @@ def targets(root: Path) -> dict:
         # A aprovação: arquivo próprio, para não ser apagada junto com as
         # marcações quando o apply_edits consome o preview_edits.json.
         root / "preview_approval.json": approval_digest,
+        # A amostra da Fase 2 aprovada (botão "Aprovar amostra").
+        root / "preview_amostra.json": amostra_digest,
         # O projeto nascido na dropzone.
         root / "preview_request.json": request_digest,
     }

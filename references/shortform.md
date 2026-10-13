@@ -161,7 +161,7 @@ your edit is gone at the next run. Bespoke graphics go in
 
 ## Headline layouts — N linhas, corpo ajustado
 
-Onze looks via `hook.style`, escolhidos na aba Estilo. Os quatro originais:
+Doze looks via `hook.style`, escolhidos na aba Estilo. Os quatro originais:
 **`outline`** (branco + traço preto grosso), **`card`** (cartão escuro
 arredondado, CAIXA ALTA), **`realce`** (cada linha numa tarja sólida de
 destaque), **`misto`** (linha 1 leve, linha 2 pesada no destaque). Os sete
@@ -176,6 +176,7 @@ novos:
 | `relevo` | caixa alta com extrusão DURA no destaque; preenchimento em degradê |
 | `grifo` | cada PALAVRA com sua tarja (o `realce` faz por linha) |
 | `contorno_duplo` | linha vazada em cima, cheia embaixo — o vazado deixa a imagem passar |
+| `tarjas` | cada linha numa tarja reta e encostada: as de fora claras com texto escuro, a do MEIO maior no destaque. `hook.hero` (índice) troca qual linha é a herói |
 
 ### A quebra: o `/` manda
 
@@ -863,14 +864,47 @@ O schema, em `edit-data.json`:
   (`--validar` confere). Campo extra por janela: `eyebrow` (rótulo editorial
   em cima do conteúdo).
 
+## Moldura explicativa — por dentro
+
+O fluxo (perguntas, roteiro, aprovação) está no SKILL.md. Aqui, o que o código
+faz e por quê — números medidos na referência Video-43569.
+
+- **Geometria** (px de referência 1080×1920, `explicativo.py → GEOM`): card
+  810 de largura, topo a 46%, sangrando embaixo, raio 75 · PIP Ø 367 (34% da
+  largura) com centro a 22% da altura, x a 21%/79%/50% · dividida = moldura na
+  metade de baixo · quadrado 680² · oculto = encolhe para o centro do topo e
+  some. Só vertical 9:16 por enquanto.
+- **Rosto dentro da moldura**: `rosto.json` (Haar, 2 amostras/s, cache pelo
+  mtime do corte) dá centro e largura; cada formato tem a largura do rosto
+  relativa à moldura e a altura do centro (`ROSTO`), e o vídeo é posicionado
+  para isso sem nunca descobrir a borda da moldura.
+- **Movimento** (`explicativo.js`): moldura 0,30s `power2.inOut` começando 0,1s
+  antes da palavra; volta à base 0,33s `power3.out`; troca de fundo por wipe
+  circular nascendo no centro do DESTINO da moldura, 0,2s; item entra da
+  direita (+144px) em 0,15s na palavra; conteúdo sai 0,1s antes da troca.
+- **Câmera**: só anima onde o sujeito está grande (mesma supressão por janela
+  da tela dividida). Perseguição do olhar é ignorada com aviso — a moldura já
+  enquadra o rosto.
+- **Legenda**: sobre fundo claro no PIP/oculto, o `--cap-color` do contêiner
+  vira `#101010` e volta na saída; sobre vídeo, fica a cor escolhida.
+- **Fundo**: `escuro` (radial quente #23110A→#080808 + grade de pontos) ou
+  `claro` (#FBFBFB + pontos #E9E9E9), por cena; `explicativo.fundo` define o da base.
+- **Erro de script vira falha**: o render da Fase 2 lê a saída do HyperFrames
+  e PARA se a página acusar erro — sem isso o `explicativo.js` faltando saiu
+  como "Render complete" com a moldura parada.
+
 ## Behind-the-subject (element between person and background)
 
 Puts an image or giant word(s) BEHIND the person. Great on medium/wide shots;
 on tight close-ups anchor elements to the TOP (template already does). Needs
 the matting extra: `uv sync --extra matting` (torch).
 
+**Antes: a pergunta do teste de 5s** (SKILL.md, "Recorte de fundo"). Depois,
+cada janela sai do motor APROVADO e é reaproveitada entre renders:
+
 ```bash
-uv run python helpers/person_matte.py preview.mp4 -o hyperframes/fg_<name>.mov --start <s> --duration <d>
+uv run python helpers/recorte.py processar <edit> --inicio <s> --fim <e>
+# → edit/recorte/fg_<motor>_<s>_<e>.mov
 ```
 
 Then describe each window in `edit-data.json` `behind[]` (kind image/words,
