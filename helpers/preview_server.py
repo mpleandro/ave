@@ -20,8 +20,11 @@ Routes:
   /gen/words.json       transcrito DO CORTE com a folga medida de cada fronteira
   /gen/thumbs/<n>.jpg   timeline filmstrip thumbs (auto-generated, 1 per 2s)
   /api/state    GET     state.json + mtimes (UI polls this to hot-reload)
+  /api/estilos-salvos GET  os estilos com nome (~/.avelin/estilos_salvos.json)
   /api/save     POST    body → <edit>/preview_edits.json (atomic), or
-                        <edit>/preview_style.json when body.type=="style-setup"
+                        <edit>/preview_style.json when body.type=="style-setup",
+                        <edit>/preview_amostra.json when body.type=="approve-amostra"
+                        (dispara `phase2.py --completo`)
 
 Usage:
     uv run helpers/preview_server.py [--root <videos_dir>/edit] [--port 4820]
@@ -234,7 +237,9 @@ BRAND_KEYS = ("accent", "textColor", "capColor", "fontMain", "fontAccent", "capF
 # de meses não pode morrer num `git clean` nem subir para um repositório que
 # outros clonam.
 ESTILO = Path.home() / ".avelin" / "estilo.json"
-ESTILO_KEYS = ("edit", "headline", "captions", "elements", "capDy")
+ESTILOS_SALVOS = Path.home() / ".avelin" / "estilos_salvos.json"
+ESTILO_KEYS = ("edit", "headline", "captions", "elements", "capDy",
+               "hookDx", "hookDy", "hookScale")
 
 
 def _set_root(p: Path | None) -> None:
@@ -712,6 +717,8 @@ class Handler(BaseHTTPRequestHandler):
             self._brand_get()
         elif path == "/api/estilo":
             self._estilo_get()
+        elif path == "/api/estilos-salvos":
+            self._estilos_salvos()
         elif path == "/api/localfonts":
             self._localfonts()
         elif path == "/download":
@@ -761,6 +768,11 @@ class Handler(BaseHTTPRequestHandler):
         # que "conserte isto" é contraditória por construção.
         if body.get("type") == "approve-cut":
             name = "preview_approval.json"
+        elif body.get("type") == "approve-amostra":
+            # A amostra da Fase 2 aprovada: o próximo passo é o render inteiro.
+            # Arquivo próprio pela razão da aprovação do corte — é decisão de
+            # fase, e um pedido de correção no mesmo arquivo a contradiria.
+            name = "preview_amostra.json"
         elif body.get("type") == "style-setup":
             name = "preview_style.json"
             self._estilo_lembrar(body)
@@ -823,10 +835,12 @@ class Handler(BaseHTTPRequestHandler):
         # exatamente o erro que originou este encadeamento.
         if name == "preview_approval.json":
             return self._gate_then_approve()
+        if name == "preview_amostra.json":
+            return self._spawn_helper("phase2.py", ["--completo"])
         script = "apply_edits.py" if name == "preview_edits.json" else "phase2.py"
         return self._spawn_helper(script)
 
-    def _spawn_helper(self, script: str) -> bool:
+    def _spawn_helper(self, script: str, extra: list[str] | None = None) -> bool:
         """Dispara um helper em segundo plano — e VÊ como ele terminou.
 
         O que havia aqui era `stdout=DEVNULL, stderr=DEVNULL` seguido de
@@ -858,7 +872,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             proc = subprocess.Popen(
                 [helper_python(), str(Path(__file__).resolve().parent / script),
-                 str(self.root)],
+                 str(self.root), *(extra or [])],
                 stdout=fh, stderr=subprocess.STDOUT,
                 start_new_session=True,
             )
@@ -1088,6 +1102,16 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, json.JSONDecodeError):
             d = {}
         self._json({k: d[k] for k in ESTILO_KEYS if k in d})
+
+    def _estilos_salvos(self) -> None:
+        """Os estilos com nome (`helpers/estilos_salvos.py`) — a aba Estilo os
+        mostra como os primeiros cartões da seção Formato. Só leitura: quem
+        salva é a IA, depois de perguntar ao usuário."""
+        try:
+            d = json.loads(ESTILOS_SALVOS.read_text())
+        except (OSError, json.JSONDecodeError):
+            d = {}
+        self._json({"estilos": d.get("estilos", []) if isinstance(d, dict) else []})
 
     def _estilo_lembrar(self, body: dict) -> None:
         """Guarda as escolhas do envio de estilo para o PRÓXIMO projeto.
@@ -1497,6 +1521,13 @@ class Handler(BaseHTTPRequestHandler):
             p = self._safe(self.root, rel)
             if p and p.exists():
                 mtimes[key] = p.stat().st_mtime
+        # a amostra da Fase 2 mora num sub-objeto; o editor compara a data dela
+        # com a do final para saber qual dos dois é o estilo mais recente
+        am = state.get("amostra")
+        if isinstance(am, dict) and am.get("video"):
+            p = self._safe(self.root, am["video"])
+            if p and p.exists():
+                mtimes["amostra"] = p.stat().st_mtime
         edl = None
         rel = state.get("edl") or "edl.json"
         p = self._safe(self.root, rel)

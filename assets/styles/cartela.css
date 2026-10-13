@@ -445,3 +445,19 @@
 .ave-cartela .hl-line.ct-escuro { color: var(--hl-sobre); }
 .ave-cartela .hl-line.ct-claro { color: var(--hl-papel); }
 .ave-cartela .hl-line.ct-serif { font-family: var(--hl-serif); font-style: italic; letter-spacing: 0; }
+
+/* Capa SEM chapa (hook.semFundo): o vídeo fica à vista, então o texto precisa
+   de sombra para ler sobre qualquer fundo. */
+.ave-cartela.ct-semfundo .ct-linhas, .ave-cartela.ct-semfundo .ct-olho {
+  text-shadow: 0 calc(6px * var(--hl-scale)) calc(34px * var(--hl-scale)) rgba(0,0,0,.65),
+               0 0 calc(10px * var(--hl-scale)) rgba(0,0,0,.45);
+}
+.ave-cartela.cheia.ct-semfundo .ct-bloco {
+  justify-content: flex-start;
+  padding-top: calc(170px * var(--hl-scale));
+}
+.ave-cartela.ct-semfundo .ct-olho {
+  font-size: calc(50px * var(--hl-scale));
+  letter-spacing: 0.04em;
+  margin-bottom: calc(10px * var(--hl-scale));
+}

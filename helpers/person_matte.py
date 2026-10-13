@@ -61,6 +61,11 @@ def main() -> None:
     ap.add_argument("--start", type=float, default=0.0, help="Start time (s)")
     ap.add_argument("--duration", type=float, default=None, help="Duration (s); default = to end")
     ap.add_argument("--crf", type=int, default=20, help="VP9 quality (lower = better)")
+    ap.add_argument("--fgr", action="store_true",
+                    help="cor DESCONTAMINADA do RVM em vez da fonte — para pôr a pessoa "
+                         "sobre um fundo DIFERENTE (cabeça vazando a moldura). Com a cor "
+                         "da fonte, a borda do cabelo carrega a parede original e vira "
+                         "halo claro sobre fundo escuro (medido)")
     args = ap.parse_args()
 
     import torch
@@ -120,6 +125,8 @@ def main() -> None:
             src = torch.from_numpy(rgb).float().div(255.0).permute(2, 0, 1).unsqueeze(0).to(device)
             _fgr, pha, *rec = model(src, *rec, downsample_ratio=ratio)
             a = pha.clamp(0, 1)[0, 0].cpu().numpy()                   # H,W alpha
+            if args.fgr:
+                rgb = (_fgr.clamp(0, 1)[0].permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
             # Composite the ORIGINAL source RGB (not RVM's decontaminated fgr)
             # with the alpha. The behind-subject effect keeps the SAME background
             # (the base cut), so source pixels make the person seamless over the

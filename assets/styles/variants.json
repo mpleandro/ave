@@ -1432,6 +1432,32 @@
       },
       "upperLines": null
     },
+    "tarjas": {
+      "weights": [
+        800,
+        800,
+        900
+      ],
+      "cap": 118,
+      "safeW": 880,
+      "lh": 1.0,
+      "top": 210,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": true,
+      "align": "center",
+      "gradient": null,
+      "sizes": null,
+      "heroMid": true,
+      "minorK": 0.6,
+      "fontRole": null,
+      "_note": "Tarjas empilhadas, cada linha na sua: as de fora numa tarja clara (a cor principal) com texto escuro, a do MEIO maior numa tarja no destaque com texto na principal. É o gancho de referência \"A Igreja odeia os / Legendários? / Assista até o final!\". A linha herói é a do meio (n//2): em duas linhas, a segunda. `hook.hero` no edit-data troca qual linha é a herói sem trocar de layout.",
+      "paint": {
+        "lines": "main",
+        "lineBox": "main",
+        "heroBox": "accent"
+      }
+    },
     "fita": {
       "motor": "cartela",
       "cheia": false,
@@ -2452,6 +2478,19 @@
         "stacked": -0.3,
         "scatter": -0.03
       }
+    },
+    "cheia": {
+      "band": 1920,
+      "zoom": 1.0,
+      "focusY": 0,
+      "captionBottom": 430,
+      "seam": false,
+      "hookTop": 738,
+      "centreOffset": {
+        "stacked": 0,
+        "scatter": 0
+      },
+      "_nota": "B-ROLL DE TELA CHEIA. A faixa de arte ocupa o quadro inteiro (band=1920), então a janela do vídeo fica com altura 0 e o a-roll some atrás dela — que é o que 'corte de apoio' quer dizer. Existe porque o vocabulário do curta só tinha arte em FAIXA (750px, com o rosto embaixo) e cartão do Broll Overlay (880px com borda): nenhum dos dois é um corte de apoio. `captionBottom` é o MESMO 430 do padrão, de propósito — sem costura para desviar, a legenda não tem por que sair do lugar."
     },
     "_centre_readme": "Para os estilos ancorados no CENTRO (empilhado, disperso), a tela dividida precisa de deslocamento próprio — converter o `captionBottom` põe o centro do bloco onde ficaria a BASE do karaokê, que é mais baixo do que se quer. `stacked`/`top` = -0.167 é o valor documentado e medido no original. Os outros três são DERIVADOS da janela de vídeo de cada layout (top: 750–1920, bottom: 0–1170) e nunca foram conferidos em filmagem — se a legenda encostar no queixo ou na costura, é aqui que se ajusta."
   },
