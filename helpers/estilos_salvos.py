@@ -5,7 +5,7 @@ Um vídeo entregue e aprovado carrega dezenas de decisões que o próximo da mes
 série quer repetir: formato, headline, legenda, cores, fontes, posições,
 elementos, as opções da moldura explicativa. O `estilo.json` lembra só a ÚLTIMA
 escolha (um espaço, sobrescrito a cada envio); isto guarda VÁRIAS, com o nome
-que o usuário deu — "Reels Vértuz", "Aulas do curso X".
+que o usuário deu — "Reels da Marca", "Aulas do curso X".
 
 Mora em `~/.avelin/estilos_salvos.json`, fora do clone e do projeto, pela razão
 da marca: é de quem edita, não do vídeo. A aba Estilo mostra cada um como o
@@ -13,9 +13,9 @@ primeiro cartão da seção Formato, com borda laranja e o nome; clicar aplica
 tudo. Quem SALVA é a IA, depois da entrega, perguntando (AskUserQuestion) —
 ver SKILL.md, "Estilos salvos".
 
-    estilos_salvos.py salvar <edit> --nome "Reels Vértuz"
+    estilos_salvos.py salvar <edit> --nome "Reels da Marca"
     estilos_salvos.py listar
-    estilos_salvos.py remover --nome "Reels Vértuz"
+    estilos_salvos.py remover --nome "Reels da Marca"
     estilos_salvos.py igual <edit>      # já existe um salvo idêntico? (exit 0 = sim)
 """
 from __future__ import annotations

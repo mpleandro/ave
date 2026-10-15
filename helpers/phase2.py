@@ -305,7 +305,7 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         data.pop("questionBox", None)
     # ESTILO SALVO escolhido (helpers/estilos_salvos.py): fonte e cor dele
     # também valem. O envio comum não as aplica — a aba manda as de fábrica e
-    # quem muda fonte e cor é o chat —, mas escolher "Reels Vértuz" é pedir
+    # quem muda fonte e cor é o chat —, mas escolher "Reels da Marca" é pedir
     # o pacote inteiro, letra e cor inclusas.
     if pick.get("estiloSalvo"):
         hook = data.setdefault("hook", {})

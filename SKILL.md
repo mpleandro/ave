@@ -1279,13 +1279,13 @@ entregue, com `AskUserQuestion` (header `Estilo`), uma vez por entrega:
 > *"Quer salvar este estilo para os próximos vídeos? Ele aparece primeiro na
 > aba Estilo, com o nome que você der."*
 > · **Salvar como "<sugestão>"** (Recomendado) — sugestão tirada do projeto ou
->   da série ("Reels Vértuz", "Aulas do curso X"), nunca um nome técnico
+>   da série ("Reels da Marca", "Aulas do curso X"), nunca um nome técnico
 > · **Não salvar**
 > (o **Other** é onde ele digita o próprio nome)
 
 ```bash
 uv run python helpers/estilos_salvos.py igual <edit>     # exit 0 = já existe idêntico
-uv run python helpers/estilos_salvos.py salvar <edit> --nome "Reels Vértuz"
+uv run python helpers/estilos_salvos.py salvar <edit> --nome "Reels da Marca"
 ```
 
 - **Não pergunte** se o vídeo saiu de um estilo salvo sem mudança
