@@ -456,6 +456,11 @@
   justify-content: flex-start;
   padding-top: calc(170px * var(--hl-scale));
 }
+/* hook.posicao = "centro": a capa sem chapa no MEIO da tela (destaque máximo) */
+.ave-cartela.cheia.ct-semfundo.ct-centro .ct-bloco {
+  justify-content: center;
+  padding-top: calc(120px * var(--hl-scale));
+}
 .ave-cartela.ct-semfundo .ct-olho {
   font-size: calc(50px * var(--hl-scale));
   letter-spacing: 0.04em;

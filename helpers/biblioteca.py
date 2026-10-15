@@ -3,7 +3,7 @@
 
     uv run python helpers/biblioteca.py --candidatos <edit-dir>
     uv run python helpers/biblioteca.py --registrar ~/Marca/logo.png --tipo logo \\
-        --nome "Vértuz branco" --tags marca,claro --nota "só sobre fundo escuro"
+        --nome "Logo branco" --tags marca,claro --nota "só sobre fundo escuro"
     uv run python helpers/biblioteca.py --pasta ~/Music/"Own SFX"/riser --tipo sfx --papel riser
     uv run python helpers/biblioteca.py --listar [--tipo sfx] [--json]
     uv run python helpers/biblioteca.py --resolver --tipo sfx --papel riser [--json]

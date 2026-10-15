@@ -500,8 +500,57 @@ def fx_maos(frames, rot, M):
     return out
 
 
+def fx_vertigo(frames, rot, M):
+    """VERTIGO (dolly zoom), do motor de efeitos (gancho, 2026-10-15): a
+    pessoa fica do MESMO tamanho e o fundo recua, como câmera afastando com
+    zoom fechando. A pessoa sai do recorte (MediaPipe); o fundo é uma placa
+    sem ela (inpaint em 1/4 da resolução) encolhida em torno do centro da
+    pessoa — encolher, e não ampliar, para o buraco do inpaint ficar ATRÁS
+    dela em vez de virar um halo borrado em volta. Borda que sobra: espelho,
+    com um desfoque que cresce junto com o efeito para a costura não ler."""
+    ms = mascaras(frames)
+    n = len(frames)
+    out = []
+    for i, (f, m) in enumerate(zip(frames, ms)):
+        h, w = f.shape[:2]
+        t = i / max(1, n - 1)
+        forca = ease(min(1.0, t / 0.75)) * rampa(i, n, ent=0.0, sai=0.35)
+        if forca < 1e-3:
+            out.append(f)
+            continue
+        k = 1.0 - 0.3 * forca
+        ys, xs = np.nonzero(m > 0.5)
+        cx, cy = (float(xs.mean()), float(ys.mean())) if len(xs) else (w / 2, h / 2)
+        q = 4
+        pequeno = cv2.resize(f, (w // q, h // q), interpolation=cv2.INTER_AREA)
+        buraco = (cv2.resize(m, (w // q, h // q)) > 0.25).astype(np.uint8) * 255
+        buraco = cv2.dilate(buraco, np.ones((9, 9), np.uint8))
+        placa = cv2.inpaint(cv2.cvtColor(pequeno, cv2.COLOR_RGB2BGR), buraco, 6, cv2.INPAINT_TELEA)
+        placa = cv2.cvtColor(cv2.resize(placa, (w, h), interpolation=cv2.INTER_CUBIC), cv2.COLOR_BGR2RGB)
+        # pixels do fundo fora do recorte voltam nítidos; só o miolo é placa
+        mm = cv2.GaussianBlur(m, (0, 0), 3)[..., None]
+        fundo = (f * (1 - mm) + placa * mm).astype(np.float32)
+        A = np.float32([[k, 0, cx * (1 - k)], [0, k, cy * (1 - k)]])
+        # a borda que sobra NÃO é espelho (medido: o espelho repetia o teto e
+        # desenhava uma linha no alto): é a própria placa, bem desfocada, e a
+        # costura some numa rampa de 40px
+        valido = cv2.warpAffine(np.ones((h, w), np.float32), A, (w, h), flags=cv2.INTER_LINEAR,
+                                borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        valido = cv2.GaussianBlur(cv2.erode(valido, np.ones((41, 41), np.uint8)), (0, 0), 14)[..., None]
+        encolhido = cv2.warpAffine(fundo, A, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+        enchimento = cv2.GaussianBlur(fundo, (0, 0), 30)
+        fundo = encolhido * valido + enchimento * (1 - valido)
+        sig = 6.0 * forca
+        if sig > 0.3:
+            fundo = cv2.GaussianBlur(fundo, (0, 0), sig)
+        a = m[..., None]
+        out.append(np.clip(f * a + fundo * (1 - a), 0, 255).astype(np.uint8))
+    return out
+
+
 EFEITOS = {"profundidade": fx_profundidade, "recorte": fx_recorte, "nuvem": fx_nuvem,
-           "painel": fx_painel, "maos": fx_maos}
+           "painel": fx_painel, "maos": fx_maos,
+           "vertigo": fx_vertigo}
 
 
 # ---------------------------------------------------------------- plano

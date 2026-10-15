@@ -314,6 +314,45 @@ motor `palavra`, e consertado junto):
 - **O `cinema` nascia debaixo da interface.** Fundo do bloco em 0.12 do quadro,
   com o rodapé da plataforma começando em 0.13. Subiu para 290px do fundo.
 
+### A HEADLINE TAMBÉM NÃO CAI NO ROSTO (desde 14/10/2026)
+
+A proteção do rosto cobre **três peças**: a legenda (queixo, acima), a
+Caixinha (topo da cabeça, abaixo) e a **headline do gancho** — que até
+14/10/2026 nunca tinha sido incluída, apesar de nascer no alto do quadro
+(`top` 190–360px no catálogo), exatamente na faixa da testa de quem grava em
+plano médio.
+
+`helpers/caption_safe.py <edit> --headline [--aplicar] [--json]`:
+
+- mede **topo da cabeça (p10) e queixo (p90)** — os dois, porque o bloco da
+  headline pode cair no rosto por qualquer lado — **só na janela do gancho**
+  (0 → `hook.endSec`, no tempo do corte), não no vídeo inteiro: um aperto da
+  câmera dinâmica no minuto 1 não decide onde fica um texto que saiu aos 4s;
+- calcula o bloco pela **mesma conta do compositor** (`hl_fit`/`hl_ks`, `top`
+  do edit-data ou do catálogo, piso da área segura, arrasto `dy`/`scale`); a
+  altura das peças (fita, cartão, painel, sobrancelha) é estimativa
+  generosa — errar para mais só afasta o texto do rosto;
+- se o bloco entra no retângulo do rosto, escreve `hook.top`: primeiro
+  **acima da cabeça**, se couber abaixo da área segura do topo (260px); senão
+  **abaixo do queixo**, se couber acima da legenda (a posição real dela, com o
+  `paddingBottom`/`offsetY` já medidos) e do rodapé da plataforma;
+- sem lugar bom, **avisa e não mexe** — o conserto é encurtar o texto,
+  reenquadrar, trocar para cartela de tela cheia ou `hook.top` à mão.
+
+Quem entra: as bandas antigas (`card`, `outline`, `realce`, …) e as cartelas
+`cheia: false` (`fita`, `jornal`, `terminal`, …). Quem não entra: a cartela
+de tela cheia com chapa (ela cobre o vídeo) e o gancho sob tela dividida (a
+altura é a do layout, `split.<layout>.hookTop`). **Exceção medida:** a tela
+cheia sem chapa — `semFundo`, ou `capa_blur` com `semBlur` — deixa o vídeo
+aparecer e o texto volta a ficar sobre o rosto; ela não tem `top` (o bloco é
+posto por flex, alto ou `posicao: "centro"`), então a checagem só **avisa**.
+
+`phase2.py` roda isso depois da legenda (o chão da headline é o topo da
+legenda já medida) e da Caixinha, e pula quando a Caixinha ou a Notícia estão
+ligadas — as duas têm a trava própria com as cartelas banda (ver a seção da
+Caixinha). **`hook.top` ou `hook.dy` postos à mão vencem a medição**: o helper
+mede e avisa, mas não sobrescreve.
+
 ### The accent colour (`accent` in preview_style.json)
 
 O accent é o mesmo da headline e da legenda; o padrão DO PRODUTO é o
@@ -747,7 +786,9 @@ Regras de operação, todas decididas pelo usuário (2026-08-19):
    `caption_safe.caixa_bate_no_rosto()` mede o topo da cabeça (p10 — a cabeça
    mais alta do corte, não a média) e devolve `bate` + `sugestaoTopPx`. Se
    bater, a pergunta ao usuário já vai com a alternativa: pergunta sem saída é
-   aviso disfarçado.
+   aviso disfarçado. É uma das três peças da proteção do rosto — legenda,
+   Caixinha e, desde 14/10/2026, a headline (`--headline`; ver "A HEADLINE
+   TAMBÉM NÃO CAI NO ROSTO").
 
 **De-conflito com Headline: TRAVA, não reposicionamento** (decisão do usuário,
 2026-08-23). A caixinha e QUALQUER cartela "banda" (`cheia: false` —
@@ -1008,6 +1049,22 @@ o movimento pouco antes de a voz voltar. Se a animação da fonte não couber,
 **acelere e corte o estado ocioso** — entra já em movimento. Isso é decisão de
 ofício (Princípio 9): faça e informe.
 
+## CTA de fechamento (`cta`) — a última aba do editor
+
+Três modelos da biblioteca (`assets/cta/README.md`): **Siga o perfil**
+(cápsula no topo), **Instagram Card** e **Instagram Simples** (só o botão).
+`edit-data.json → cta: {"modelo", "arroba"}`, montado por `helpers/cta.py`.
+
+- **Foto obrigatória** no Siga o perfil e no Card: `hyperframes/cta/perfil.png`.
+  Sem ela (e sem a salva em `~/.avelin/cta/perfil.png`), a Fase 2 recusa e
+  manda pedir — no editor (arquivo, quadro do vídeo, print colado) ou
+  `cta.py foto <edit> <imagem | --quadro S>`. Nunca entregue o card sem rosto.
+- **@**: o do projeto, senão `brand.json → instagram`; sem nenhum, pergunte.
+- **Tempo**: o clique cai no último "segue/siga" da fala; sem a palavra, termina
+  no fim do vídeo; e o CTA sempre cabe inteiro. `start` no dado vence.
+- **Não monte mais CTA de seguir em `brollGraphics`** — use o modelo. Peça
+  sob medida só quando o pedido for outro (link, comentário, produto).
+
 ## Illustrative images
 
 Pexels for generic concepts (key: `PEXELS_API_KEY`). For brands/people/specific
@@ -1090,3 +1147,24 @@ setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv"
 ```
 
 Confirme também `max_volume ≤ -1 dB` (`-af volumedetect`) na entrega.
+
+
+## Efeitos (motor único, 2026-10-15)
+
+Ver SKILL.md, "Efeitos — um motor só". Protocolo da IA, sem perguntar ao usuário:
+
+1. `efeitos.py permitidos <edit>` — o que o formato deixa entrar. "Nenhum" não deixa nada.
+2. `efeitos.py candidatos <edit>` — a fala com o efeito que cada frase pede
+   (lista → `checklist`, número → `chartGrow`, app/rede → `phoneMockup`,
+   software/IA → `uiWorld`) e as frases de efeito do zoom digital.
+3. Escreva `efeitos[]` com critério: um efeito de conteúdo por vez, 3–6s, só
+   onde a fala de fato enumera/cita número/cita app. Itens de checklist com
+   2–4 palavras, cada um com a `palavra` que o cita. Gráfico com `valores`
+   reais da fala (ou proporções honestas), `numero` só se ele foi dito.
+4. `efeitos.py validar <edit> --gravar` e a Fase 2.
+
+Densidade: o motor nunca encavala dois de conteúdo; zoom digital no máximo a
+cada 5s; zoom através no máximo a cada 8s, só em junção real do corte.
+
+CTA: `cta.py momentos <edit>` → grave `cta.momento` na chamada de verdade
+(pode ser no meio do vídeo) ou `cta.momentoRevisado: true`.

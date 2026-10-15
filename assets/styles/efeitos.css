@@ -1,0 +1,236 @@
+/* EFEITOS — aparência dos efeitos da Fase 2 (helpers/efeitos_compose.py monta,
+ * efeitos.js anima). Geometria em px de 1080×1920; posição e escala chegam no
+ * `style` de cada bloco, calculadas fora do rosto e dentro da área segura.
+ *
+ * Vidro escuro e o accent do projeto (`--efx-accent`, a cor de destaque
+ * da marca do usuário): o efeito é informação por cima da pessoa, e o vidro deixa a imagem
+ * respirar por trás sem disputar com ela.
+ *
+ * Nada de transition/@keyframes aqui: quebram o seek do renderer. Tudo que se
+ * move, move pelo GSAP em tempo absoluto. */
+
+.efx { position:absolute; pointer-events:none; font-family:'Inter', system-ui, sans-serif;
+       color:#fff; -webkit-font-smoothing:antialiased; }
+.efx em { font-style:normal; color:var(--efx-accent, #ff3b30); }
+
+.efx-checklist, .efx-chart { transform:scale(var(--efx-esc, 1)); }
+
+.efx-card { position:relative; background:rgba(16,16,18,.74);
+            -webkit-backdrop-filter:blur(22px) saturate(1.25); backdrop-filter:blur(22px) saturate(1.25);
+            border:1.5px solid rgba(255,255,255,.14); border-radius:40px;
+            box-shadow:0 30px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08); }
+.efx-ponto { display:inline-block; width:14px; height:14px; border-radius:50%;
+             background:var(--efx-accent, #ff3b30); box-shadow:0 0 18px var(--efx-accent, #ff3b30); }
+
+/* ---------------------------------------------------------------- checklist */
+.efx-ck { padding:34px 38px 30px; }
+.efx-ck-head { display:flex; align-items:center; gap:16px; margin-bottom:22px;
+               font-size:30px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+               color:rgba(255,255,255,.72); }
+.efx-ck-tit { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.efx-ck-cont { position:relative; min-width:120px; height:34px; text-align:right;
+               font-size:25px; letter-spacing:.02em; text-transform:none; color:rgba(255,255,255,.55); }
+.efx-ck-n { position:absolute; right:0; top:0; white-space:nowrap; opacity:0; }
+.efx-ck-item { display:flex; align-items:center; gap:26px; height:108px;
+               border-top:1px solid rgba(255,255,255,.08); }
+.efx-ck-bola { flex:none; width:56px; height:56px; border-radius:50%;
+               border:3px solid rgba(255,255,255,.38); display:grid; place-items:center; }
+.efx-ck-bola svg { width:34px; height:34px; }
+.efx-ck-bola path { fill:none; stroke:#fff; stroke-width:3.4; stroke-linecap:round;
+                    stroke-linejoin:round; stroke-dasharray:30; stroke-dashoffset:30; }
+.efx-ck-txt { font-size:50px; font-weight:700; letter-spacing:-.01em; line-height:1.1;
+              color:rgba(255,255,255,.55); }
+
+/* ---------------------------------------------------------------- gráfico */
+.efx-ch { width:100%; height:100%; padding:32px 38px 26px; display:flex; flex-direction:column; }
+.efx-ch-head { display:flex; align-items:center; gap:16px; font-size:27px; font-weight:700;
+               letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,.72); }
+.efx-ch-big { margin-top:10px; font-size:108px; font-weight:800; letter-spacing:-.04em; line-height:1;
+              color:var(--efx-accent, #ff3b30); }
+.efx-ch-area { flex:1; display:flex; align-items:flex-end; justify-content:space-between; gap:18px;
+               margin-top:18px; padding-bottom:4px; }
+.efx-ch-col { flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end;
+              align-items:center; }
+.efx-ch-val { font-size:30px; font-weight:800; margin-bottom:10px; color:rgba(255,255,255,.9);
+              white-space:nowrap; }
+.efx-ch-bar { width:100%; max-width:84px; border-radius:16px 16px 6px 6px;
+              background:rgba(255,255,255,.26); }
+.efx-ch-col.dest .efx-ch-bar { background:var(--efx-accent, #ff3b30);
+                               box-shadow:0 0 40px rgba(255,82,45,.45); }
+.efx-ch-col.dest .efx-ch-val { color:var(--efx-accent, #ff3b30); }
+.efx-ch-rot { margin-top:12px; height:30px; font-size:24px; font-weight:600; letter-spacing:.06em;
+              text-transform:uppercase; color:rgba(255,255,255,.55); white-space:nowrap; }
+
+/* ---------------------------------------------------------------- celular */
+.efx-phonebox { --k:var(--efx-k, 1); }
+.efx-phone { position:absolute; inset:0; border-radius:calc(64px * var(--k));
+             background:#0a0a0c; border:calc(11px * var(--k)) solid #1d1d21;
+             box-shadow:0 40px 90px rgba(0,0,0,.55), 0 0 0 calc(2px * var(--k)) rgba(255,255,255,.08); }
+.efx-ph-ilha { position:absolute; z-index:3; left:50%; top:calc(18px * var(--k));
+               width:calc(122px * var(--k)); height:calc(36px * var(--k)); margin-left:calc(-61px * var(--k));
+               border-radius:999px; background:#000; }
+.efx-ph-tela { position:absolute; inset:0; border-radius:calc(53px * var(--k)); overflow:hidden; }
+.efx-ph-tela.notificacao { background:radial-gradient(120% 70% at 30% 0%, rgba(255,82,45,.55), transparent 60%),
+                                      linear-gradient(170deg, #26201f, #0d0d10 70%); }
+.efx-ph-tela.conversa { background:#0d0d10; }
+.efx-ph-img { width:100%; height:100%; object-fit:cover; }
+.efx-ph-hora { margin-top:calc(110px * var(--k)); text-align:center; font-size:calc(118px * var(--k));
+               font-weight:600; letter-spacing:-.03em; color:rgba(255,255,255,.92); }
+.efx-ph-nots { position:absolute; left:calc(18px * var(--k)); right:calc(18px * var(--k));
+               top:calc(330px * var(--k)); display:flex; flex-direction:column; gap:calc(14px * var(--k)); }
+.efx-ph-not { display:flex; gap:calc(16px * var(--k)); align-items:flex-start;
+              padding:calc(20px * var(--k)); border-radius:calc(30px * var(--k));
+              background:rgba(255,255,255,.16); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px); }
+.efx-ph-ico { flex:none; width:calc(54px * var(--k)); height:calc(54px * var(--k));
+              border-radius:calc(14px * var(--k)); background:var(--efx-accent, #ff3b30); }
+.efx-ph-app { font-size:calc(22px * var(--k)); font-weight:700; letter-spacing:.06em;
+              text-transform:uppercase; color:rgba(255,255,255,.6); }
+.efx-ph-ntx { margin-top:calc(4px * var(--k)); font-size:calc(34px * var(--k)); font-weight:600;
+              line-height:1.2; color:#fff; }
+.efx-ph-topo { display:flex; align-items:center; gap:calc(16px * var(--k));
+               padding:calc(78px * var(--k)) calc(26px * var(--k)) calc(20px * var(--k));
+               border-bottom:1px solid rgba(255,255,255,.08); }
+.efx-ph-av { width:calc(56px * var(--k)); height:calc(56px * var(--k)); border-radius:50%;
+             background:linear-gradient(135deg, var(--efx-accent, #ff3b30), #F0BE48); }
+.efx-ph-nome { font-size:calc(28px * var(--k)); font-weight:700; }
+.efx-ph-msgs { display:flex; flex-direction:column; gap:calc(14px * var(--k));
+               padding:calc(26px * var(--k)) calc(20px * var(--k)); }
+.efx-ph-msg { max-width:78%; padding:calc(16px * var(--k)) calc(22px * var(--k));
+              border-radius:calc(28px * var(--k)); font-size:calc(33px * var(--k)); font-weight:500;
+              line-height:1.25; }
+.efx-ph-msg.ele { align-self:flex-start; background:#26262b; border-bottom-left-radius:calc(8px * var(--k)); }
+.efx-ph-msg.eu { align-self:flex-end; background:var(--efx-accent, #ff3b30);
+                 border-bottom-right-radius:calc(8px * var(--k)); }
+
+/* ================================================================ GANCHO
+ * Camada ATRÁS da pessoa: o vídeo, depois estas peças, depois a pessoa
+ * recortada (`.efx-fg`) por cima — e o que é FRENTE vem depois dela. */
+
+/* ---------------------------------------------------------------- capa */
+.efx-cover-mast { left:0; right:0; top:250px; text-align:center; }
+.efx-cover-ed { font-size:26px; font-weight:700; letter-spacing:.32em; color:rgba(255,255,255,.85);
+                text-shadow:0 2px 12px rgba(0,0,0,.5); }
+.efx-cover-tit { margin-top:4px; font-family:'Playfair Display', Georgia, serif; font-weight:900;
+                 font-size:var(--mast); line-height:.86; letter-spacing:-.02em;
+                 color:var(--efx-accent, #ff3b30); text-shadow:0 6px 30px rgba(0,0,0,.25); }
+.efx-cover-front { left:130px; right:242px; bottom:340px; }
+.efx-cover-tag { display:inline-block; padding:8px 18px; margin-bottom:16px; background:var(--efx-accent, #ff3b30);
+                 font-size:26px; font-weight:800; letter-spacing:.14em; }
+.efx-cover-linha { font-size:66px; font-weight:800; line-height:1.02; letter-spacing:-.02em;
+                   text-transform:uppercase; text-shadow:0 4px 22px rgba(0,0,0,.6); margin-bottom:8px; }
+.efx-cover-bar { display:flex; align-items:flex-end; gap:16px; margin-top:22px; }
+.efx-cover-cod { width:150px; height:70px; background:#fff;
+                 background-image:repeating-linear-gradient(90deg, #111 0 3px, transparent 3px 6px, #111 6px 7px, transparent 7px 11px);
+                 border:8px solid #fff; }
+.efx-cover-num { font-size:24px; font-weight:700; letter-spacing:.1em; color:rgba(255,255,255,.85); }
+
+/* ---------------------------------------------------------------- manchetes */
+.efx-hw { inset:0; }
+.efx-hw-peca { position:absolute; width:330px; box-shadow:0 18px 40px rgba(0,0,0,.45); }
+.efx-hw-peca.jornal { background:#f3efe6; color:#141414; padding:20px 22px 24px; }
+.efx-hw-fonte { font-family:'Playfair Display', Georgia, serif; font-weight:900; font-size:22px;
+                border-bottom:2px solid #141414; padding-bottom:6px; margin-bottom:10px; letter-spacing:.04em; }
+.efx-hw-man { font-family:'Playfair Display', Georgia, serif; font-weight:700; font-size:36px; line-height:1.05; }
+.efx-hw-peca.principal { width:800px; padding:26px 32px 32px; }
+.efx-hw-peca.principal .efx-hw-fonte { font-size:28px; }
+.efx-hw-peca.principal .efx-hw-man { font-size:76px; font-weight:900; line-height:.98; }
+.efx-hw-peca.tweet { background:#fff; color:#0f1419; border-radius:22px; padding:20px 22px; width:330px; }
+.efx-hw-tw-top { display:flex; gap:12px; align-items:center; font-size:20px; margin-bottom:10px; }
+.efx-hw-tw-top b { display:block; font-weight:800; } .efx-hw-tw-top i { font-style:normal; color:#536471; }
+.efx-hw-av { width:44px; height:44px; border-radius:50%; flex:none;
+             background:linear-gradient(135deg, var(--efx-accent, #ff3b30), #F0BE48); }
+.efx-hw-tw-txt { font-size:31px; font-weight:600; line-height:1.2; }
+.efx-hw-peca.nota { background:#18181b; border:1.5px solid rgba(255,255,255,.18); border-radius:12px;
+                    padding:22px; color:#fff; }
+.efx-hw-nota { font-size:33px; font-weight:700; line-height:1.15; }
+
+/* ---------------------------------------------------------------- vídeos */
+.efx-cw { inset:0; }
+.efx-cw-cel { position:absolute; border-radius:22px; overflow:hidden; background:#222;
+              box-shadow:0 12px 30px rgba(0,0,0,.45); }
+.efx-cw-cel img { width:100%; height:100%; object-fit:cover; display:block; }
+.efx-cw-v { position:absolute; left:12px; bottom:10px; font-size:22px; font-weight:800;
+            text-shadow:0 2px 8px rgba(0,0,0,.8); }
+
+/* ---------------------------------------------------------------- moldura */
+.efx-fb-bg { inset:0; background:radial-gradient(90% 60% at 50% 30%, rgba(255,82,45,.22), transparent 70%),
+                                 linear-gradient(180deg, #17120f, #0b0a09); }
+.efx-fb-borda { left:0; top:0; width:100%; height:100%; border-radius:46px; box-sizing:border-box;
+                border:6px solid rgba(255,255,255,.92); opacity:0; }
+
+
+/* ---------------------------------------------------------------- órbita */
+.efx-orb { inset:0; }
+.efx-orb-c { position:absolute; left:0; top:0; border-radius:26px; overflow:hidden; background:#222;
+             box-shadow:0 20px 50px rgba(0,0,0,.5), 0 0 0 3px rgba(255,255,255,.85); opacity:0;
+             transform-origin:50% 50%; }
+.efx-orb-c img { width:100%; height:100%; object-fit:cover; display:block; }
+
+/* ---------------------------------------------------------------- interface */
+.efx-ui { inset:0; }
+.efx-ui-p { position:absolute; }
+.efx-ui-not { display:flex; gap:18px; align-items:center; width:440px; padding:20px 24px; border-radius:30px;
+              background:rgba(245,245,247,.86); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px);
+              color:#111; box-shadow:0 18px 40px rgba(0,0,0,.35); }
+.efx-ui-not b { display:block; font-size:21px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:#666; }
+.efx-ui-not i { display:block; font-style:normal; font-size:31px; font-weight:700; }
+.efx-ui-ico { flex:none; width:62px; height:62px; border-radius:16px; background:var(--efx-accent, #ff3b30); }
+.efx-ui-bt { padding:26px 54px; border-radius:999px; background:var(--efx-accent, #ff3b30); font-size:36px;
+             font-weight:800; box-shadow:0 16px 40px rgba(255,82,45,.4); }
+.efx-ui-cursor { position:absolute; left:70%; top:62%; width:64px; height:64px; fill:#fff;
+                 stroke:#111; stroke-width:1.3; filter:drop-shadow(0 6px 10px rgba(0,0,0,.45)); }
+.efx-ui-tg { display:flex; align-items:center; gap:26px; padding:22px 26px; border-radius:26px;
+             background:rgba(16,16,18,.8); border:1.5px solid rgba(255,255,255,.14); font-size:31px; font-weight:700; }
+.efx-ui-sw { position:relative; width:96px; height:56px; border-radius:999px; background:rgba(255,255,255,.22); }
+.efx-ui-kn { position:absolute; left:6px; top:6px; width:44px; height:44px; border-radius:50%; background:#fff; }
+.efx-ui-pr { width:420px; padding:22px 26px; border-radius:26px; background:rgba(16,16,18,.8);
+             border:1.5px solid rgba(255,255,255,.14); }
+.efx-ui-pr-top { display:flex; justify-content:space-between; font-size:28px; font-weight:700; margin-bottom:16px; }
+.efx-ui-pct { color:var(--efx-accent, #ff3b30); }
+.efx-ui-pr-bar { height:16px; border-radius:99px; background:rgba(255,255,255,.16); overflow:hidden; }
+.efx-ui-pr-fill { height:100%; width:100%; border-radius:99px; background:var(--efx-accent, #ff3b30);
+                  transform-origin:0 50%; transform:scaleX(0); }
+.efx-ui-bu { display:flex; align-items:center; gap:16px; width:480px; padding:22px 28px; border-radius:999px;
+             background:#fff; color:#111; font-size:31px; font-weight:600; box-shadow:0 16px 40px rgba(0,0,0,.35); }
+.efx-ui-bu svg { width:34px; height:34px; fill:none; stroke:#555; stroke-width:1.8; stroke-linecap:round; }
+.efx-ui-caret { width:3px; height:38px; background:var(--efx-accent, #ff3b30); }
+.efx-ui-chip { padding:14px 26px; border-radius:999px; background:rgba(16,16,18,.8); font-size:28px; font-weight:700; }
+
+/* ---------------------------------------------------------------- recuo para o app */
+.efx-rv-hole { left:0; top:0; width:100%; height:100%; border-radius:0;
+               box-shadow:0 0 0 2600px #ECE8E1; }
+.efx-rv-ui { inset:0; color:#1a1a1a; }
+.efx-rv-bar { position:absolute; left:var(--vx); width:var(--vw); top:calc(var(--vy) - 74px); height:58px;
+              display:flex; align-items:center; gap:12px; padding:0 22px; border-radius:22px 22px 0 0;
+              background:#fff; box-shadow:0 10px 30px rgba(0,0,0,.08); font-size:24px; font-weight:600; color:#555; }
+.efx-rv-bar i { width:16px; height:16px; border-radius:50%; background:#ff5f57; }
+.efx-rv-bar i:nth-child(2) { background:#febc2e; } .efx-rv-bar i:nth-child(3) { background:#28c840; }
+.efx-rv-bar span { margin-left:18px; }
+.efx-rv-tl { position:absolute; left:var(--vx); width:var(--vw); top:calc(var(--vy) + var(--vh) + 22px); height:54px;
+             display:flex; gap:6px; padding:8px; border-radius:16px; background:#fff; }
+.efx-rv-tl span { border-radius:8px; background:rgba(255,82,45,.28); }
+.efx-rv-tl span:nth-child(2n) { background:rgba(40,40,40,.16); }
+.efx-rv-tl b { position:absolute; top:-6px; bottom:-6px; left:38%; width:4px; border-radius:2px; background:var(--efx-accent, #ff3b30); }
+.efx-rv-card { position:absolute; left:var(--cx, var(--vx)); width:var(--cw, var(--vw)); box-sizing:border-box; top:calc(var(--vy) + var(--vh) + 100px);
+               display:flex; align-items:center; gap:20px; padding:20px 22px; border-radius:26px; background:#fff;
+               box-shadow:0 18px 40px rgba(0,0,0,.12); }
+.efx-rv-av { flex:none; width:76px; height:76px; border-radius:50%; overflow:hidden;
+             background:linear-gradient(135deg, var(--efx-accent, #ff3b30), #F0BE48); }
+.efx-rv-av img { width:100%; height:100%; object-fit:cover; }
+.efx-rv-tx { flex:1; min-width:0; } .efx-rv-tx b { display:block; font-size:30px; font-weight:800; }
+.efx-rv-tx i { display:block; font-style:normal; font-size:22px; color:#777; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.efx-rv-bt { display:grid; place-items:center; height:70px; min-width:200px; padding:0 26px; border-radius:999px;
+             background:var(--efx-accent, #ff3b30); color:#fff; font-size:28px; font-weight:800; }
+.efx-rv-bt .a, .efx-rv-bt .b { grid-area:1/1; } .efx-rv-bt .b { opacity:0; }
+.efx-rv-cursor { position:absolute; left:0; top:0; width:70px; height:70px; fill:#fff; stroke:#111; stroke-width:1.3;
+                 filter:drop-shadow(0 6px 10px rgba(0,0,0,.35)); }
+
+
+/* ---------------------------------------------------------------- formatos de recorte */
+.efx-ft-marca { inset:0; background:radial-gradient(80% 50% at 50% 28%, rgba(255,82,45,.55), transparent 70%),
+                                   radial-gradient(70% 40% at 80% 90%, rgba(240,190,72,.25), transparent 70%),
+                                   linear-gradient(180deg, #1c1411, #0b0a0a); }
+.efx-cd-papel { inset:0; background-color:#f1ecdf;
+                background-image:repeating-linear-gradient(0deg, rgba(80,110,160,.16) 0 2px, transparent 2px 64px),
+                                 linear-gradient(90deg, transparent 112px, rgba(216,74,58,.35) 112px 115px, transparent 115px); }
+.efx-cd-rab { position:absolute; inset:0; width:100%; height:100%; }
