@@ -62,6 +62,9 @@ TRACK = {
     "caption": 6,
     "wordaccent": 7,
     "hook": 8,       # acima da legenda: os dois disputam a costura
+    # O EMPILHAMENTO É A ORDEM NO DOCUMENTO, não o track-index: o `#hook` vem
+    # DEPOIS da arte do split no HTML — antes dela, a imagem da faixa cobria a
+    # Notícia inteira (2026-10-14).
     "transicao": 9,  # por cima de tudo que é imagem
     "soundtrack": 10,
     "sfx": 11,
@@ -401,7 +404,9 @@ def split_windows(data: dict, H: int, duration: float) -> list[dict]:
             # ser a costura e passa a ser a tarja: a base do bloco pousa um
             # respiro acima do fim dela, de modo que uma deixa de duas linhas
             # ainda caiba dentro. Sem faixa, segue o valor do layout.
-            "captionBottom": (
+            # `captionBottom` na janela vence: a headline na costura empurra a
+            # legenda para cima, sobre a arte, enquanto as duas convivem.
+            "captionBottom": float(it["captionBottom"]) if it.get("captionBottom") is not None else (
                 round(H - (band + strip) + 30) if (is_top and strip)
                 else (round(band + strip + 30) if (not is_top and strip)
                       else lay["captionBottom"])),
@@ -1550,7 +1555,12 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
     if (h.get("cheia") and "svg" not in pecas and "blur" not in pecas
             and not hook.get("semFundo")):
         fora += '<i class="ct-fundo"></i>'
-    if "blur" in pecas:
+    # `hook.semBlur`: o MESMO layout sem o desfoque (pedido do usuário,
+    # 2026-10-13 — "remova o blur do gancho"). Trocar para outra capa mudava o
+    # desenho inteiro (a `capa` põe a 1ª linha como sobrancelha, no canto);
+    # com semBlur a capa desfocada fica igual, com o vídeo nítido atrás.
+    # Combine com `semFundo` para ganhar a sombra de leitura do texto.
+    if "blur" in pecas and not hook.get("semBlur"):
         fora += '<i class="ct-blur"></i>'
     if "vinheta" in pecas:
         fora += '<i class="ct-vinheta"></i>'
@@ -1564,6 +1574,10 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
     cheia = " cheia" if h.get("cheia") else ""
     if hook.get("semFundo"):
         cheia += " ct-semfundo"
+    # sem fundo a capa sobe para o alto (para não cobrir o rosto); `posicao:
+    # "centro"` a devolve ao meio da tela quando o destaque é o que importa
+    if hook.get("posicao") == "centro":
+        cheia += " ct-centro"
     # `--hl-sobre` (o texto POR CIMA do papel/accent nos layouts antigos —
     # fita, balão, adesivo, cortina) nasce fixo em cartela.css (#10202e): é
     # desenho deliberado, não uma cor esquecida. Mas `hook.sobre` no
@@ -1579,6 +1593,7 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
              f'data-track-index="{TRACK["hook"]}" '
              f'style="--hl-scale:1; --hl-size:{size:.2f}; --hl-lh:{h["lh"]}; '
              f'--hl-top:{top}; --hl-main:{main_color}; --hl-accent:{accent}; '
+             + (f'--hl-box:{hook["box"]}; ' if hook.get("box") else '') +
              f'--hl-accent-rgb:{rgb_trio(accent)}; --hl-deep:{deep}; '
              f'--hl-sobre-accent:{sobre_accent(accent)}; {sobre}{nt}'
              f'--hl-stroke:{h.get("stroke", 0)}; '
@@ -1641,7 +1656,9 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
     # AJUSTE POR PROJETO da medida da cartela: `cap` (teto do corpo) e `safeW`
     # (largura útil do texto). O catálogo dá o default; um vídeo que estreita o
     # card precisa estreitar o texto junto, senão a manchete transborda.
-    h = {**h, **{k: hook[k] for k in ("cap", "safeW") if k in hook}}
+    # + `paint` (cor por linha, ex. ["main","main","accent"]) e `weights` —
+    # o destaque de UMA linha é escolha do projeto, não do catálogo.
+    h = {**h, **{k: hook[k] for k in ("cap", "safeW", "paint", "weights", "sizes") if k in hook}}
     h = _hl_seguro(h, data)
     if h.get("heroMid") and hook.get("hero") is not None:
         h["heroIndex"] = hook["hero"]
@@ -1747,6 +1764,7 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
              f'data-duration="{end:.3f}" data-track-index="{TRACK['hook']}" '
              f'style="--hl-scale:1; --hl-size:{size:.2f}; --hl-lh:{h["lh"]}; '
              f'--hl-top:{top}; --hl-main:{main_color}; --hl-accent:{accent}; '
+             + (f'--hl-box:{hook["box"]}; ' if hook.get("box") else '') +
              f'--hl-font:{hl_css_family(fonts["main"])}; '
              f'--hl-font-accent:{hl_css_family(fonts["accent"])}; '
              f'--hl-stroke:{h["stroke"]};{extra}">'
@@ -1932,7 +1950,8 @@ def camera_parts(data, duration):
     defaults = VARIANTS["camera"]
     segs = data.get("_segments") or []
     off = bool(data.get("_camOff"))
-    zoom_cuts = bool(els.get("zoomCuts", True)) and bool(segs) and not off
+    # desligado por padrão (pedido do usuário, 2026-10-15): só entra marcado
+    zoom_cuts = bool(els.get("zoomCuts", False)) and bool(segs) and not off
     zoom_auto = bool(els.get("zoomAuto", True)) and bool(segs) and not off
 
     js, style, blocks = "", "", []
@@ -2314,6 +2333,17 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
                 # a valer nos trechos de base
                 data = {**data, "_camOff": not vivos}
     cam_js, cam_style, trans_blocks = camera_parts(data, duration)
+    # EFEITOS (efeitos_compose.py): blocos, linha de JS e sons. Os sons entram
+    # em `events` aqui, antes de sfx_blocks olhar a lista.
+    efx = None
+    if data.get("_efx"):
+        import efeitos_compose
+        efx = efeitos_compose.montar(data, data["_efx"], duration, accent, events) or None
+        # A CAPA DE REVISTA desenha o texto do gancho ela mesma: a headline
+        # por cima seria o mesmo texto duas vezes
+        if efx and efx.get("substituiHook"):
+            hook_block, hook_css = "", ""
+            data = {**data, "hook": {**(data.get("hook") or {}), "enabled": False}}
 
     # A FAMÍLIA ESCOLHIDA NA ABA ESTILO, com o padrão sendo a do próprio
     # estilo. Vazio aqui não é "sem fonte": é "a de fábrica", e por isso a
@@ -2362,6 +2392,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
             gfont = f"{gfont}&{q}"
     if exp:
         gfont = f"{gfont}&{exp['gfont']}"
+    if efx and efx.get("gfont"):
+        gfont = f"{gfont}&{efx['gfont']}"
 
     if style_id == "stacked":
         cap_css = ('<link rel="stylesheet" href="styles/stacked.css">\n'
@@ -2503,6 +2535,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         parts.append(cam_js)
     if exp:
         parts.append(exp["js"])
+    if efx:
+        parts.append(efx["js"])
     needs_tl = bool(parts)
     track_tag = '<script src="styles/tracking.js"></script>' if track_js else ""
 
@@ -2639,6 +2673,23 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         print(f"  aviso: gráfico sob medida '{gid}' sem arquivo em "
               f"compositions/{gid}.html — não vai aparecer", file=sys.stderr)
 
+    # CTA DE FECHAMENTO — a última aba do editor (`edit-data.json → cta`).
+    # Modelos da biblioteca em assets/cta/; quem monta é `helpers/cta.py`, que
+    # também alinha o clique do botão com o último "segue/siga" da fala.
+    import cta as _cta
+    _proj = Path(data.get("_proj", "."))
+    try:
+        _palavras = json.loads((_proj / "captions.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        _palavras = []
+    cta_html, cta_avisos = _cta.montar(
+        data, _proj, duration, _palavras, events, TRACK["bespoke"],
+        TRACK["overlay"], TRACK["audio"], data.get("width", 1080), data.get("height", 1920))
+    for w in cta_avisos:
+        print(w, file=sys.stderr)
+    if cta_html:
+        bg_blocks.append(cta_html)
+
     persp_html, persp_js = perspectiva_markup(data, duration, events)
 
     # Broll Overlay ANTES do corte de efeitos: as janelas emitem os próprios
@@ -2666,8 +2717,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     snd = data.get("soundtrack") or {}
     track_block = ""
     if snd.get("enabled") and snd.get("file"):
-        track_block = (f'  <audio id="soundtrack" src="{snd["file"]}" data-start="0" '
-                       f'data-duration="{duration:.3f}" data-track-index="{TRACK['soundtrack']}" '
+        # `start`: a trilha pode entrar no meio — num react o trecho de
+        # terceiro já traz a música dele, e duas trilhas juntas brigam.
+        s0 = min(max(0.0, float(snd.get("start", 0) or 0)), duration)
+        track_block = (f'  <audio id="soundtrack" src="{snd["file"]}" data-start="{s0:.3f}" '
+                       f'data-duration="{duration - s0:.3f}" data-track-index="{TRACK['soundtrack']}" '
                        f'data-volume="{snd.get("volume", 0.1)}"></audio>')
 
     insert_html = "\n".join(insert_blocks)
@@ -2753,6 +2807,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 <link href="https://fonts.googleapis.com/css2?{gfont}&display=swap" rel="stylesheet">
 {gsap_tag}
 {exp["tag"] if exp else ""}
+{efx["tag"] if efx else ""}
 {cam_tag}
 {track_tag}
 {split_tag}
@@ -2764,6 +2819,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 {hook_css}
 {extra_css}
 {exp["css"] if exp else ""}
+{efx["css"] if efx else ""}
 {split_css}
 {bo_css}
 {cx_css}
@@ -2779,16 +2835,17 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
      tamanho do pai), e o punch não teria o que escalar. */
   #vidwin {{ position:absolute; inset:0; }}
   #a-roll {{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover;
-             {"transform-origin:0 0;" if track_js else cam_style} }}
+             {"transform-origin:0 0;" if track_js else cam_style} {(efx or {}).get("arollStyle") or ""} }}
 </style>
 </head>
 <body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="{duration:.3f}"
-     data-width="{W}" data-height="{H}"{no_tl}>
+     data-width="{W}" data-height="{H}"{no_tl}{f' style="{efx["style"]}"' if efx else ""}>
 
 {exp["antes"] if exp else ""}
+{efx["antes"] if efx else ""}
   <div id="vidwin">
-    <video id="a-roll" class="clip" src="{video}" muted playsinline
+    <video id="a-roll" class="clip" src="{(efx or {}).get("arollSrc") or video}" muted playsinline
            data-start="0" data-duration="{vdur:.3f}" data-track-index="{TRACK['aroll']}"></video>
   </div>
   <!-- Áudio como trilha própria, do mesmo arquivo. Medido: drift zero em 78s e
@@ -2798,12 +2855,13 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
          data-track-index="{TRACK['audio']}" data-volume="1"></audio>
 
 {exp["depois"] if exp else ""}
+{efx["depois"] if efx else ""}
 {persp_html}
-{hook_block}
 {fade_html}
 {cx_html}
 {split_block}
 {bo_html}
+{hook_block}
 {chr(10).join(trans_blocks)}
 {insert_html}
 {wa_html}
@@ -2893,7 +2951,7 @@ def main() -> None:
             shutil.copy2(src, sfxdir / spec["file"])
 
     if (data.get("camera", {}).get("enabled", True)
-            and any((data.get("elements") or {}).get(k, True) for k in ("zoomCuts", "zoomAuto"))) \
+            and any((data.get("elements") or {}).get(k, d) for k, d in (("zoomCuts", False), ("zoomAuto", True)))) \
             or data.get("transitions"):
         files += ["camera.js", "camera.css"]
     for f in files:
@@ -2948,6 +3006,21 @@ def main() -> None:
                 for s in autor]
     data["_segments"] = segs
 
+    # EFEITOS (helpers/efeitos.py): resolvidos AQUI, antes das deixas, porque
+    # efeito de conteúdo cala a legenda na janela dele (é o texto do momento)
+    # e porque a câmera some onde a pessoa recortada tem de casar com o vídeo.
+    data["_proj"] = str(proj)
+    data["_video"] = args.video
+    import efeitos_compose
+    efx_plano = efeitos_compose.preparar(data, duration, segs)
+    if efx_plano:
+        data["_efx"] = efx_plano
+        if efx_plano["travas"]:
+            data["_segments"] = efeitos_compose.aparar_planos(data["_segments"],
+                                                              efx_plano["travas"])
+        for f in ("efeitos.css", "efeitos.js"):
+            shutil.copy2(STYLES_DIR / f, proj / "styles" / f)
+
     # DURANTE UM BROLL OVERLAY A LEGENDA SAI DE CENA (pedido do usuário,
     # 2026-08-19): o overlay já é o texto do momento, e os dois juntos
     # disputavam a mesma tela. Filtrado pelo PONTO MÉDIO da deixa — uma deixa
@@ -2979,9 +3052,21 @@ def main() -> None:
     # quadro, então a legenda por baixo não é disputa de espaço — é texto
     # invisível, e o `check` acusa "texto escondido sob elemento opaco".
     _hk_cheia = bool(VARIANTS["headlines"].get(_hk.get("style"), {}).get("cheia"))
+    # `muteCaptions: true` EXPLÍCITO cala sempre: na tela dividida o gancho
+    # pousa na costura, que é exatamente onde a legenda do split mora.
     if (_hk.get("enabled") and _hk.get("lines") and _hk.get("muteCaptions", True)
-            and (_hk_cheia or float(_hk.get("top") or 0) > 900)):
+            and (_hk_cheia or float(_hk.get("top") or 0) > 900
+                 or _hk.get("muteCaptions") is True)):
         bo_spans.append((0.0, float(_hk.get("endSec", 4.0))))
+    # Palavra em destaque que repete a palavra falada: legenda e destaque
+    # mostrando a mesma palavra juntos viram texto sobre texto. Por entrada.
+    bo_spans += [(float(w.get("start", 0)), float(w.get("end", 0)))
+                 for w in (data.get("wordAccents") or []) if w.get("muteCaptions")]
+    if efx_plano:
+        bo_spans += efx_plano["mutes"]
+    # Janelas caladas À MÃO: o react traz a legenda queimada do vídeo de
+    # terceiro na faixa de cima, e a nossa por baixo vira a mesma fala duas vezes.
+    bo_spans += [(float(a), float(b)) for a, b in (data.get("captionMutes") or [])]
 
     def fora_broll(ms_a: float, ms_b: float) -> bool:
         mid = (ms_a + ms_b) / 2000.0

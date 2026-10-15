@@ -76,6 +76,7 @@ const ICON = {
   audio: '<svg viewBox="0 0 16 16"><path d="M2.4 6.2v3.6h2.4l3.5 2.8V3.4L4.8 6.2H2.4z"/><path d="M10.5 5.7a3.2 3.2 0 0 1 0 4.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M12.4 3.9a5.7 5.7 0 0 1 0 8.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   inserts: '<svg viewBox="0 0 16 16"><rect x="1.2" y="3.2" width="13.6" height="9.6" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.3" cy="6.6" r="1.15"/><path d="M2.6 11.7l3-2.9a1 1 0 0 1 1.34-.05l1.84 1.58 1.5-1.24a1 1 0 0 1 1.29.02l1.72 1.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   music: '<svg viewBox="0 0 16 16"><path d="M13.1 1.9 6.6 3.5a.8.8 0 0 0-.6.78v6.06a2.25 2.25 0 1 0 1.5 2.12V6.6l5-1.22v3.5a2.25 2.25 0 1 0 1.5 2.12V2.68a.8.8 0 0 0-.9-.78z"/></svg>',
+  follow: '<svg viewBox="0 0 16 16"><circle cx="6.2" cy="5" r="2.9"/><path d="M1 13.6c0-2.9 2.3-4.7 5.2-4.7s5.2 1.8 5.2 4.7v.6H1v-.6z"/><path d="M13 4.6v4.6M10.7 6.9h4.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>',
   text: '<svg viewBox="0 0 16 16"><path d="M2 2.6h12v2.5h-1.5V4.1H8.75v8.1h1.6v1.3H5.65v-1.3h1.6V4.1H3.5v1H2V2.6z"/></svg>',
   notes: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
   cam: '<svg viewBox="0 0 16 16"><rect x="1" y="3.6" width="10.2" height="8.8" rx="2"/><path d="M12.4 7.1l2.3-1.6c.5-.35 1.3-.05 1.3.6v3.8c0 .65-.8.95-1.3.6l-2.3-1.6V7.1z"/></svg>',
@@ -85,6 +86,8 @@ const ICON = {
   zoomOut: '<svg viewBox="0 0 16 16"><path d="M7 1.6a5.4 5.4 0 1 0 3.3 9.7l3.2 3.2a.9.9 0 0 0 1.3-1.3l-3.2-3.2A5.4 5.4 0 0 0 7 1.6zm0 1.8a3.6 3.6 0 1 1 0 7.2 3.6 3.6 0 0 1 0-7.2zM4.9 6.1v1.8h4.2V6.1H4.9z"/></svg>',
   fit: '<svg viewBox="0 0 16 16"><path d="M2 2h4.2v1.8H3.8v2.4H2V2zm7.8 0H14v4.2h-1.8V3.8H9.8V2zM2 9.8h1.8v2.4h2.4V14H2V9.8zm10.2 0H14V14H9.8v-1.8h2.4V9.8z"/></svg>',
   undo: '<svg viewBox="0 0 16 16"><path d="M3.4 6.5h6.1a4.2 4.2 0 0 1 0 8.4H7.2v-1.9h2.3a2.3 2.3 0 0 0 0-4.6H3.4l2.4 2.4-1.35 1.35L.6 7.55 4.45 3.7 5.8 5.05 3.4 6.5z"/></svg>',
+  fx: '<svg viewBox="0 0 16 16"><rect x="1.4" y="5" width="9.2" height="9.2" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.8 9.6l1.6 1.6 2.9-3.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6.9l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>',
+  eye: '<svg viewBox="0 0 16 16"><path d="M8 3C4.4 3 1.6 5.4.5 8c1.1 2.6 3.9 5 7.5 5s6.4-2.4 7.5-5C14.4 5.4 11.6 3 8 3zm0 8.2A3.2 3.2 0 1 1 8 4.8a3.2 3.2 0 0 1 0 6.4z"/><circle cx="8" cy="8" r="1.7"/></svg>',
   flag: '<svg viewBox="0 0 16 16"><rect x="1.9" y="1.4" width="1.6" height="13.2" rx=".8"/><path d="M5 2.7h7.6a.6.6 0 0 1 .47.97L11.36 6l1.71 2.33a.6.6 0 0 1-.47.97H5V2.7z"/></svg>',
 };
 
@@ -145,16 +148,16 @@ const PORTED = {
   captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked',
                      'pop', 'popLinha', 'popBloco', 'revelar', 'editorial', 'dinamico',
                      ...PAL.map((p) => p[0])]),
-  headlines: new Set(['', 'outline', 'card', 'realce', 'misto',
+  headlines: new Set(['caixinha', 'noticia', '', 'outline', 'card', 'realce', 'misto',
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
-                      'relevo', 'grifo', 'contorno_duplo', 'tarjas',
+                      'relevo', 'grifo', 'contorno_duplo', 'tarjas', 'vidro',
                       ...CARTELAS.map((c) => c[0])]),
   // os três de `EDIT_ELEMENTS` entram aqui porque o radio de FORMATO os
   // oferece junto com limpa/split/split2 (ver `radios()`) — e os três têm
   // caminho de render de verdade no compositor (`questionBox`,
   // `brollOverlays[]`, `hook.style="noticia"`).
   edits: new Set(['limpa', 'split', 'split2', 'caixinha', 'brollOverlay', 'noticia',
-                  'animTexto', 'anim3d', 'explicativo']),
+                  'animTexto', 'anim3d', 'explicativo', 'ilustrado', 'fundoTrocado', 'caderno']),
 };
 
 /* FORMATO É UMA ESCOLHA SÓ, e ela mora em dois lugares no dado.
@@ -180,7 +183,18 @@ const PORTED = {
  * quadrado quando cita lista, exemplo ou comparação. Roteiro de cenas escrito
  * pela IA lendo a fala (`helpers/explicativo.py`); o `phase2.py` recusa pelo
  * nome enquanto ele não existir. */
-const EDIT_ELEMENTS = ['caixinha', 'brollOverlay', 'noticia', 'animTexto', 'anim3d', 'explicativo'];
+/* ILUSTRADO, FUNDO TROCADO e CADERNO (2026-10-15, motor de efeitos —
+ * helpers/efeitos.py): os três são formato porque decidem quais efeitos
+ * AUTOMÁTICOS podem entrar (`variants.json → efeitos.formatos`). "Nenhum" não
+ * prevê efeito nenhum; o Ilustrado é o quadro cheio com todos eles. */
+const EDIT_ELEMENTS = ['brollOverlay', 'animTexto', 'anim3d', 'explicativo',
+                       'ilustrado', 'fundoTrocado', 'caderno'];
+/* CAIXINHA e NOTÍCIA moram na camada HEADLINE (pedido do usuário, 2026-10-14),
+ * como as DUAS PRIMEIRAS opções do radio: as duas ocupam a mesma zona alta da
+ * headline, então são uma escolha de headline, não de formato. O dado não
+ * mudou — continuam em `elements` (→ `questionBox`, `hook.style="noticia"`) —,
+ * só a tela: escolher uma zera `headline`, e escolher uma headline as desliga. */
+const HEADLINE_ELEMENTS = ['caixinha', 'noticia'];
 
 // Quadro de foco de câmera — substitui o "boneco" genérico (círculo+blob) nos
 // mocks de tipo de edição por um vocabulário de editor: cantos em L, ponto de
@@ -279,6 +293,8 @@ const STYLE_CATALOG = {
     {id: 'grifo', name: 'Grifo', hl: 'grifo'},
     {id: 'contorno_duplo', name: 'Contorno duplo', hl: 'contorno_duplo'},
     {id: 'tarjas', name: 'Tarjas', hl: 'tarjas'},
+    // VIDRO — Glass Type da referência de efeitos (2026-10-15): cartão fosco
+    {id: 'vidro', name: 'Vidro', hl: 'vidro'},
     // as vinte do motor `cartela`, banda primeiro e tela cheia depois
     ...CARTELAS.map(([id, name]) => ({id, name, ct: id})),
     /* SEM HEADLINE precisa ser uma ESCOLHA, não a ausência de uma.
@@ -339,7 +355,7 @@ const STYLE_CATALOG = {
     {
       id: 'zoomCuts',
       name: 'Zoom in e out nos cortes',
-      def: true,
+      def: false, // desmarcado por padrão — pedido do usuário, 2026-10-15
       icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="3.4" width="6" height="9.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9.6" y="1.9" width="5.2" height="12.2" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8.4 8h.7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
     },
     {
@@ -521,6 +537,148 @@ const STYLE_CATALOG = {
         <rect x="18" y="87.8" width="18" height="2.4" rx="1.2" fill="rgba(255,255,255,.3)"/>
       </svg>`,
     },
+    /* ---------- MOTOR DE EFEITOS (2026-10-15, helpers/efeitos.py) ----------
+     * Formatos que prevêem efeitos automáticos, e os efeitos em si. Os chips
+     * de efeito (`efx: true`) só valem quando o FORMATO prevê o efeito — fora
+     * dele aparecem travados com o motivo (elLocked), e a escolha do usuário
+     * fica guardada para quando ele trocar de formato. */
+    {
+      id: 'ilustrado',
+      name: 'Ilustrado',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.4" y="2" width="13.2" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4 9l1.4 1.4L8 7.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><rect x="10" y="7" width="1.6" height="4.4" rx=".6"/><rect x="12.2" y="5" width="1.4" height="6.4" rx=".6"/></svg>',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="3" y="3" width="60" height="112" rx="5" fill="rgba(255,255,255,.05)"/>
+        <circle cx="33" cy="34" r="12" fill="rgba(255,255,255,.14)"/>
+        <path d="M14 76a19 19 0 0138 0z" fill="rgba(255,255,255,.14)"/>
+        <rect x="9" y="56" width="48" height="34" rx="5" fill="rgba(10,10,12,.8)" stroke="rgba(255,255,255,.18)" stroke-width=".6"/>
+        <circle cx="15" cy="64" r="2.6" fill="rgb(var(--orange-rgb))"/>
+        <rect x="20" y="62.8" width="20" height="2.4" rx="1.2" fill="rgba(255,255,255,.85)"/>
+        <circle cx="15" cy="73" r="2.6" fill="rgb(var(--orange-rgb))"/>
+        <rect x="20" y="71.8" width="16" height="2.4" rx="1.2" fill="rgba(255,255,255,.85)"/>
+        <circle cx="15" cy="82" r="2.6" fill="none" stroke="rgba(255,255,255,.4)" stroke-width=".8"/>
+        <rect x="20" y="80.8" width="22" height="2.4" rx="1.2" fill="rgba(255,255,255,.4)"/>
+        <rect x="46" y="76" width="3.4" height="9" rx="1" fill="rgba(255,255,255,.35)"/>
+        <rect x="51" y="70" width="3.4" height="15" rx="1" fill="rgb(var(--orange-rgb))"/>
+      </svg>`,
+    },
+    {
+      id: 'fundoTrocado',
+      name: 'Fundo trocado',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.4" y="2" width="13.2" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="7" r="2.2"/><path d="M4 14a4 4 0 018 0"/></svg>',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <defs><linearGradient id="ftg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgb(var(--orange-rgb))" stop-opacity=".55"/><stop offset="1" stop-color="#1b2a44"/></linearGradient></defs>
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="url(#ftg)" stroke="rgba(255,255,255,.12)"/>
+        <path d="M3 84l14-16 10 9 14-18 22 25v31H3z" fill="rgba(0,0,0,.28)"/>
+        <circle cx="33" cy="54" r="13" fill="#d9d4cf"/>
+        <path d="M11 115a22 22 0 0144 0z" fill="#d9d4cf"/>
+      </svg>`,
+    },
+    {
+      id: 'caderno',
+      name: 'Caderno',
+      def: false,
+      icon: '<svg viewBox="0 0 16 16"><rect x="2" y="1.6" width="12" height="12.8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M4.6 5.4c2-1.4 4.6 1.4 6.8 0M4.6 8.6c2-1.4 4.6 1.4 6.8 0" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#efeadf" stroke="rgba(255,255,255,.12)"/>
+        <g stroke="rgba(80,110,160,.25)" stroke-width=".5"><path d="M3 20h60M3 30h60M3 40h60M3 50h60M3 60h60M3 70h60M3 80h60M3 90h60M3 100h60M3 110h60"/></g>
+        <path d="M10 18c8-6 14 6 22 0s14 6 24 0M12 26c8-6 14 6 22 0" fill="none" stroke="#8a9ad8" stroke-width="2.4" stroke-linecap="round" opacity=".8"/>
+        <circle cx="33" cy="56" r="13" fill="#4a3f3a" stroke="#fff" stroke-width="2.6"/>
+        <path d="M11 115a22 22 0 0144 0z" fill="#2b2b2b" stroke="#fff" stroke-width="2.6"/>
+        <path d="M48 40l3 3m0-3l-3 3" stroke="#d84a3a" stroke-width="1.2"/>
+        <rect x="44" y="64" width="16" height="8" rx="1" fill="#f3d84b" opacity=".85" transform="rotate(-8 52 68)"/>
+      </svg>`,
+    },
+    {
+      id: 'checklist', efx: true, name: 'Checklist', def: true,
+      icon: '<svg viewBox="0 0 16 16"><path d="M2 4.2l1.3 1.3L5.6 3M2 10.2l1.3 1.3 2.3-2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="7.4" y="3.6" width="7" height="1.6" rx=".8"/><rect x="7.4" y="9.6" width="5.4" height="1.6" rx=".8"/></svg>',
+    },
+    {
+      id: 'chartGrow', efx: true, name: 'Gráfico crescendo', def: true,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.6" y="9" width="2.6" height="5" rx=".7"/><rect x="5.4" y="6.4" width="2.6" height="7.6" rx=".7"/><rect x="9.2" y="3.8" width="2.6" height="10.2" rx=".7"/><path d="M12.6 2.2h2v2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+    },
+    {
+      id: 'phoneMockup', efx: true, name: 'Celular na tela', def: true,
+      icon: '<svg viewBox="0 0 16 16"><rect x="4" y="1.2" width="8" height="13.6" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="6.4" y="2.6" width="3.2" height="1" rx=".5"/><rect x="5.6" y="6" width="4.8" height="2" rx=".6" opacity=".7"/></svg>',
+    },
+    {
+      id: 'uiWorld', efx: true, name: 'Mundo de interface', def: true,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.2" y="2" width="6" height="3.4" rx="1.2"/><rect x="8.8" y="6.2" width="6" height="3.4" rx="1.7" opacity=".7"/><path d="M3.2 9.4l3.6 1.6-1.5.6-.6 1.5z"/><rect x="2" y="12.6" width="7" height="1.6" rx=".8" opacity=".6"/></svg>',
+    },
+    {
+      id: 'zoomPunch', efx: true, name: 'Zoom digital na frase de efeito', def: true,
+      icon: '<svg viewBox="0 0 16 16"><path d="M1.6 5V2.4a.8.8 0 01.8-.8H5M11 1.6h2.6a.8.8 0 01.8.8V5M14.4 11v2.6a.8.8 0 01-.8.8H11M5 14.4H2.4a.8.8 0 01-.8-.8V11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><rect x="5" y="5" width="6" height="6" rx="1.4"/></svg>',
+    },
+    {
+      id: 'zoomThrough', efx: true, name: 'Zoom através do corte', def: false, // idem zoomCuts
+      icon: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2" /><circle cx="8" cy="8" r="4.6" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".7"/><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1" opacity=".4"/></svg>',
+    },
+  ],
+  /* EFEITO DO GANCHO — escolha explícita, um por vídeo, nos primeiros
+   * segundos (`edit-data.json → ganchoEfeito`). Combina com o layout da
+   * headline acima; a Capa de revista desenha o texto do gancho ela mesma. */
+  ganchoFx: [
+    { id: '', name: 'Nenhum',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <circle cx="33" cy="52" r="13" fill="rgba(255,255,255,.16)"/>
+        <path d="M12 115a21 21 0 0142 0z" fill="rgba(255,255,255,.16)"/>
+        <path d="M17 14.5L49 30" stroke="rgba(255,255,255,.34)" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>` },
+    { id: 'frameBreak', name: 'Quebra de moldura',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#15110f" stroke="rgba(255,255,255,.12)"/>
+        <rect x="10" y="40" width="46" height="66" rx="6" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.5)" stroke-width="1.2" transform="rotate(-3 33 73)"/>
+        <circle cx="33" cy="40" r="12" fill="#d9d4cf"/>
+        <path d="M14 106a19 19 0 0138 0z" fill="#d9d4cf"/>
+        <path d="M45 62l12-10" stroke="#d9d4cf" stroke-width="5" stroke-linecap="round"/>
+      </svg>` },
+    { id: 'coverStory', name: 'Capa de revista',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="#2a2a2e" stroke="rgba(255,255,255,.12)"/>
+        <text x="33" y="30" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="17" fill="rgb(var(--orange-rgb))">CAPA</text>
+        <circle cx="33" cy="42" r="13" fill="#d9d4cf"/>
+        <path d="M11 115a22 22 0 0144 0z" fill="#d9d4cf"/>
+        <rect x="6" y="70" width="16" height="2.4" rx="1" fill="#fff"/><rect x="6" y="75" width="12" height="2.4" rx="1" fill="#fff" opacity=".7"/>
+        <rect x="46" y="100" width="12" height="9" fill="#fff"/>
+      </svg>` },
+    { id: 'headlineWall', name: 'Parede de manchetes',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <rect x="5" y="10" width="22" height="13" rx="1" fill="#f2efe8" transform="rotate(-6 16 16)"/>
+        <rect x="38" y="8" width="22" height="15" rx="1" fill="#f2efe8" transform="rotate(5 49 15)"/>
+        <rect x="6" y="32" width="18" height="12" rx="1" fill="#1d1d1f" stroke="rgba(255,255,255,.3)" stroke-width=".5" transform="rotate(4 15 38)"/>
+        <rect x="42" y="30" width="18" height="12" rx="1" fill="#f2efe8" transform="rotate(-5 51 36)"/>
+        <circle cx="33" cy="54" r="13" fill="#d9d4cf"/>
+        <path d="M11 115a22 22 0 0144 0z" fill="#d9d4cf"/>
+      </svg>` },
+    { id: 'couchWall', name: 'Parede de vídeos',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <g fill="rgba(255,255,255,.22)"><rect x="5" y="7" width="12" height="20" rx="2"/><rect x="19" y="7" width="12" height="20" rx="2"/><rect x="35" y="7" width="12" height="20" rx="2"/><rect x="49" y="7" width="12" height="20" rx="2"/>
+        <rect x="5" y="30" width="12" height="20" rx="2"/><rect x="49" y="30" width="12" height="20" rx="2"/></g>
+        <circle cx="33" cy="54" r="13" fill="#d9d4cf"/>
+        <path d="M11 115a22 22 0 0144 0z" fill="#d9d4cf"/>
+      </svg>` },
+    { id: 'orbit', name: 'Órbita',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <ellipse cx="33" cy="56" rx="27" ry="9" fill="none" stroke="rgba(255,255,255,.25)" stroke-dasharray="2 2"/>
+        <circle cx="33" cy="54" r="13" fill="#d9d4cf"/>
+        <path d="M11 115a22 22 0 0144 0z" fill="#d9d4cf"/>
+        <rect x="2" y="50" width="11" height="15" rx="2" fill="rgb(var(--orange-rgb))"/>
+        <rect x="52" y="44" width="11" height="15" rx="2" fill="rgba(255,255,255,.7)"/>
+      </svg>` },
+    { id: 'vertigo', name: 'Vertigo',
+      mock: `<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">
+        <rect x=".5" y=".5" width="65" height="117" rx="7" fill="var(--bg1)" stroke="rgba(255,255,255,.12)"/>
+        <g fill="none" stroke="rgba(255,255,255,.18)"><rect x="6" y="10" width="54" height="98"/><rect x="14" y="24" width="38" height="70"/><rect x="22" y="38" width="22" height="42"/></g>
+        <path d="M6 10l16 28M60 10L44 38M6 108l16-28M60 108L44 80" stroke="rgba(255,255,255,.18)"/>
+        <circle cx="33" cy="54" r="12" fill="#d9d4cf"/>
+        <path d="M13 115a20 20 0 0140 0z" fill="#d9d4cf"/>
+      </svg>` },
   ],
 };
 
@@ -1567,6 +1725,21 @@ function elLocked(e) {
     // dado travaria a opção no primeiro segundo de cada carregamento.
     if (e.needsKey in keys && !keys[e.needsKey]) return e.keyMsg || 'Falta a chave de API para isto.';
   }
+  /* EFEITO AUTOMÁTICO FORA DO FORMATO (regra do usuário, 2026-10-15): o chip
+   * trava com o motivo, e a escolha dele fica guardada para quando o formato
+   * mudar. A lista é a do `variants.json → efeitos.formatos`, a mesma que o
+   * helpers/efeitos.py aplica no render — sem o variants carregado, não trava. */
+  if (e.efx) {
+    const fm = ((LIVE.variants || {}).efeitos || {}).formatos;
+    if (fm) {
+      const f = formatoEl() || S.style.edit || 'limpa';
+      if (!(fm[f] || []).includes(e.id)) {
+        return `O formato "${formatoName()}" não prevê este efeito.\n\n`
+          + 'Efeito automático só entra quando o formato prevê — escolha "Ilustrado" '
+          + '(ou outro formato que o preveja) na camada Formato.';
+      }
+    }
+  }
   /* ZONA ALTA: a trava virou SUBSTITUIÇÃO (decisão do usuário, 2026-09-15).
    *
    * Caixinha, Notícia e as cartelas "banda" continuam disputando o mesmo canto
@@ -1631,6 +1804,11 @@ function defaultStyle() {
     // legenda; dy positivo = para CIMA; escala multiplica o layout inteiro.
     hookDx: 0, hookDy: 0, hookScale: 1,
     elements,
+    // CTA DE FECHAMENTO (aba CTA). `modelo` vazio = nenhum. O @ vem do
+    // brand.json (`instagram`) quando o projeto não tem o seu.
+    cta: { modelo: '', arroba: '' },
+    // EFEITO DO GANCHO (motor de efeitos): '' = nenhum
+    ganchoEfeito: '',
     note: '',
   };
 }
@@ -1820,6 +1998,8 @@ function styleState() {
     && same('capColor', def.capColor)
     && same('capDy', 0)
     && same('hookDx', 0) && same('hookDy', 0) && same('hookScale', 1)
+    && same('cta', def.cta)
+    && same('ganchoEfeito', def.ganchoEfeito)
     /* escolher um ESTILO SALVO é mudança mesmo quando ele difere só em fonte
        ou cor, que não estão nesta lista — sem isto o botão ficava travado */
     && JSON.stringify((S.style.estiloSalvo || {}).id || null)
@@ -2020,6 +2200,7 @@ async function poll() {
     // "você tem ajustes não salvos" logo abaixo bloquearia a atualização
     // justamente enquanto o usuário espera, que é quando ele mais precisa ver.
     if (data.keys) S.keys = data.keys;
+    S.root = data.root || null;   // a foto do CTA é por projeto (loadCtaFoto)
     // O QUE A MÁQUINA TEM. Fora da assinatura pelo mesmo motivo do progresso:
     // não muda a linha do tempo, e a checklist tem de acertar já no primeiro
     // poll — inclusive na tela inicial, onde não há projeto e `applyState`
@@ -2088,10 +2269,17 @@ async function applyState(data) {
      escolhas vêm antes da marca porque a marca é mais específica — ela é sobre
      quem faz, não sobre como se costuma fazer — e as duas antes do projeto,
      que vence sempre. */
-  S.style = { ...defaultStyle(), ...(S.prefs || {}), ...(S.brand || {}),
-              ...(S.state.style || {}) };
-  S.style.elements = { ...defaultStyle().elements, ...((S.prefs || {}).elements || {}),
-                       ...((S.state.style || {}).elements || {}) };
+  /* PROJETO JÁ RENDERIZADO NÃO HERDA "A ÚLTIMA VEZ" (pedido do usuário,
+     2026-10-15). As escolhas da última vez servem para o projeto NOVO nascer
+     parecido com o anterior; num projeto que já tem estilo gravado, cada chave
+     que faltasse no registro dele vinha de outro vídeo e aparecia como
+     "1 alteração" ao recarregar — um "Enviar" depois refazia o vídeo com uma
+     escolha que ninguém fez. */
+  const proj = S.state.style || null;
+  const prefs = proj ? {} : (S.prefs || {});
+  S.style = { ...defaultStyle(), ...prefs, ...(S.brand || {}), ...(proj || {}) };
+  S.style.elements = { ...defaultStyle().elements, ...(prefs.elements || {}),
+                       ...((proj || {}).elements || {}) };
   /* MIGRAÇÃO: Caixinha e Broll Overlay eram radio de "tipo de edição", e
      Notícia era uma cartela de "headline" — as três viraram toggles
      independentes em `elements`. Projetos salvos ANTES desta mudança ainda
@@ -2537,6 +2725,17 @@ const editOptions = () => [
 ];
 /* Qual dos três está ligado (string vazia = o formato é um `edit` comum). */
 const formatoEl = () => EDIT_ELEMENTS.find((id) => S.style.elements[id]) || '';
+/* O radio da headline: Caixinha e Notícia primeiro, depois o catálogo. */
+const headlineOptions = () => [
+  ...HEADLINE_ELEMENTS.map((id) => STYLE_CATALOG.elements.find((e) => e.id === id)).filter(Boolean),
+  ...STYLE_CATALOG.headlines,
+];
+const headlineEl = () => HEADLINE_ELEMENTS.find((id) => S.style.elements[id]) || '';
+const headlineName = () => {
+  const id = headlineEl();
+  return id ? ((STYLE_CATALOG.elements.find((e) => e.id === id) || {}).name || '—')
+            : styleName('headlines', S.style.headline);
+};
 /* O NOME do formato escolhido, para os resumos. `styleName('edits', …)` não
  * serve sozinho: com Caixinha ligada o `edit` é `limpa`, e o resumo diria
  * "Nenhum" para um vídeo que tem um adesivo na tela. */
@@ -2657,10 +2856,11 @@ function updateSummary() {
   // os três de EDIT_ELEMENTS saem da lista de "extras": eles SÃO o formato,
   // e já aparecem nomeados na primeira posição por `formatoName()`.
   const on = STYLE_CATALOG.elements.filter(
-    (e) => S.style.elements[e.id] && !EDIT_ELEMENTS.includes(e.id));
+    (e) => S.style.elements[e.id] && !EDIT_ELEMENTS.includes(e.id)
+           && !HEADLINE_ELEMENTS.includes(e.id));
   const accentBit = accentUsed() ? ` · destaque ${accentName(S.style.accent)}` : '';
   box.textContent =
-    `${formatoName()} · headline ${styleName('headlines', S.style.headline)}` +
+    `${formatoName()} · headline ${headlineName()}` +
     ` · legenda ${styleName('captions', S.style.captions)}${accentBit} · ` +
     (on.length ? on.map((e) => e.name).join(', ') : 'sem elementos extras');
 }
@@ -2680,22 +2880,31 @@ const LAYERS = [
   /* Sem `elements`: Caixinha, Broll Overlay e Notícia entram no PRÓPRIO radio
      de `edits` (ver EDIT_ELEMENTS) em vez de virem como checkbox ao lado dele.
      Listá-los aqui também os desenharia duas vezes na mesma camada. */
-  { id: 'elementos', name: 'Formato', sub: 'Um formato por vídeo — layout do corte, caixinha, broll overlay, notícia ou animação',
+  { id: 'elementos', name: 'Formato', sub: 'Um formato por vídeo — layout do corte, broll overlay ou animação',
     ico: 'inserts', groups: ['edits'] },
-  { id: 'headline', name: 'Headline', sub: 'Layout — o texto é combinado no chat',
-    ico: 'text', groups: ['headlines'] },
+  { id: 'headline', name: 'Headline', sub: 'Caixinha, notícia ou layout — o texto é combinado no chat',
+    ico: 'text', groups: ['headlines', 'ganchoFx'] },
   { id: 'legendas', name: 'Legendas', sub: 'Estilo',
     ico: 'captions', groups: ['captions'] },
+  /* EFEITOS (2026-10-15): ilustram a fala e entram SOZINHOS — mas só quando o
+     formato os prevê (regra do usuário; "Nenhum" não prevê nada). O chip é a
+     permissão; o lugar de cada um sai da leitura da fala (helpers/efeitos.py). */
+  { id: 'efeitos', name: 'Efeitos', sub: 'Ilustram a fala — entram sozinhos quando o formato prevê',
+    ico: 'fx', elements: ['checklist', 'chartGrow', 'phoneMockup', 'uiWorld'] },
   { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
-    ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts'] },
+    ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts', 'zoomPunch', 'zoomThrough'] },
   { id: 'trilha', name: 'Trilha & mixagem', sub: 'Áudio, níveis, ducking e mixagem final',
     ico: 'music', elements: ['sfx', 'musicAI'] },
+  /* A ÚLTIMA porque é o último segundo do vídeo: o pedido de seguir. */
+  { id: 'cta', name: 'CTA', sub: 'Fecho do vídeo — siga o perfil, card ou botão do Instagram',
+    ico: 'follow', cta: true },
 ];
 
 // `edits` deixou de ser só "tipo de edição" quando Caixinha, Broll Overlay e
 // Notícia entraram no mesmo radio (ver EDIT_ELEMENTS) — o título tem de
 // cobrir os seis, e "um por vídeo" é a regra que o radio impõe.
-const GROUP_TITLE = { edits: 'Formato — um por vídeo', headlines: 'Estilo de headline', captions: 'Estilo de legenda' };
+const GROUP_TITLE = { edits: 'Formato — um por vídeo', headlines: 'Headline — caixinha, notícia ou layout',
+                      ganchoFx: 'Efeito do gancho — os primeiros segundos', captions: 'Estilo de legenda' };
 /* Uma camada por vez, num INSPETOR de altura fixa — o modelo de NLE.
  * O acordeão anterior crescia para dentro do layout: cada clique mudava a
  * altura do painel e empurrava a linha do tempo e o preview. Trocar de camada
@@ -2798,8 +3007,10 @@ function renderSetup() {
   const radios = (host, group, chosen) => {
     // O radio de FORMATO junta os dois contratos de dado numa escolha só —
     // ver EDIT_ELEMENTS. Os outros grupos são o catálogo puro.
-    const opts = group === 'edits' ? editOptions() : STYLE_CATALOG[group];
+    const opts = group === 'edits' ? editOptions()
+      : group === 'headlines' ? headlineOptions() : STYLE_CATALOG[group];
     const elAtivo = formatoEl();
+    const hlAtivo = headlineEl();
     host.innerHTML = '';
     /* OS SALVOS VÊM PRIMEIRO, com borda laranja e o NOME que o usuário deu:
        são o padrão dele, e o padrão é a primeira coisa que se procura. */
@@ -2814,13 +3025,16 @@ function renderSetup() {
         const fmt = EDIT_ELEMENTS.find((k) => els[k]);
         const fmtNome = fmt ? ((STYLE_CATALOG.elements.find((x) => x.id === fmt) || {}).name || fmt)
                             : styleName('edits', st.edit);
-        card.title = `${e.nome} — ${fmtNome} · headline ${styleName('headlines', st.headline)}`
+        const hlEl = HEADLINE_ELEMENTS.find((k) => els[k]);
+        const hlNome = hlEl ? ((STYLE_CATALOG.elements.find((x) => x.id === hlEl) || {}).name || hlEl)
+                            : styleName('headlines', st.headline);
+        card.title = `${e.nome} — ${fmtNome} · headline ${hlNome}`
           + ` · legenda ${styleName('captions', st.captions)}${e.criado ? ' · salvo em ' + e.criado : ''}`;
         const prev = el('div', 'opt-preview frame salvo-mock', card);
         el('div', 'salvo-cor', prev).style.background = st.accent || ACCENT_DEFAULT;
         el('div', 'salvo-fmt', prev).textContent = fmtNome;
         el('div', 'salvo-det', prev).textContent =
-          `${styleName('headlines', st.headline)} · ${styleName('captions', st.captions)}`;
+          `${hlNome} · ${styleName('captions', st.captions)}`;
         el('div', 'opt-name salvo-nome', card).textContent = e.nome;
         el('div', 'opt-mark', card);
       }
@@ -2843,9 +3057,17 @@ function renderSetup() {
       /* MARCADO é o formato ATUAL, e ele pode vir de qualquer um dos dois
          lados: com Caixinha ligada, `edit` continua `limpa` — marcar por
          `o.id === chosen` acenderia "Nenhum" junto com ela. */
+      /* COM UM ESTILO SALVO ESCOLHIDO, ELE é a seleção do Formato — e só ele.
+         O salvo carrega um formato dentro (e é ele que vai ao render), mas
+         acender também o cartão desse formato fazia a tela mostrar DUAS
+         escolhas num radio de uma, como se o clique tivesse pegado outro
+         cartão (relatado pelo usuário, 2026-10-15). */
       const on = group === 'edits'
-        ? (EDIT_ELEMENTS.includes(o.id) ? o.id === elAtivo : !elAtivo && o.id === chosen)
-        : o.id === chosen;
+        ? (S.style.estiloSalvo ? false
+          : EDIT_ELEMENTS.includes(o.id) ? o.id === elAtivo : !elAtivo && o.id === chosen)
+        : group === 'headlines'
+          ? (HEADLINE_ELEMENTS.includes(o.id) ? o.id === hlAtivo : !hlAtivo && o.id === chosen)
+          : o.id === chosen;
       const card = el('div', `opt${on ? ' on' : ''}${off ? ' unavailable' : ''}`, host);
       card.dataset.group = group;
       card.dataset.id = o.id;
@@ -2876,7 +3098,8 @@ function renderSetup() {
   // var(), so the variable has to be in place when the previews first paint
   applyAccent();
 
-  const chosen = { edits: S.style.edit, headlines: S.style.headline, captions: S.style.captions };
+  const chosen = { edits: S.style.edit, headlines: S.style.headline, captions: S.style.captions,
+                   ganchoFx: S.style.ganchoEfeito || '' };
   for (const L of LAYERS) {
     for (const g of L.groups || []) {
       const host = $(`opt-${g}`);
@@ -2900,6 +3123,18 @@ function renderSetup() {
       el('div', 'chk-box', row);
       el('div', 'chk-ico', row).innerHTML = e.icon || '';
       el('div', 'chk-name', row).textContent = e.name;
+      /* O OLHO (pedido do usuário, 2026-10-15): em Efeitos e Movimento a demo
+         sai do clique no chip e vai para cá. Marcar é decidir o que vai ao
+         render; ver é outra pergunta — juntas, cada liga/desliga cobria o
+         vídeo que se estava editando. */
+      if (L.id === 'efeitos' || (L.id === 'movimento' && DEMO_MOVIMENTO.includes(e.id))) {
+        const vendo = S.demoSel[L.id] === e.id && S.demoPausada !== L.id;
+        const eye = el('button', `chk-eye${vendo ? ' on' : ''}`, row);
+        eye.type = 'button';
+        eye.title = vendo ? 'Voltar ao vídeo' : 'Ver o efeito';
+        eye.setAttribute('aria-label', eye.title);
+        eye.innerHTML = ICON.eye;
+      }
     }
   }
   refreshLayerSummaries();
@@ -2914,7 +3149,89 @@ function renderSetup() {
      tinha como mudar. Com a comparação honesta, marcar uma opção e ver a barra
      insistir em "Estilo ainda não escolhido" seria o mesmo sintoma de antes. */
   refreshActionBar();
+  atualizarDemo();
 }
+
+/* ---------- DEMONSTRAÇÃO NO PLAYER (demos.js) ----------
+ * Pedido do usuário (2026-10-15): escolher formato, efeito, movimento ou CTA
+ * MOSTRA o comportamento — 5s em loop no lugar do vídeo. Formato e efeito do
+ * gancho com boneco ilustrado (mudam o layout e pedem a pessoa recortada, que
+ * no editor ainda não existe); efeito, movimento e CTA sobre o vídeo do
+ * projeto (zoom e cartão só dizem algo sobre o enquadramento real). Fora
+ * dessas camadas — Legendas, Trilha — o player volta ao vídeo editado. */
+S.demoSel = { efeitos: null, movimento: null, gancho: false };
+S.demoPausada = null;
+const DEMO_MOVIMENTO = ['tracking', 'zoomAuto', 'zoomCuts', 'zoomPunch', 'zoomThrough'];
+
+function demoSpec() {
+  /* O CORTE LIMPO, não o render: o `final.mp4` já traz legenda e headline
+     queimadas, e a demo de um efeito por cima delas mostraria duas camadas
+     de texto que o vídeo novo não vai ter. */
+  const limpo = `/media/${(S.state && S.state.video) || 'preview.mp4'}`;
+  const base = { accent: S.style.accent || ACCENT_DEFAULT, videoSrc: limpo || video.currentSrc || video.src || '',
+                 t0: video.currentTime || 0, arroba: ctaArroba() };
+  if (activeLayer === 'elementos') {
+    let id = formatoEl() || S.style.edit || 'limpa';
+    let nome = formatoName();
+    if (S.style.estiloSalvo) {
+      const e = (S.salvos || []).find((x) => x.id === S.style.estiloSalvo.id);
+      const st = (e && e.style) || {};
+      id = EDIT_ELEMENTS.find((k) => (st.elements || {})[k]) || st.edit || 'limpa';
+      nome = S.style.estiloSalvo.nome;
+      if (st.accent) base.accent = st.accent;
+    }
+    return { ...base, kind: 'formato', id, nome };
+  }
+  if (activeLayer === 'efeitos' || activeLayer === 'movimento') {
+    const L = LAYERS.find((x) => x.id === activeLayer);
+    const ids = activeLayer === 'movimento' ? DEMO_MOVIMENTO : L.elements;
+    // só o que o OLHO pediu — marcar o chip não cobre mais o vídeo
+    const id = ids.includes(S.demoSel[activeLayer]) ? S.demoSel[activeLayer] : null;
+    if (!id) return null;
+    const cat = STYLE_CATALOG.elements.find((x) => x.id === id) || {};
+    return { ...base, kind: activeLayer === 'efeitos' ? 'efeito' : 'movimento', id, nome: cat.name || id };
+  }
+  if (activeLayer === 'headline' && S.demoSel.gancho && S.style.ganchoEfeito) {
+    return { ...base, kind: 'gancho', id: S.style.ganchoEfeito, nome: styleName('ganchoFx', S.style.ganchoEfeito) };
+  }
+  if (activeLayer === 'cta') {
+    const m = (S.style.cta || {}).modelo;
+    if (!m) return null;
+    return { ...base, kind: 'cta', id: m, nome: (CTA_MODELOS.find((x) => x.id === m) || {}).name || m };
+  }
+  return null;
+}
+
+function posDemo(host) {
+  const frame = video.parentElement;
+  if (!frame) return;
+  const fr = frame.getBoundingClientRect();
+  const vr = video.videoWidth ? video.getBoundingClientRect() : fr;
+  host.style.left = `${vr.left - fr.left}px`;
+  host.style.top = `${vr.top - fr.top}px`;
+  host.style.width = `${vr.width}px`;
+  host.style.height = `${vr.height}px`;
+}
+
+function atualizarDemo() {
+  const host = $('demoStage');
+  if (!host || !window.AVE_DEMOS) return;
+  const spec = (S.demoPausada === activeLayer) ? null : demoSpec();
+  if (!spec || !setupApplies()) { AVE_DEMOS.parar(); return; }
+  posDemo(host);
+  if (!video.paused) video.pause();
+  AVE_DEMOS.mostrar(host, spec);
+}
+
+// apertar play no vídeo é pedir o vídeo de volta: a demo sai até a próxima escolha
+video.addEventListener('play', () => {
+  if (window.AVE_DEMOS && AVE_DEMOS.ativo()) { S.demoPausada = activeLayer; AVE_DEMOS.parar(); }
+  for (const eye of document.querySelectorAll('.chk-eye.on')) eye.classList.remove('on');
+});
+window.addEventListener('resize', () => {
+  const host = $('demoStage');
+  if (host && window.AVE_DEMOS && AVE_DEMOS.ativo()) { posDemo(host); AVE_DEMOS.encaixar(); }
+});
 
 /* Monta a faixa de camadas e o corpo do inspetor. Reconstrói do zero a cada
  * render porque o estado que ele mostra (o que está escolhido) vive em S.style,
@@ -2923,6 +3240,228 @@ function renderSetup() {
 /* Devolve o `scrollTop` DEPOIS que o conteúdo novo mediu a altura. No mesmo
  * quadro o corpo ainda está vazio, `scrollHeight` é zero e o navegador prende
  * o valor em 0 — a atribuição parece funcionar e não faz nada. */
+/* ---------- CTA DE FECHAMENTO ----------
+ * Os modelos moram em assets/cta/ e quem monta é helpers/cta.py. Aqui só se
+ * escolhe o modelo, o @ e a foto. A FOTO não é estilo: é arquivo, e vai direto
+ * para o servidor no ato (projeto + ~/.avelin/cta/perfil.png) em vez de esperar
+ * o envio — sem ela, a Fase 2 recusa os modelos que a pedem. */
+const CTA_MODELOS = [
+  { id: '', name: 'Nenhum', foto: false },
+  { id: 'siga-perfil', name: 'Siga o perfil', foto: true,
+    title: 'Cápsula no topo que abre da foto: "Siga o perfil" + @, cursor aperta Seguir' },
+  { id: 'instagram-card', name: 'Instagram Card', foto: true,
+    title: 'O ícone do Instagram vira um cartão com foto, @ e Seguir → Seguindo' },
+  { id: 'instagram-simples', name: 'Instagram Simples', foto: false,
+    title: 'Só o botão Seguir → Seguindo, sem foto' },
+  /* RECUO PARA O APP (motor de efeitos, 2026-10-15): o vídeo recua para dentro
+     de uma janela de editor e um cartão de seguir é clicado */
+  { id: 'revelarApp', name: 'Recuo para o app', foto: false,
+    title: 'O vídeo recua para dentro de uma janela de app; o cursor aperta Seguir' },
+];
+S.ctaFoto = null;      // {tem, url, origem} — do servidor
+let ctaFotoProj = null; // de qual projeto é o S.ctaFoto
+let ctaMsg = '';
+
+async function loadCtaFoto(force) {
+  const proj = S.root || null;
+  if (!force && S.ctaFoto && ctaFotoProj === proj) return;
+  ctaFotoProj = proj;
+  try { S.ctaFoto = await (await fetch('/api/cta-foto')).json(); }
+  catch (e) { S.ctaFoto = { tem: false }; }
+  if (activeLayer === 'cta') renderSetup();
+}
+
+/* A miniatura de cada modelo leva a FOTO DE VERDADE quando ela existe: escolher
+   o card vendo o próprio rosto nele é a prévia que importa. */
+function ctaMock(id, host) {
+  const foto = S.ctaFoto && S.ctaFoto.tem ? S.ctaFoto.url : '';
+  const arroba = ctaArroba();
+  if (id === 'siga-perfil') {
+    host.innerHTML = '<div class="cta-pill"><span class="cta-pill-foto"></span>'
+      + '<span class="cta-pill-txt"><b>Siga o perfil</b><i></i></span>'
+      + '<span class="cta-pill-btn">Seguir</span></div>';
+    host.querySelector('.cta-pill-btn').style.background = S.style.accent || ACCENT_DEFAULT;
+    host.querySelector('.cta-pill-txt i').textContent = arroba || '@perfil';
+    if (foto) host.querySelector('.cta-pill-foto').style.backgroundImage = `url("${foto}")`;
+  } else if (id === 'instagram-card') {
+    host.innerHTML = '<div class="cta-card"><img src="/assets/cta-card.png" alt="">'
+      + '<span class="cta-card-foto"></span></div>';
+    if (foto) host.querySelector('.cta-card-foto').style.backgroundImage = `url("${foto}")`;
+  } else if (id === 'instagram-simples') {
+    host.innerHTML = '<div class="cta-simples"><img src="/assets/cta-simples.png" alt=""></div>';
+  } else if (id === 'revelarApp') {
+    host.innerHTML = '<svg viewBox="0 0 66 118" xmlns="http://www.w3.org/2000/svg">'
+      + '<rect x=".5" y=".5" width="65" height="117" rx="7" fill="#ECE8E1"/>'
+      + '<rect x="13" y="16" width="40" height="4" rx="1.5" fill="#fff"/>'
+      + '<circle cx="16" cy="18" r="1" fill="#ff5f57"/><circle cx="19" cy="18" r="1" fill="#febc2e"/>'
+      + '<rect x="13" y="20" width="40" height="62" rx="3" fill="#3a3840"/>'
+      + '<circle cx="33" cy="44" r="8" fill="#d9d4cf"/><path d="M20 82a13 13 0 0126 0z" fill="#d9d4cf"/>'
+      + '<rect x="13" y="86" width="40" height="5" rx="1.5" fill="#fff"/>'
+      + `<rect x="13" y="95" width="40" height="10" rx="3" fill="#fff"/><rect x="38" y="97" width="13" height="6" rx="3" fill="${S.style.accent || ACCENT_DEFAULT}"/>`
+      + '</svg>';
+  } else {
+    host.innerHTML = '<div class="cta-nenhum">sem CTA</div>';
+  }
+}
+
+function ctaArroba() {
+  const a = ((S.style.cta || {}).arroba || '').trim() || ((S.brand || {}).instagram || '').trim();
+  return a ? (a.startsWith('@') ? a : '@' + a) : '';
+}
+
+function buildCtaBody(body) {
+  if (!S.style.cta) S.style.cta = { modelo: '', arroba: '' };
+  loadCtaFoto(false);
+  const g = el('div', 'dep-group', body);
+  el('span', 'group-title', el('div', 'group-head', g)).textContent = 'CTA — fecho do vídeo';
+  const grid = el('div', 'opt-grid cta-grid', g);
+  const atual = S.style.cta.modelo || '';
+  for (const m of CTA_MODELOS) {
+    const card = el('div', `opt${m.id === atual ? ' on' : ''}`, grid);
+    card.dataset.cta = m.id;
+    if (m.title) card.title = m.title;
+    ctaMock(m.id, el('div', 'opt-preview frame cta-prev', card));
+    el('div', 'opt-name', card).textContent = m.name;
+    el('div', 'opt-mark', card);
+  }
+  const m = CTA_MODELOS.find((x) => x.id === atual);
+  if (!m || !m.id) return;
+  /* O clique do botão cai no último "segue/siga" da fala; sem essa palavra,
+     o CTA termina junto com o vídeo. Dito aqui para ninguém procurar um campo
+     de tempo que não existe. */
+  el('div', 'cta-nota', g).textContent = 'Entra no fim: o clique do botão cai no último "segue/siga" da fala '
+    + '(sem essa palavra, termina junto com o vídeo). Tempo e posição finos, pelo chat.';
+  if (!m.foto) return;
+
+  const box = el('div', 'cta-perfil', g);
+  const av = el('div', `cta-avatar${S.ctaFoto && S.ctaFoto.tem ? '' : ' vazio'}`, box);
+  if (S.ctaFoto && S.ctaFoto.tem) av.style.backgroundImage = `url("${S.ctaFoto.url}")`;
+  else av.textContent = 'sem foto';
+  const col = el('div', 'cta-perfil-col', box);
+  const lab = el('label', 'cta-label', col);
+  lab.textContent = 'Perfil';
+  const inp = el('input', 'cta-arroba', col);
+  inp.id = 'ctaArroba';
+  inp.type = 'text';
+  inp.spellcheck = false;
+  inp.placeholder = ((S.brand || {}).instagram || '@seuperfil');
+  inp.value = S.style.cta.arroba || '';
+  const acoes = el('div', 'cta-acoes', col);
+  const b = (acao, txt, tip) => {
+    const x = el('button', 'btn ghost small', acoes);
+    x.type = 'button'; x.dataset.ctaAcao = acao; x.textContent = txt; x.title = tip;
+  };
+  b('arquivo', 'Subir foto', 'Escolher uma imagem do computador');
+  b('quadro', 'Usar quadro do vídeo', 'Usa o quadro que está no player agora — recortado no rosto');
+  b('colar', 'Colar print', 'Cola um print da área de transferência (ou Cmd+V com esta aba aberta)');
+  const st = el('div', 'cta-status', col);
+  st.id = 'ctaStatus';
+  st.textContent = ctaMsg || (S.ctaFoto && S.ctaFoto.tem
+    ? (S.ctaFoto.origem === 'salva' ? 'Usando a foto salva do último projeto.' : 'Foto deste projeto.')
+    : `${m.name} precisa da foto do perfil — sem ela a finalização recusa este modelo.`);
+}
+
+async function ctaEnviaFoto(blob, query) {
+  ctaMsg = 'enviando a foto…';
+  if ($('ctaStatus')) $('ctaStatus').textContent = ctaMsg;
+  try {
+    /* PNG sempre: o navegador decodifica o que ele mostra (HEIC no Safari,
+       WebP, print colado) e o servidor só precisa ler PNG. */
+    let corpo = blob;
+    if (blob && blob.type !== 'image/png' && window.createImageBitmap) {
+      try {
+        const bmp = await createImageBitmap(blob);
+        const cv = document.createElement('canvas');
+        cv.width = bmp.width; cv.height = bmp.height;
+        cv.getContext('2d').drawImage(bmp, 0, 0);
+        corpo = await new Promise((r) => cv.toBlob(r, 'image/png'));
+      } catch (e) { /* manda como veio */ }
+    }
+    const r = await fetch('/api/cta-foto' + (query || ''), {
+      method: 'POST', body: corpo || '',
+      headers: corpo ? { 'Content-Type': corpo.type || 'image/png' } : {},
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || r.statusText);
+    S.ctaFoto = d;
+    ctaMsg = 'Foto gravada — recortada no rosto. Vale para os próximos projetos também.';
+  } catch (e) {
+    ctaMsg = `Não deu para gravar a foto: ${e.message || e}`;
+  }
+  renderSetup();
+  setTimeout(() => { ctaMsg = ''; }, 6000);
+}
+
+async function ctaColar() {
+  try {
+    const itens = await navigator.clipboard.read();
+    for (const it of itens) {
+      const tipo = it.types.find((t) => t.startsWith('image/'));
+      if (tipo) return ctaEnviaFoto(await it.getType(tipo));
+    }
+    ctaMsg = 'A área de transferência não tem imagem — tire o print e tente de novo.';
+  } catch (e) {
+    ctaMsg = 'O navegador não liberou a área de transferência — use Cmd+V com esta aba aberta.';
+  }
+  renderSetup();
+}
+
+/* Devolve true quando o clique era da aba CTA (o painel não segue adiante). */
+function ctaClick(e) {
+  const card = e.target.closest('[data-cta]');
+  if (card) {
+    if (!S.style.cta) S.style.cta = { modelo: '', arroba: '' };
+    S.style.cta.modelo = card.dataset.cta;
+    delete S.style.estiloSalvo;
+    renderSetup();
+    return true;
+  }
+  const bt = e.target.closest('[data-cta-acao]');
+  if (!bt) return false;
+  const acao = bt.dataset.ctaAcao;
+  if (acao === 'arquivo') {
+    const f = document.createElement('input');
+    f.type = 'file'; f.accept = 'image/*';
+    f.onchange = () => { if (f.files[0]) ctaEnviaFoto(f.files[0]); };
+    f.click();
+  } else if (acao === 'quadro') {
+    // o player mostra o corte renderizado — o mesmo arquivo do state.video
+    ctaEnviaFoto(null, `?quadro=${(video.currentTime || 0).toFixed(3)}`);
+  } else if (acao === 'colar') {
+    ctaColar();
+  }
+  return true;
+}
+
+// Cmd+V com a aba CTA aberta cola o print direto (o caminho que sempre
+// funciona — `navigator.clipboard.read()` depende de permissão do navegador)
+document.addEventListener('paste', (e) => {
+  if (activeLayer !== 'cta' || $('layersPanel').classList.contains('hidden')) return;
+  const m = CTA_MODELOS.find((x) => x.id === ((S.style.cta || {}).modelo || ''));
+  if (!m || !m.foto) return;
+  const it = [...(e.clipboardData || {}).items || []].find((x) => x.type.startsWith('image/'));
+  if (!it) return;
+  e.preventDefault();
+  ctaEnviaFoto(it.getAsFile());
+});
+
+// o @ não reconstrói o painel a cada tecla: só o estado, o resumo e a barra
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'ctaArroba') return;
+  if (!S.style.cta) S.style.cta = { modelo: '', arroba: '' };
+  S.style.cta.arroba = e.target.value.trim();
+  refreshActionBar();
+  clearTimeout(ctaArroba.t);
+  // o @ é de quem faz, como a cor: vai para o brand.json e vale no próximo
+  ctaArroba.t = setTimeout(() => {
+    const v = S.style.cta.arroba;
+    if (!v) return;
+    fetch('/api/brand', { method: 'POST', body: JSON.stringify({ instagram: v.startsWith('@') ? v : '@' + v }) })
+      .then((r) => r.json()).then((d) => { if (d && d.brand) S.brand = { ...(S.brand || {}), instagram: d.brand.instagram }; })
+      .catch(() => {});
+  }, 900);
+});
+
 function restauraRolagem(el2, topo) {
   if (!topo) return;
   requestAnimationFrame(() => { el2.scrollTop = topo; });
@@ -2958,6 +3497,7 @@ function buildLayerRows() {
 
   const L = LAYERS.find((x) => x.id === activeLayer) || LAYERS[0];
   if (L.soon) { el('div', 'layer-soon', body).textContent = L.soon; return; }
+  if (L.cta) { buildCtaBody(body); return; }
 
   for (const gid of L.groups || []) {
     const g = el('div', 'dep-group', body);
@@ -2985,19 +3525,57 @@ function refreshLayerSummaries() {
     const n = $(`sum-${L.id}`);
     if (!n) continue;
     if (L.soon) { n.textContent = 'em breve'; continue; }
+    if (L.cta) {
+      const m = CTA_MODELOS.find((x) => x.id === ((S.style.cta || {}).modelo || ''));
+      n.textContent = m && m.id ? m.name : 'nenhum';
+      continue;
+    }
     const bits = [];
     // `edits` passa por `formatoName()`: com um dos três de EDIT_ELEMENTS
     // ligado, `S.style.edit` é `limpa` e o resumo diria "Nenhum" para um
     // vídeo que tem adesivo (ou cartela, ou ênfase) na tela.
     for (const g of L.groups || []) bits.push(g === 'edits' ? formatoName()
-      : styleName(g, { headlines: S.style.headline, captions: S.style.captions }[g]));
+      : g === 'headlines' ? headlineName()
+      : g === 'ganchoFx' ? (S.style.ganchoEfeito ? styleName('ganchoFx', S.style.ganchoEfeito) : '')
+      : styleName(g, S.style.captions));
     if (L.elements) {
-      const on = L.elements.filter((id) => S.style.elements[id]);
+      // um efeito travado pelo formato NÃO está ativo, por mais que o chip
+      // guarde a escolha — o resumo diz o que vai ao render
+      const on = L.elements.filter((id) => {
+        const cat = STYLE_CATALOG.elements.find((x) => x.id === id);
+        return S.style.elements[id] && !(cat && cat.efx && elLocked(cat));
+      });
       bits.push(on.length ? `${on.length} ativo${on.length === 1 ? '' : 's'}` : 'desligado');
     }
     n.textContent = bits.filter(Boolean).join(' · ');
   }
 }
+
+/* A ÚLTIMA ESCOLHA é a que a demonstração mostra — registrada na CAPTURA,
+   antes do handler abaixo, que retorna cedo em vários ramos. Nos cartões de
+   estilo (Formato, efeito do gancho, CTA) escolher continua mostrando; nos
+   chips de Efeitos e Movimento quem mostra é o OLHO, e o chip só liga/desliga. */
+$('layersPanel').addEventListener('click', (e) => {
+  const eye = e.target.closest('.chk-eye');
+  if (eye) {
+    // o olho NÃO marca o chip: para aqui, antes do handler de liga/desliga
+    e.stopPropagation();
+    const id = eye.closest('.chk').dataset.id;
+    const vendo = S.demoSel[activeLayer] === id && S.demoPausada !== activeLayer;
+    S.demoSel[activeLayer] = vendo ? null : id;
+    S.demoPausada = null;
+    renderSetup();
+    return;
+  }
+  S.demoPausada = null;
+  const chk = e.target.closest('.chk:not(.layer-chip)');
+  if (chk && (activeLayer === 'efeitos' || activeLayer === 'movimento')) S.demoSel[activeLayer] = null;
+  // trocar de camada também devolve o vídeo: o olho vale para onde foi aberto
+  if (e.target.closest('.layer-chip')) S.demoSel.efeitos = S.demoSel.movimento = null;
+  const opt = e.target.closest('.opt');
+  if (opt && opt.dataset.group === 'ganchoFx') S.demoSel.gancho = !!opt.dataset.id;
+  else if (opt && opt.dataset.group === 'headlines') S.demoSel.gancho = false;
+}, true);
 
 $('layersPanel').addEventListener('click', (e) => {
   // acordeão mestre: recolhe o painel inteiro e devolve a largura para a
@@ -3032,6 +3610,7 @@ $('layersPanel').addEventListener('click', (e) => {
     return;
   }
 
+  if (ctaClick(e)) return;
   const opt = e.target.closest('.opt:not(.ghost):not(.unavailable)');
   if (opt && opt.dataset.group === 'salvo') {
     aplicaEstiloSalvo(opt.dataset.id);
@@ -3058,10 +3637,14 @@ $('layersPanel').addEventListener('click', (e) => {
       renderSetup();
       return;
     }
-    const key = {headlines: 'headline', captions: 'captions'}[opt.dataset.group];
-    S.style[key] = opt.dataset.id;
+    const key = {headlines: 'headline', captions: 'captions', ganchoFx: 'ganchoEfeito'}[opt.dataset.group];
     const doHeadline = opt.dataset.group === 'headlines';
-    if (doHeadline) limpaConflitoZonaAlta('headline');
+    if (doHeadline) {
+      // Caixinha/Notícia são opções do MESMO radio: uma escolha só na zona alta
+      const id = opt.dataset.id;
+      for (const k of HEADLINE_ELEMENTS) S.style.elements[k] = (k === id);
+      S.style.headline = HEADLINE_ELEMENTS.includes(id) ? '' : id;
+    } else S.style[key] = opt.dataset.id;
     /* ESCOLHER TEM DE MOSTRAR. O gancho vive nos primeiros segundos do corte;
        com o ponteiro em 00:40 o usuário clicaria num layout e o vídeo não
        mudaria nada — escolher sem ver a escolha é o mesmo que não ter
@@ -3083,7 +3666,8 @@ $('layersPanel').addEventListener('click', (e) => {
       // alerta em vez de marcação silenciosa: marcar e não cumprir é o que
       // esta trava existe para impedir
       alert(trava);
-      S.style.elements[chk.dataset.id] = false;
+      // efeito travado pelo FORMATO guarda a escolha: trocar de formato a devolve
+      if (!cat.efx) S.style.elements[chk.dataset.id] = false;
       return;
     }
   }
@@ -3125,6 +3709,8 @@ async function sendStyle() {
     explicativoOpcoes: (S.style.estiloSalvo && S.style.explicativo) || null,
     edit: S.style.edit,
     editName: styleName('edits', S.style.edit),
+    cta: { modelo: (S.style.cta || {}).modelo || '',
+           arroba: ((S.style.cta || {}).arroba || '').trim() },
     /* O FORMATO como UMA coisa, para quem LÊ o pedido. `edit`/`elements`
        continuam sendo o contrato de máquina (o phase2.py lê os dois e não
        sabe deste campo), mas sozinho o `edit` diz "Nenhum" quando a escolha
@@ -3132,7 +3718,9 @@ async function sendStyle() {
     formato: formatoEl() || S.style.edit,
     formatoName: formatoName(),
     headline: S.style.headline,
-    headlineName: styleName('headlines', S.style.headline),
+    headlineName: headlineName(),
+    ganchoEfeito: S.style.ganchoEfeito || '',
+    ganchoEfeitoName: S.style.ganchoEfeito ? styleName('ganchoFx', S.style.ganchoEfeito) : '',
     captions: S.style.captions,
     captionsName: styleName('captions', S.style.captions),
     accent: S.style.accent,

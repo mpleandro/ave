@@ -1458,6 +1458,29 @@
         "heroBox": "accent"
       }
     },
+    "vidro": {
+      "weights": [
+        900,
+        900
+      ],
+      "cap": 82,
+      "safeW": 820,
+      "lh": 1.06,
+      "top": 210,
+      "upper": true,
+      "stroke": 0,
+      "usesAccent": true,
+      "paint": {
+        "lines": [
+          "main",
+          "accent"
+        ],
+        "box": "vidro"
+      },
+      "gradient": null,
+      "align": "center",
+      "_note": "VIDRO (Glass Type, motor de efeitos 2026-10-15): o cartão vira vidro fosco — a imagem atrás aparece borrada através dele, com borda de luz e a segunda linha no accent."
+    },
     "fita": {
       "motor": "cartela",
       "cheia": false,
@@ -2847,5 +2870,88 @@
     "_limites": "Tetos de caracteres do usuário (2026-08-19): 60 na faixa escura, 72 no corpo branco. São o que cabe legível no adesivo em 1080 de largura — passar disso encolhe a fonte ou estoura a caixa, e as duas saídas estragam o formato. Valem na INTERFACE (o campo trava) e no COMPOSITOR (dado escrito à mão também obedece)."
   },
   "_ancoras_readme": "`ancora` diz o que o número de posição do estilo SIGNIFICA, e existe porque os quatro significados diferentes estavam implícitos no CSS de cada um: `rodape` = px do fundo até a base do bloco (--cap-bottom); `topo` = fração da altura até o TOPO do bloco (o dinâmico, que não tem translateY); `centro` = fração até o CENTRO (editorial, disperso, rotativo — todos com translateY(-50%)); `centroDelta` = deslocamento a partir do meio do quadro (o empilhado, cujo top é calc((0.5 + offset) * 100%)). O caption_safe.py media o queixo e escrevia UM número para todos, tratando-o como topo: corrigia o editorial e o disperso pela metade de um bloco e jogaria o empilhado para fora do quadro. `bloco` é a altura do bloco em fração da altura do quadro, MEDIDA no render quando `blocoMedido` é verdadeiro.",
-  "_cartela_readme": "As headlines com `motor: cartela` rodam em assets/styles/cartela.css + cartela.js — um bloco de slots (olho, algarismo, linhas, grade, assinatura) mais peças opcionais (`pecas`), com entrada e saída em tween de GSAP. `cheia: true` marca as que tomam o QUADRO INTEIRO e devolvem o vídeo na saída; para elas o `top` não vale, quem posiciona é a folha. `slots` diz de onde sai cada pedaço do texto que o usuário digitou — mesma convenção da etiqueta, que já lia a primeira linha como rótulo: `primeira` (a primeira linha), `numero` (a primeira linha, se for um algarismo), `traco` (a linha que começa com travessão) e `chave:valor` (as linhas com dois-pontos). Os layouts antigos não têm `motor` e continuam saindo pelo caminho de sempre."
+  "_cartela_readme": "As headlines com `motor: cartela` rodam em assets/styles/cartela.css + cartela.js — um bloco de slots (olho, algarismo, linhas, grade, assinatura) mais peças opcionais (`pecas`), com entrada e saída em tween de GSAP. `cheia: true` marca as que tomam o QUADRO INTEIRO e devolvem o vídeo na saída; para elas o `top` não vale, quem posiciona é a folha. `slots` diz de onde sai cada pedaço do texto que o usuário digitou — mesma convenção da etiqueta, que já lia a primeira linha como rótulo: `primeira` (a primeira linha), `numero` (a primeira linha, se for um algarismo), `traco` (a linha que começa com travessão) e `chave:valor` (as linhas com dois-pontos). Os layouts antigos não têm `motor` e continuam saindo pelo caminho de sempre.",
+  "_efeitos_readme": "Motor de efeitos (helpers/efeitos.py → efeitos_compose.py → efeitos.css/js), da referência '17 video effects claude can create' (2026-10-15). `formatos` é a REGRA DO FORMATO pedida pelo usuário: efeito AUTOMÁTICO só entra quando o formato escolhido o prevê; 'Nenhum' (limpa) não prevê nada. Os efeitos do GANCHO não estão aqui: são escolha explícita na camada Headline, não automáticos. Números são ponto de partida.",
+  "efeitos": {
+    "formatos": {
+      "limpa": [],
+      "split": [],
+      "split2": [],
+      "explicativo": [],
+      "animTexto": [],
+      "anim3d": [],
+      "ilustrado": [
+        "checklist",
+        "chartGrow",
+        "phoneMockup",
+        "uiWorld",
+        "zoomPunch",
+        "zoomThrough"
+      ],
+      "brollOverlay": [
+        "zoomPunch",
+        "zoomThrough"
+      ],
+      "fundoTrocado": [
+        "checklist",
+        "chartGrow",
+        "phoneMockup",
+        "zoomPunch"
+      ],
+      "caderno": [
+        "checklist",
+        "chartGrow",
+        "zoomPunch"
+      ]
+    },
+    "duracaoPadrao": {
+      "checklist": 4.0,
+      "chartGrow": 3.5,
+      "phoneMockup": 4.0,
+      "uiWorld": 4.0,
+      "zoomPunch": 1.2
+    },
+    "ganchoPadrao": 3.0,
+    "entrada": 0.38,
+    "saida": 0.26,
+    "checklist": {
+      "largura": 800,
+      "item": 108,
+      "_note": "Card de vidro escuro; cada item marca na palavra que o cita."
+    },
+    "chartGrow": {
+      "largura": 800,
+      "altura": 520,
+      "barraMs": 0.55,
+      "stagger": 0.09
+    },
+    "phoneMockup": {
+      "largura": 430,
+      "altura": 880,
+      "raio": 64
+    },
+    "zoomPunch": {
+      "escala": 1.32,
+      "intervaloMinimo": 5.0,
+      "_note": "Zoom digital: corte seco para dentro do rosto na frase de efeito, corte seco de volta no fim dela."
+    },
+    "zoomThrough": {
+      "escala": 2.6,
+      "blur": 16,
+      "entraFrames": 7,
+      "saiFrames": 9,
+      "intervaloMinimo": 8.0,
+      "_note": "O zoom atravessa o rosto até o corte e o plano seguinte nasce de dentro dele."
+    },
+    "frameBreak": {
+      "card": {
+        "top": 23,
+        "lados": 8,
+        "base": 13
+      },
+      "raio": 46,
+      "transicao": 0.5,
+      "_note": "Quebra de moldura: o quadro encolhe para um cartão (inset em % do quadro) e a cabeça recortada passa por cima da borda de cima."
+    }
+  }
 }

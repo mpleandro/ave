@@ -199,8 +199,11 @@ def resolver(edit: Path, margem: float, verbose: bool = True) -> list[dict]:
         # medição. O foco continua MEDIDO: quem escolhe o quanto fecha é o
         # autor, quem põe a cabeça no lugar é a medição.
         zoom_base = float(it.get("zoomBase", lay["zoom"]))
+        # FOLGA POR JANELA (`margemRosto`): quando algo nosso pousa na costura
+        # — a headline centrada nela na abertura —, o rosto desce o bastante
+        # para o elemento não cobri-lo. Mesmo princípio do `zoomBase`.
         zoom, focus, nota = enquadrar(cabelo, altura, src_w, src_h, src_w, win_h,
-                                      zoom_base, margem)
+                                      zoom_base, float(it.get("margemRosto", margem)))
         out.append({"start": t0, "end": t1, "ok": True,
                     "cabelo": round(cabelo, 1), "rosto_h": round(altura, 1),
                     "zoom": zoom, "focusY": focus,
@@ -215,6 +218,11 @@ def aplicar(edit: Path, medidas: list[dict]) -> int:
     n = 0
     for it, m in zip(dados.get("splitInserts") or [], medidas):
         if not m.get("ok"):
+            continue
+        # `focoManual`: o par zoom/focusY foi posto à mão e vence a medição —
+        # o caso de uma fonte que JÁ nasceu com a faixa da arte gravada (react
+        # montado na câmera), onde medir o rosto o aproximaria sem motivo.
+        if it.get("focoManual"):
             continue
         it["zoom"], it["focusY"] = m["zoom"], m["focusY"]
         n += 1

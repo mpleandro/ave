@@ -224,7 +224,9 @@ SERVER = Path.home() / ".avelin" / "server.json"
 # escreve aqui quando descobre a marca (de um site, de um material de
 # referência, de uma resposta no chat).
 BRAND = Path.home() / ".avelin" / "brand.json"
-BRAND_KEYS = ("accent", "textColor", "capColor", "fontMain", "fontAccent", "capFont")
+# `instagram` é o @ do CTA de fechamento: de quem faz, não do vídeo — como a cor.
+BRAND_KEYS = ("accent", "textColor", "capColor", "fontMain", "fontAccent", "capFont",
+              "instagram")
 
 # AS ESCOLHAS DE ESTILO, lembradas entre projetos. O `brand.json` já guardava a
 # identidade (cor e letra); faltava o resto do que o usuário marca toda vez —
@@ -239,7 +241,10 @@ BRAND_KEYS = ("accent", "textColor", "capColor", "fontMain", "fontAccent", "capF
 ESTILO = Path.home() / ".avelin" / "estilo.json"
 ESTILOS_SALVOS = Path.home() / ".avelin" / "estilos_salvos.json"
 ESTILO_KEYS = ("edit", "headline", "captions", "elements", "capDy",
-               "hookDx", "hookDy", "hookScale")
+               "hookDx", "hookDy", "hookScale", "cta")
+# A FOTO DO PERFIL do CTA mora fora do projeto pela razão do brand.json: é de
+# quem faz. Cada envio grava no projeto E aqui; o projeto sem foto herda esta.
+CTA_FOTO_SALVA = Path.home() / ".avelin" / "cta" / "perfil.png"
 
 
 def _set_root(p: Path | None) -> None:
@@ -721,15 +726,69 @@ class Handler(BaseHTTPRequestHandler):
             self._estilos_salvos()
         elif path == "/api/localfonts":
             self._localfonts()
+        elif path == "/api/cta-foto":
+            self._cta_foto_get()
+        elif path == "/api/cta-foto/salva.png":
+            self._send_file(CTA_FOTO_SALVA) if CTA_FOTO_SALVA.exists() \
+                else self._json({"error": "sem foto salva"}, 404)
+        elif path.startswith("/cta-demo/"):
+            self._cta_demo(path[len("/cta-demo/"):].removesuffix(".html"))
+        elif path.startswith("/cta-asset/"):
+            p = self._safe(Path(__file__).resolve().parent.parent / "assets" / "cta",
+                           path[len("/cta-asset/"):])
+            self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path == "/download":
             self._no_project() or self._download()
         else:
             self._json({"error": "unknown route"}, 404)
 
+    def _cta_demo(self, modelo: str) -> None:
+        """O CTA DE VERDADE como demonstração no player (camada CTA do editor):
+        o mesmo HTML do render, com foto, @ e cor do usuário — sem foto, um
+        círculo na cor de destaque. O editor o toca em loop num iframe."""
+        import json as _json
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import cta as C
+        m = C.MODELOS.get(modelo)
+        if not m or not m.get("html"):
+            return self._json({"error": "modelo sem página"}, 404)
+        cta_dir = Path(__file__).resolve().parent.parent / "assets" / "cta"
+        html = (cta_dir / m["html"]).read_text()
+        info = self._cta_foto_info()
+        foto = info.get("url") if info.get("tem") else (
+            "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'>"
+            "<rect width='10' height='10' fill='%23ff3b30'/></svg>")
+        try:
+            marca = _json.loads((Path.home() / ".avelin" / "brand.json").read_text())
+        except (OSError, ValueError):
+            marca = {}
+        arroba = (marca.get("instagram") or "seuperfil").lstrip("@")
+        accent = marca.get("accent") or "#ff3b30"
+        subs = {"{{FOTO}}": foto, "{{ARROBA}}": arroba, "{{ACCENT}}": accent,
+                "{{CLIQUE}}": f"{m['clique']:.3f}", "{{DURACAO}}": f"{m['duracao']:.3f}",
+                "{{ID}}": "demo"}
+        if modelo == "instagram-card":
+            larg = m["largura"] * 1080
+            subs.update({"{{VIDEO}}": f"/cta-asset/{m['video']}", "{{ESCALA}}": f"{larg / 544:.4f}",
+                         "{{LEFT}}": f"{540 - larg / 2:.1f}", "{{TOP}}": f"{m['topo'] * 1920:.1f}",
+                         "{{MAPA}}": (cta_dir / "instagram-card.json").read_text(), "{{SELO}}": ""})
+        for k, v in subs.items():
+            html = html.replace(k, v)
+        body = html.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_POST(self) -> None:  # noqa: N802
         route = self.path.split("?", 1)[0]
         if route == "/api/upload":
             return self._upload()
+        if route == "/api/cta-foto":
+            return self._no_project() or self._cta_foto_put()
         if route in ("/api/open", "/api/close", "/api/drop", "/api/brand", "/api/start"):
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -1067,6 +1126,63 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"families": [], "error": str(exc)[:200]})
 
     # ---- a marca ----
+    # ---- CTA: a foto do perfil ----
+    def _cta_foto_info(self) -> dict:
+        proj = (self.root / "hyperframes" / "cta" / "perfil.png") if self.root else None
+        if proj and proj.exists():
+            v = int(proj.stat().st_mtime)
+            return {"tem": True, "origem": "projeto",
+                    "url": f"/media/hyperframes/cta/perfil.png?v={v}"}
+        if CTA_FOTO_SALVA.exists():
+            v = int(CTA_FOTO_SALVA.stat().st_mtime)
+            return {"tem": True, "origem": "salva", "url": f"/api/cta-foto/salva.png?v={v}"}
+        return {"tem": False}
+
+    def _cta_foto_get(self) -> None:
+        self._json(self._cta_foto_info())
+
+    def _cta_foto_put(self) -> None:
+        """Grava a foto do CTA: corpo cru (arquivo escolhido ou print colado) ou
+        `?quadro=<s>` (o quadro do corte naquele segundo).
+
+        O recorte quadrado em volta do rosto é do `cta.py foto`, rodado no
+        python dos helpers — este servidor pode estar num interpretador sem o
+        OpenCV (ver helper_python).
+        """
+        from urllib.parse import parse_qs, urlparse
+        q = parse_qs(urlparse(self.path).query)
+        args = [helper_python(), str(Path(__file__).resolve().parent / "cta.py"),
+                "foto", str(self.root)]
+        if q.get("quadro"):
+            try:
+                args += ["--quadro", f"{float(q['quadro'][0]):.3f}"]
+            except ValueError:
+                return self._json({"error": "quadro inválido"}, 400)
+        else:
+            try:
+                total = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                total = 0
+            if total <= 0 or total > 25 << 20:
+                return self._json({"error": "imagem vazia ou grande demais"}, 400)
+            ext = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
+                   "image/heic": ".heic"}.get(
+                (self.headers.get("Content-Type") or "").split(";")[0].strip(), ".png")
+            tmp = self.root / ".preview_cache" / f"cta-upload{ext}"
+            tmp.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_bytes(self.rfile.read(total))
+            args.append(str(tmp))
+        r = subprocess.run(args, capture_output=True, text=True)
+        if r.returncode != 0:
+            return self._json({"error": (r.stderr or r.stdout).strip()[-300:]}, 500)
+        feita = self.root / "hyperframes" / "cta" / "perfil.png"
+        try:
+            CTA_FOTO_SALVA.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(feita, CTA_FOTO_SALVA)
+        except OSError:
+            pass
+        self._json({"ok": True, **self._cta_foto_info()})
+
     def _brand_get(self) -> None:
         try:
             d = json.loads(BRAND.read_text())

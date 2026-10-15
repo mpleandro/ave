@@ -1294,6 +1294,10 @@ kbd {
    o cartão, e o radio de formato ganhou justamente os títulos mais longos da
    aba ("Caixinha de perguntas"), então a diferença agora aparece. */
 #opt-edits .opt { width: calc(var(--mock-w) + 16px); }
+/* Caixinha e Notícia moram no radio da HEADLINE (2026-10-14): o mock delas
+   ocupa o mesmo quadro dos cartões vizinhos, senão a fileira desnivela. */
+#opt-headlines .opt-preview.frame { width: var(--quadro-w, 110px); height: var(--quadro-h, 196px); }
+#opt-headlines .opt-preview.frame svg { object-fit: contain; }
 /* O CARTÃO É O QUADRO, na orientação do vídeo carregado (pedido do usuário,
    2026-08-19). Era uma tira de 64px com a legenda centrada nela: dava para
    comparar as LETRAS, não para ver como fica. A legenda vive a 22% do fundo, a
@@ -1493,6 +1497,24 @@ kbd {
 .chk-ico svg { width: 17px; height: 17px; fill: currentColor; display: block; }
 .chk.on .chk-ico { color: var(--blue); }
 .chk-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+/* o olho: ver a demo no player sem marcar o chip — fica à direita, empurrado
+   pela margem automática, e acende na cor de acento enquanto a demo roda */
+.chk-eye {
+  flex: 0 0 auto;
+  display: grid; place-items: center;
+  width: 24px; height: 22px;
+  margin: -3px -6px -3px auto;
+  padding: 0;
+  border: 0; border-radius: 7px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.chk-eye svg { width: 15px; height: 15px; fill: currentColor; display: block; }
+.chk-eye:hover { color: var(--text, #fff); background: rgba(255, 255, 255, 0.08); }
+.chk-eye.on { color: var(--orange); background: rgb(var(--orange-rgb) / 0.14); }
+.chk.locked .chk-eye { cursor: pointer; }
 
 /* Caixinha, Broll Overlay e Notícia NÃO têm regra própria aqui: viraram
    opções do radio de formato (ver EDIT_ELEMENTS em app.js) e usam o `.opt`
@@ -2301,3 +2323,92 @@ button.tl-chip:disabled { cursor: default; }
 .salvo-cor { width:22px; height:22px; border-radius:50%; border:2px solid rgb(255 255 255 / .6); }
 .salvo-fmt { font-weight:700; font-size:12px; color:#fff; line-height:1.15; }
 .salvo-det { font-size:10.5px; color:rgb(255 255 255 / .62); line-height:1.25; }
+
+/* ---------- CTA de fechamento (aba CTA) ----------
+   Miniaturas no mesmo quadro 9:16 das outras opções, com a peça no lugar em
+   que ela entra no vídeo: cápsula no topo, card no alto, botão embaixo. */
+.cta-grid .opt { width: calc(var(--mock-w) + 16px); }
+.cta-prev { position: relative; overflow: hidden; border-radius: 8px;
+  background: linear-gradient(180deg, #2b2f36, #15171b); }
+.cta-pill { position: absolute; left: 6%; right: 6%; top: 24%; height: 13%;
+  display: flex; align-items: center; gap: 3px; padding: 0 3px;
+  border-radius: 99px; background: rgba(24, 24, 24, .94); }
+.cta-pill-foto { flex: none; height: 78%; aspect-ratio: 1; border-radius: 50%;
+  background: #555 center / cover; box-shadow: 0 0 0 1.5px var(--orange); }
+.cta-pill-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.1; }
+.cta-pill-txt b { font-size: 6px; color: #fff; white-space: nowrap; }
+.cta-pill-txt i { font-style: normal; font-size: 4.5px; color: #b8b2ad;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cta-pill-btn { flex: none; font-size: 5px; font-weight: 700; color: #fff;
+  padding: 2px 4px; border-radius: 99px; }
+.cta-card { position: absolute; left: 50%; top: 10%; width: 74%; transform: translateX(-50%); }
+.cta-card img { width: 100%; display: block; }
+/* o círculo da foto na mesma posição medida no vídeo (272,407 r 94.6 em 544×890) */
+.cta-card-foto { position: absolute; left: calc(50% - 17.4%); width: 34.8%; aspect-ratio: 1;
+  top: calc(45.7% - 10.6%); border-radius: 50%; background: #3a3a3a center / cover; }
+.cta-simples { position: absolute; left: 50%; top: 72%; width: 70%; transform: translateX(-50%); }
+.cta-simples img { width: 100%; display: block; }
+.cta-nenhum { position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 10px; color: var(--dim); }
+.cta-nota { margin-top: 10px; font-size: 11px; line-height: 1.45; color: var(--dim); }
+.cta-perfil { display: flex; gap: 14px; align-items: flex-start; margin-top: 14px;
+  padding: 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--stroke); }
+.cta-avatar { flex: none; width: 76px; height: 76px; border-radius: 50%;
+  background: #2a2a2a center / cover; box-shadow: 0 0 0 2px var(--orange); }
+.cta-avatar.vazio { display: grid; place-items: center; font-size: 10px; color: var(--dim);
+  box-shadow: 0 0 0 1.5px var(--stroke); border: 1px dashed rgba(255, 255, 255, .25); }
+.cta-perfil-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.cta-label { font-size: 11px; color: var(--dim); }
+.cta-arroba { width: 100%; padding: 7px 9px; border-radius: 8px; font: inherit; font-size: 13px;
+  color: var(--text); background: rgba(0, 0, 0, .25); border: 1px solid var(--stroke); }
+.cta-arroba:focus { outline: none; border-color: var(--orange); }
+.cta-acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.cta-status { font-size: 11px; line-height: 1.4; color: var(--dim); }
+
+/* ---------- DEMONSTRAÇÃO NO PLAYER (demos.js, 2026-10-15) ----------
+   Uma tela virtual 1080×1920 escalada sobre o vídeo. Ela COBRE o vídeo
+   enquanto a camada aberta é Formato, Efeitos, Movimento ou CTA; nas outras o
+   player volta ao vídeo editado. */
+.demo-stage { position: absolute; z-index: 6; overflow: hidden; border-radius: inherit; background: #000;
+              pointer-events: none; }
+.demo-stage.hidden { display: none; }
+.dm-tela { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: hidden;
+           transform-origin: 0 0; background: #111; }
+.dm-vidwin, .dm-cena, .dm-fg, .dm-fundo { position: absolute; inset: 0; }
+.dm-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.dm-boneco { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dm-fg { pointer-events: none; }
+.dm-cap { position: absolute; left: 0; right: 0; top: 1500px; text-align: center; font: 900 76px/1.1 Poppins, sans-serif;
+          color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,.6); display: flex; gap: 20px; justify-content: center; }
+.dm-escuro { position: absolute; inset: 0; background: rgba(0,0,0,.62); }
+.dm-grade { background-color: #0b0b0b; background-image: linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px); background-size: 120px 120px; }
+.dm-bo { position: absolute; left: 0; right: 0; top: 760px; display: flex; flex-wrap: wrap; justify-content: center;
+         gap: 10px 26px; padding: 0 120px; font: 900 132px/1 Poppins, sans-serif; color: #fff; }
+.dm-kin { position: absolute; left: 130px; top: 640px; font: 900 120px/1.02 Poppins, sans-serif; color: #fff; }
+.dm-piso { position: absolute; left: -200px; right: -200px; bottom: -200px; height: 900px;
+           background-image: linear-gradient(rgba(255,255,255,.18) 2px, transparent 2px),
+                             linear-gradient(90deg, rgba(255,255,255,.18) 2px, transparent 2px);
+           background-size: 120px 120px; transform: perspective(800px) rotateX(62deg); transform-origin: 50% 100%; }
+.dm-lista { position: absolute; left: 130px; right: 130px; top: 860px; display: flex; flex-direction: column; gap: 28px; }
+.dm-lista div { display: flex; align-items: center; gap: 28px; padding: 26px 30px; border-radius: 28px;
+                background: rgba(255,255,255,.1); border: 2px solid rgba(255,255,255,.16);
+                font: 800 64px/1 Inter, sans-serif; color: #fff; }
+.dm-lista b { display: grid; place-items: center; width: 76px; height: 76px; border-radius: 18px; font-size: 44px; }
+.dm-arte { position: absolute; left: 0; width: 1080px; height: 960px; overflow: hidden; }
+.dm-arte svg { width: 100%; height: 100%; display: block; }
+.dm-costura { position: absolute; left: 0; right: 0; height: 6px; background: rgba(255,255,255,.9); }
+.dm-corredor { background: repeating-linear-gradient(90deg, #3a3f55 0 90px, #4b5170 90px 180px);
+               transform-origin: 50% 45%; }
+.dm-corredor::after { content: ''; position: absolute; inset: 0;
+                      background: radial-gradient(40% 30% at 50% 45%, rgba(255,220,160,.55), transparent 70%); }
+.dm-iframe { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; border: 0; background: transparent; }
+.dm-segue { position: absolute; left: 290px; top: 1340px; width: 500px; height: 120px; border-radius: 22px; display: grid;
+            place-items: center; background: #0095f6; font: 700 52px/1 Inter, sans-serif; color: #fff; }
+.dm-segue .a, .dm-segue .b { grid-area: 1 / 1; }
+.dm-rotulo { position: absolute; left: 10px; top: 10px; padding: 4px 10px; border-radius: 999px; z-index: 2;
+             background: rgba(0,0,0,.55); color: #fff; font: 600 11px/1.4 Inter, sans-serif; letter-spacing: .02em; }
+/* o vídeo da demo NÃO é o vídeo do player: as regras de `.player-frame video`
+   (largura máxima em vw, raio) cortavam a tela virtual pela metade */
+.player-frame .demo-stage video.dm-video { position: absolute; inset: 0; width: 100%; height: 100%;
+  max-width: none; max-height: none; border-radius: 0; object-fit: cover; }

@@ -88,7 +88,7 @@ def _silences_ffmpeg(video: Path, noise: str, min_silence: float) -> list[tuple[
     consumidor de `measured_silences` seria um vão inexistente.
     """
     proc = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-nostats", "-i", str(video),
+        ["ffmpeg", "-hide_banner", "-nostats", "-i", str(video), "-vn",
          "-af", f"silencedetect=noise={noise}:d={min_silence}", "-f", "null", "-"],
         capture_output=True, text=True,
     )
@@ -110,7 +110,7 @@ def _silences_ffmpeg(video: Path, noise: str, min_silence: float) -> list[tuple[
 
 def detect_silences(video: Path, noise: str, min_silence: float) -> list[tuple[float, float]]:
     cmd = [
-        "ffmpeg", "-hide_banner", "-i", str(video),
+        "ffmpeg", "-hide_banner", "-i", str(video), "-vn",
         "-af", f"silencedetect=noise={noise}:d={min_silence}",
         "-f", "null", "-",
     ]

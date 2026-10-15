@@ -198,6 +198,9 @@
            tela. O render continua sendo a palavra final — isto é o que deixa
            escolher um estilo sem esperar dois minutos para vê-lo. -->
       <div id="liveOverlay" class="live-overlay"></div>
+      <!-- DEMONSTRAÇÃO da escolha (demos.js): cobre o vídeo nas camadas
+           Formato, Efeitos, Movimento e CTA; some nas outras. -->
+      <div id="demoStage" class="demo-stage hidden"></div>
       <!-- REPRODUÇÃO sobre a imagem. Play, som e relógio pertencem ao player —
            numa barra separada eles gastavam uma faixa inteira da coluna para
            dizer coisas que só fazem sentido olhando o vídeo. -->
@@ -450,6 +453,11 @@
 <div id="tooltip" class="tooltip hidden"></div>
 <div id="toast" class="toast hidden"></div>
 
+<!-- as demonstrações usam os MESMOS efeitos do render (efeitos.css/js) e o GSAP -->
+<link rel="stylesheet" href="/styles/efeitos.css">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<script src="/styles/efeitos.js"></script>
+<script src="/assets/demos.js"></script>
 <script src="/assets/styles.local.js"></script>  <!-- AVELIN-OVERLAY -->
 <script src="/assets/app.js"></script>
 </body>

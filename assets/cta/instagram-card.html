@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1080, height=1920" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+  /* CTA "Instagram Card" — modelo da biblioteca (assets/cta/, helpers/cta.py).
+   *
+   * O CARTÃO é o `instagram-card.webm`: o ig_follow_profile.mov sem o verde e
+   * com a foto e o @ do autor APAGADOS (pintados com o preto do miolo). Por
+   * cima dele, aqui, entram a foto e o @ de quem está usando, quadro a quadro
+   * nas posições que `cta.py preparar` mediu no vídeo original — a foto cresce
+   * na entrada, pulsa no clique e desce no fechamento; o @ entra digitado.
+   *
+   * Tudo em coordenadas do vídeo (544×890). A caixa inteira escala para a
+   * largura pedida em `cta.width`.
+   */
+  @font-face { font-family: 'IGUser'; font-weight: 700;
+    src: local('Roboto Bold'), local('Roboto-Bold'), local('Inter Tight Bold'), local('InterTight-Bold'); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
+  #{{ID}}-caixa { position: absolute; left: {{LEFT}}px; top: {{TOP}}px; width: 544px; height: 890px;
+    transform: scale({{ESCALA}}); transform-origin: 0 0; }
+  #{{ID}}-video { position: absolute; left: 0; top: 0; width: 544px; height: 890px; }
+  /* o miolo preto do cartão: foto e @ nunca vazam para a borda colorida */
+  #{{ID}}-miolo { position: absolute; left: 0; top: 0; width: 544px; height: 890px; visibility: hidden; }
+  #{{ID}}-foto { position: absolute; left: 0; top: 0; width: 200px; height: 200px; border-radius: 50%;
+    object-fit: cover; transform-origin: 0 0; visibility: hidden; }
+  #{{ID}}-arroba { position: absolute; left: 0; top: 0; width: 544px; height: 60px;
+    display: flex; align-items: center; justify-content: center; gap: 10px; visibility: hidden; }
+  #{{ID}}-nome { font-family: 'IGUser', 'Roboto', 'Helvetica Neue', Arial, sans-serif; font-weight: 700;
+    font-size: 37px; letter-spacing: -0.4px; color: #fff; white-space: nowrap; line-height: 60px; }
+  #{{ID}}-selo { width: 34px; height: 34px; flex: none; {{SELO}} }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="{{ID}}" data-start="0" data-duration="{{DURACAO}}"
+     data-width="1080" data-height="1920">
+  <div id="{{ID}}-caixa">
+    <video id="{{ID}}-video" src="{{VIDEO}}" muted playsinline data-start="0"
+           data-duration="{{DURACAO}}" data-track-index="0"></video>
+    <div id="{{ID}}-miolo">
+      <img id="{{ID}}-foto" src="{{FOTO}}" alt="" />
+      <div id="{{ID}}-arroba">
+        <span id="{{ID}}-nome">{{ARROBA}}</span>
+        <svg id="{{ID}}-selo" viewBox="0 0 40 40"><path fill="#0095F6" d="M20 1.5l4.6 3.4 5.7-.3 1.9 5.4 4.8 3.1-1.6 5.5 1.6 5.5-4.8 3.1-1.9 5.4-5.7-.3L20 38.5l-4.6-3.4-5.7.3-1.9-5.4-4.8-3.1 1.6-5.5-1.6-5.5 4.8-3.1 1.9-5.4 5.7.3z"/><path d="M13 20.5l4.6 4.6L27.5 15" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  var MAPA = {{MAPA}};
+  var ID = '{{ID}}';
+  var tl = gsap.timeline({ paused: true });
+  var q = function (s) { return '#' + ID + '-' + s; };
+  var FIN = MAPA.arrobaFinal || [97, 538, 449, 570];
+  /* o @ do usuário pode ser mais largo que o do vídeo: encolhe para caber no
+     miolo, nunca estica */
+  var nomeEl = document.querySelector(q('arroba'));
+  var largura = 0;
+  for (var c = 0; c < nomeEl.children.length; c++) largura += nomeEl.children[c].getBoundingClientRect().width;
+  if (nomeEl.children.length > 1 && getComputedStyle(nomeEl.children[1]).display !== 'none') largura += 10;
+  var encolhe = largura > 440 ? 440 / largura : 1;
+  /* a linha de base do @ original fica no fundo da caixa medida */
+  var baseY = FIN[3] - 30 - 15;
+  var fps = MAPA.fps, ultimo = { m: null, f: null, a: null };
+  MAPA.quadros.forEach(function (Q, i) {
+    var t = i / fps;
+    var m = Q.miolo ? 'inset(' + Q.miolo[1] + 'px ' + (543 - Q.miolo[2]) + 'px ' + (889 - Q.miolo[3]) + 'px ' + Q.miolo[0] + 'px)' : null;
+    if (m !== ultimo.m) {
+      tl.set(q('miolo'), m ? { visibility: 'visible', clipPath: m } : { visibility: 'hidden' }, t);
+      ultimo.m = m;
+    }
+    var f = Q.foto ? Q.foto.join(',') : null;
+    if (f !== ultimo.f) {
+      if (Q.foto) {
+        var R = Q.foto[2] + 1;
+        tl.set(q('foto'), { visibility: 'visible', x: Q.foto[0] - R, y: Q.foto[1] - R, scale: (2 * R) / 200 }, t);
+      } else tl.set(q('foto'), { visibility: 'hidden' }, t);
+      ultimo.f = f;
+    }
+    var a = Q.arroba ? Q.arroba.join(',') : null;
+    if (a !== ultimo.a) {
+      if (Q.arroba) {
+        /* quanto da digitação já apareceu: a borda direita medida contra a do
+           @ completo. O deslocamento vertical acompanha o fechamento. */
+        var frac = Math.max(0, Math.min(1, (Q.arroba[2] - FIN[0]) / (FIN[2] - FIN[0])));
+        var dy = Q.arroba[3] - FIN[3];
+        /* recorte em px do espaço LOCAL do bloco (antes do `scale`): o grupo
+           está centrado em 544, e revela da esquerda para a direita */
+        var dir = frac >= 0.995 ? 0 : 544 - ((544 - largura) / 2 + frac * largura);
+        tl.set(q('arroba'), { visibility: 'visible', y: baseY + dy, scale: encolhe,
+          clipPath: 'inset(0px ' + dir.toFixed(1) + 'px 0px 0px)' }, t);
+      } else tl.set(q('arroba'), { visibility: 'hidden' }, t);
+      ultimo.a = a;
+    }
+  });
+  window.__timelines = window.__timelines || {};
+  window.__timelines[ID] = tl;
+</script>
+</body>
+</html>

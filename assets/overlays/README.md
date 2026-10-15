@@ -74,6 +74,12 @@ Nomes fixos — o composer e o agente procuram por eles.
 | `ig_follow` | CTA **"siga o perfil"** no Instagram. Overlay simples: entra no fim, sem preparo nenhum |
 | `ig_follow_profile` | mesma função, versão em **chromakey** — mais rico, mas **exige a foto do usuário** para preencher o espaço do avatar |
 
+**Desde 2026-10-14 os dois entram pela aba CTA do editor, não por aqui** —
+`assets/cta/README.md`. O `ig_follow_profile` virou o modelo **Instagram Card**
+(verde removido, foto e @ do autor apagados, foto e @ do usuário postos por
+cima em HTML) e o `ig_follow`, o **Instagram Simples**. Os .mov ficam nesta pasta
+como ORIGEM do `cta.py preparar`. O texto abaixo é o histórico do porquê.
+
 O `ig_follow_profile` não é o `ig_follow` melhorado: é outro fluxo. Sem a foto
 ele entra com um buraco no lugar do rosto, que lê como render quebrado. **Se a
 foto não estiver no projeto, use o `ig_follow` e diga por quê** — nunca entregue

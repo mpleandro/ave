@@ -240,7 +240,7 @@ Every edit session gets the same interactive interface in the user's preview pan
     "sourceDurations": {"C0000": 1038.5},
     "awaitingStyle": false,
     "style": {"edit": "split", "captions": "karaoke",
-              "elements": {"tracking": false, "zoomAuto": true, "zoomCuts": true, "musicAI": true}}}
+              "elements": {"tracking": false, "zoomAuto": true, "zoomCuts": false, "musicAI": true}}}
    ```
    (`captions`/`editData`/`finalVideo` only when they exist; the Fase-2 tab plays `finalVideo` — the render WITH captions/inserts — while Fase 1 plays the clean cut; `sourceDurations` lets the UI clamp take extensions; `awaitingStyle`/`style` drive the Estilo tab below.)
 2. Ensure `.claude/launch.json` has the config (adjust `--root` per session). The
@@ -442,6 +442,11 @@ The cut is approved and nothing about the LOOK of Fase 2 is decided yet. **Do no
 ask the style questions in chat** — set `"awaitingStyle": true` in `state.json`
 and the UI opens its own tab, sitting between FASE 1 and FASE 2:
 
+- **CAIXINHA E NOTÍCIA MORAM NA HEADLINE (2026-10-14)** — são as duas
+  primeiras opções do radio de Headline, não mais do Formato. O dado não mudou
+  (`elements.caixinha`/`elements.noticia`); escolher uma zera `headline`, e
+  escolher uma headline desliga as duas. O que vem abaixo sobre o Formato ter
+  "seis" opções descreve a tela antiga.
 - **Formato — um por vídeo** — um RADIO de seis, não três mais três caixas de
   marcar: `limpa` ("Nenhum": no split inserts, full frame throughout — **the
   default**, and the right pick for a talking-head cut or when the user will
@@ -524,7 +529,7 @@ and the UI opens its own tab, sitting between FASE 1 and FASE 2:
   centre-anchored cousin).
 - **Elementos da edição** — checkboxes, e agora só o que é liga/desliga de
   verdade: `tracking` (movimento de tracking), `zoomAuto` (automação de zoom
-  in), `zoomCuts` (zoom in/out nos cortes),
+  in), `zoomCuts` (zoom in/out nos cortes — desmarcado por padrão),
   `sfx` (efeitos sonoros), `musicAI` (trilha sonora com IA), mais o campo de
   observação livre. Caixinha, Broll Overlay e Notícia **não estão mais aqui** —
   viraram opções do radio de Formato acima; continuam gravadas em `elements`
@@ -894,6 +899,11 @@ Everything below is what that command does, and what to do when it stops.
 
 ### A amostra vem antes do vídeo inteiro
 
+**DESLIGADA POR PADRÃO (2026-10-14).** O usuário achou a amostra ruim — caía
+no meio/fim do corte e não mostrava a headline nem a legenda — e pediu para
+seguir sem ela. O `phase2.py` renderiza o vídeo inteiro direto; a amostra só
+roda com `--amostra S-E` explícito. O texto abaixo descreve o mecanismo.
+
 **Corte com 20s ou mais: o `phase2.py` renderiza primeiro uma AMOSTRA de 8–15s**
 (`helpers/amostra.py`), não o vídeo todo. O render da Fase 2 é o passo caro, e
 o que mais custa refazer — gráfico sob medida, tela dividida, B-roll, Animação
@@ -1053,23 +1063,87 @@ One tolerated exception, by name: `content_overlap` between the two `hl-line`
 of a headline. Tight leading makes the line BOXES touch though the glyphs do
 not — verified in the render. Any other error still blocks.
 
+### Efeitos — um motor só (2026-10-15)
+
+Da referência "17 video effects claude can create". `helpers/efeitos.py`
+(catálogo, regra do formato, frase → tempo) → `efeitos_compose.py` (HTML, JS,
+sons, janelas que calam a legenda) → `assets/styles/efeitos.css|js`. Números
+em `variants.json → efeitos`. Quatro papéis, quatro lugares no editor:
+
+| Papel | Camada | Entra como | Efeitos |
+|---|---|---|---|
+| Ilustrar a fala | **Efeitos** (nova) | AUTOMÁTICO, se o formato prevê | `checklist` `chartGrow` `phoneMockup` `uiWorld` |
+| Câmera | **Movimento & tracking** | AUTOMÁTICO, se o formato prevê | `zoomPunch` (frases de efeito) `zoomThrough` (cortes; desmarcado por padrão — só entra se o usuário marcar) |
+| Abrir o vídeo | **Headline → Efeito do gancho** | escolha, um por vídeo | `frameBreak` `coverStory` `headlineWall` `couchWall` `orbit` `vertigo` |
+| Vídeo inteiro | **Formato** | escolha | `ilustrado` `fundoTrocado` `caderno` |
+
+**A REGRA DO FORMATO (usuário, 2026-10-15): efeito automático só entra quando o
+formato o prevê** (`efeitos.formatos`). "Nenhum" (`limpa`) não prevê nada; o
+`ilustrado` prevê todos. Entrada de `efeitos[]` que o formato não prevê SAI do
+render com aviso — mesmo escrita à mão. Quando prevê, **entra sem perguntar**:
+o usuário remove no editor o que não quiser.
+
+- **Movimento**: o motor posiciona sozinho (zoom digital nas frases curtas e
+  inteiras que fecham uma ideia; zoom através nas junções do EDL).
+- **Conteúdo**: tem TEXTO, então a IA escreve — sem perguntar. O `phase2.py`
+  recusa pelo nome até existir: `efeitos.py candidatos <edit>` → escreva
+  `efeitos[]` só onde a fala pede (um de conteúdo por vez) → `efeitos.py
+  validar <edit> --gravar`. Nenhum trecho pede? `efeitosRevisados: true`.
+- **Pessoa recortada** (`uiWorld`, ganchos `atras`/`fgr`, formatos de vídeo
+  inteiro): o `phase2.py` recorta só as janelas pedidas (`recorte.py
+  processar`, cache por janela) e aprova o `rvm` sozinho se nada foi aprovado.
+  Na janela, a câmera é aparada e volta a 1 (o recorte é do quadro sem zoom).
+- **`coverStory`/`headlineWall`** desenham o texto do gancho eles mesmos (a
+  headline sai). Em plano fechado a manchete principal vem para a FRENTE.
+- **`vertigo`** é pixel: `anim3d_fx.py --fx vertigo` grava `preview_vertigo.mp4`
+  e ele vira o `baseVideo`.
+
+Entrada de exemplo:
+
+```json
+{"tipo": "checklist", "de": "primeiro ela", "ate": "mudar a rota", "titulo": "o que ela disse",
+ "itens": [{"texto": "Cansou da internet", "palavra": "internet"}]}
+```
+
+### CTA — entra onde a CHAMADA está (2026-10-15)
+
+O CTA não é sempre o último segundo. A chamada pode estar no meio ("comenta
+aqui", "salva esse vídeo", "link na bio"). Com CTA ligado, o `phase2.py`
+recusa até existir `cta.momento`: `cta.py momentos <edit>` lista as chamadas
+com o segundo de cada; a IA escolhe a de verdade e grava `cta.momento` (o
+clique do botão cai nele). Sem chamada na fala: `cta.momentoRevisado: true`, e
+o CTA fecha o vídeo. Não pergunte ao usuário. `revelarApp` (recuo para o app)
+mexe no `#vidwin` e por isso é montado pelo `efeitos_compose.py`.
+
+### Demonstração no player (editor)
+
+Nas camadas Formato, Efeitos, Movimento e CTA (e no Efeito do gancho), o player
+toca uma demo de 5s da escolha (`assets/preview/demos.js`) com os MESMOS
+`efeitos.css/js` do render: formatos e ganchos com boneco ilustrado (mudam o
+layout e pedem recorte), efeitos/movimento/CTA sobre o corte limpo do projeto.
+Nas outras camadas o player volta ao vídeo editado; apertar play também.
+
 ### What exists, and what is refused
 
 | | |
 |---|---|
 | Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` `pop` `popLinha` `popBloco` `revelar` `editorial` `dinamico` |
 | Legendas · motor `palavra` | `marcador` `marcadorDuplo` `marcaTexto` `sublinhado` `progressivo` · `foco` `focoBlur` `contorno` `neon` · `chapa` `chips` `vidro` · `onda` `rotativo` `maquina` `rolagem` · `cinema` `manchete` `barra` |
-| Headlines | `outline` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` `tarjas` |
+| Headlines | `outline` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` `tarjas` `vidro` |
 | Headlines · motor `cartela` (banda) | `fita` `jornal` `terminal` `alerta` `placar` `sombra_longa` `neon` `balao` `filete` `adesivo` `noticia` |
 | Headlines · motor `cartela` (TELA CHEIA) | `capa` `capa_blur` `cortina` `meia_tela` `moldura` `contagem` `knockout` `poster` `aspas` `ficha` |
-| Edição | `limpa` `split` `split2` |
-| Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash |
+| Edição | `limpa` `split` `split2` · formatos com efeitos: `ilustrado` `fundoTrocado` `caderno` |
+| Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash · `zoomPunch` `zoomThrough` |
+| Efeitos (`efeitos[]`) | `checklist` `chartGrow` `phoneMockup` `uiWorld` |
+| Efeito do gancho (`ganchoEfeito`) | `frameBreak` `coverStory` `headlineWall` `couchWall` `orbit` `vertigo` |
+| CTA | `siga-perfil` `instagram-card` `instagram-simples` `revelarApp` |
 | Curta | inserts, palavras em destaque, gráficos sob medida |
 | Longform | B-roll, lower-thirds, cards de capítulo, callouts |
 | Som | efeitos por evento + trilha |
 
-**Not ported: the behind-the-subject layer.** A style outside the ported set is
-refused BY NAME — never substituted.
+The behind-the-subject layer exists through the effects engine (below): video →
+pieces → the cut-out person on top. A style outside the ported set is refused
+BY NAME — never substituted.
 
 `tracking` absorbs the zoom rather than animating alongside it: the translation
 depends on the face point AND the zoom at that instant, so two separate
@@ -1541,7 +1615,7 @@ starts sounding like a different microphone.
 The cut is approved and the user picked the style in the UI (`preview_style.json`)
 → load **one** file and build exactly what was picked:
 
-- **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, hook headline (band or full-screen cartela), dynamic camera, inserts, behind-the-subject, SFX, soundtrack. **`hook.lines`, o frame zero, a virada do riser e o prompt da trilha saem de `references/hooks.md`** (lote de 4 com a regra 3-2-1, diferenciação forçada, CTA por objetivo).
+- **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, hook headline (band or full-screen cartela), dynamic camera, inserts, behind-the-subject, SFX, soundtrack. **`hook.lines`, o frame zero, a virada do riser e o prompt da trilha saem de `references/hooks.md`** (lote de 4 com a regra 3-2-1, diferenciação forçada, CTA por objetivo). **CTA de fechamento (aba CTA → `edit-data.cta`)**: modelos Siga o perfil / Instagram Card / Instagram Simples em `assets/cta/` via `helpers/cta.py` — os dois primeiros exigem a foto (`hyperframes/cta/perfil.png`, ou `cta.py foto`) e a Fase 2 recusa sem ela.
 - **Horizontal / YouTube / tutorial / vlog → read `references/longform.md`.** Retention cut is there too (read it BEFORE Phase 1 on longform jobs), B-roll, lower-thirds, chapter cards, callouts, .srt + chapters, soundtrack.
 
 Both tracks: `helpers/phase2.py <edit>` faz tudo — aplica a escolha da aba Estilo, monta o projeto, compõe, roda o `check`, renderiza, normaliza a loudness e devolve os caminhos ao editor. A edição inteira é o `edit-data.json`; nada de código por sessão fora dos gráficos sob medida em `compositions/`. **Não carregue a skill `remotion-best-practices`.** Não é o motor desta skill.

@@ -80,7 +80,7 @@
   right: auto;
   transform: translateX(-50%);
   font-weight: 900;
-  background: #232326;
+  background: var(--hl-box, #232326);
   border-radius: calc(24px * var(--hl-scale));
   padding: calc(28px * var(--hl-scale)) calc(46px * var(--hl-scale));
   box-shadow: 0 calc(18px * var(--hl-scale)) calc(50px * var(--hl-scale)) rgba(0, 0, 0, 0.45);
@@ -323,3 +323,26 @@
   color: var(--hl-main);
   padding: 0.02em 0.3em 0.08em;
 }
+
+
+/* ---------- vidro (Glass Type, 2026-10-15) ---------- */
+/* o cartão vira vidro fosco: a imagem atrás aparece borrada através dele. A
+   borda de luz em cima e a sombra rasa são o que faz ler como vidro e não como
+   cinza translúcido. */
+.ave-hook.vidro {
+  display: inline-block;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  font-weight: 900;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06));
+  -webkit-backdrop-filter: blur(calc(26px * var(--hl-scale))) saturate(1.5);
+  backdrop-filter: blur(calc(26px * var(--hl-scale))) saturate(1.5);
+  border: calc(2px * var(--hl-scale)) solid rgba(255, 255, 255, 0.38);
+  border-radius: calc(34px * var(--hl-scale));
+  padding: calc(28px * var(--hl-scale)) calc(46px * var(--hl-scale));
+  box-shadow: inset 0 calc(2px * var(--hl-scale)) 0 rgba(255, 255, 255, 0.45),
+              0 calc(22px * var(--hl-scale)) calc(60px * var(--hl-scale)) rgba(0, 0, 0, 0.35);
+  text-shadow: 0 calc(2px * var(--hl-scale)) calc(10px * var(--hl-scale)) rgba(0, 0, 0, 0.35);
+}
+.ave-hook.vidro .hl-line:nth-child(2) { color: var(--hl-accent); }

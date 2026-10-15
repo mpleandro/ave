@@ -2,6 +2,8 @@
 """A FAIXA SEGURA DA LEGENDA — medida no rosto, não escolhida no olho.
 
     uv run python helpers/caption_safe.py <edit> [--aplicar] [--json]
+    uv run python helpers/caption_safe.py <edit> --caixinha [--aplicar]
+    uv run python helpers/caption_safe.py <edit> --headline [--aplicar]
 
 Por que existe: um estilo de legenda traz uma altura de fábrica (o `bottom` ou o
 `offsetY` do `variants.json`), e essa altura é uma média de material nenhum. No
@@ -90,14 +92,19 @@ def medir(video: Path, amostras: int = 40) -> dict:
             "queixoMediana": round(queixos[len(queixos) // 2], 4)}
 
 
-def geometria(estilo: str) -> dict:
+def geometria(estilo: str, ajuste: dict | None = None) -> dict:
     """Onde o bloco DESTE estilo está hoje, em frações da altura do quadro.
 
     Converte a âncora de cada estilo — que são quatro coisas diferentes — em um
     par (topo, fundo) comparável. É o que faltava para a medição do rosto poder
     falar de todos os estilos na mesma língua.
+
+    `ajuste` sobrepõe chaves do catálogo (`bottom`, `offsetY`) — é por onde a
+    checagem da HEADLINE pergunta onde a legenda está DE VERDADE neste
+    projeto, com o `paddingBottom`/`offsetY` que a medição ou a mão já
+    escreveram no edit-data, e não onde o catálogo a poria.
     """
-    st = ESTILOS.get(estilo) or {}
+    st = {**(ESTILOS.get(estilo) or {}), **(ajuste or {})}
     bloco = st.get("bloco") or 0.09
     anc = st.get("ancora", "rodape")
     if anc == "rodape":
@@ -238,12 +245,287 @@ def _altura_estimada_caixinha() -> int:
                 + cx.get("corpoTamanho", 47) * cx.get("corpoEntrelinha", 1.28) * 2)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# A HEADLINE TAMBÉM NÃO PODE CAIR SOBRE O ROSTO (pedido do usuário, 14/10/2026:
+# "ela só cuida da legenda e da Caixinha; a headline nunca foi incluída").
+#
+# A headline do gancho é o primeiro texto que o espectador lê, e nasce no ALTO
+# do quadro (`top` 190–360px no catálogo) — exatamente a faixa onde mora a
+# testa de quem grava em plano médio. A legenda olha o queixo, a caixinha olha
+# a testa; a headline, que é um bloco de várias linhas no meio dessa zona,
+# precisa olhar OS DOIS: o que ela não pode cobrir é o rosto inteiro, do topo
+# da cabeça ao queixo.
+#
+# Quem participa: só as headlines que ficam POR CIMA do vídeo — as bandas
+# antigas (`.ave-hook`) e as cartelas com `cheia: false` (fita, jornal,
+# terminal, …). A cartela de TELA CHEIA não entra: ela É o quadro (a chapa
+# cobre o vídeo inteiro enquanto está no ar) e o `top` não a move — o bloco
+# dela é centrado por flex, com margens próprias.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Folga de ALTURA além das linhas, em px de 1920, por família de desenho. É
+# estimativa (como a da caixinha), não medida de render: as linhas saem da
+# MESMA conta do compositor (`hl_fit`/`hl_ks`), e o que sobra — o padding das
+# peças (fita 38×2, cartão 44+50, painel 34×2, chapa 34×2, balão 40×2, folha
+# da notícia 54+62 + barra) e as tarjas das bandas — fica num teto generoso,
+# porque errar para MAIS só afasta a headline do rosto; errar para menos a
+# deixaria encostar nele.
+HL_FOLGA_BANDA = 0.25     # × corpo: tarja/caixa/descendentes das bandas antigas
+HL_FOLGA_PECA = 120       # px: padding da peça (fita, cartão, painel, balão…)
+HL_FOLGA_OLHO = 70        # px: a sobrancelha (`ct-olho`) quando existe
+HL_FOLGA_CAIXA = 60       # px: banda com caixa por trás (`card`: padding 28×2)
+
+
+def geometria_headline(data: dict) -> dict:
+    """Onde o bloco da headline está, em px de quadro — pela MESMA conta do
+    compositor, não por uma segunda tabela que envelheceria longe dele.
+
+    Reproduz os passos de `hook_markup()` em `compose_shortform.py` que mexem
+    em posição e tamanho: o `top` (do edit-data, senão do catálogo), o piso da
+    área segura do topo, o arrasto do editor (`dy`/`scale`) e o corpo medido
+    das linhas (`hl_fit`/`hl_ks`). Devolve `{"pula": motivo}` quando a
+    headline não é coisa que se mova contra o rosto.
+    """
+    import compose_shortform as cs
+    import area_segura
+
+    hook = data.get("hook") or {}
+    if not hook.get("enabled"):
+        return {"pula": "headline desligada"}
+    style_id = hook.get("style", "card")
+    h = VARIANTS["headlines"].get(style_id)
+    if h is None:
+        return {"pula": f"estilo de headline '{style_id}' não existe"}
+    # TELA CHEIA: a chapa cobre o vídeo, não há rosto atrás — EXCETO quando o
+    # projeto a deixou transparente: `semFundo` (sem a chapa), ou a capa
+    # desfocada com `semBlur` (a chapa dela É o desfoque; a `ct-fundo` nem é
+    # emitida para quem tem `blur`). Aí o texto passa a ficar direto sobre o
+    # vídeo, e o rosto volta a importar. Achado no primeiro teste desta
+    # regra: "5 conteudos para autoridade" usa `capa_blur` + `semFundo` +
+    # `semBlur` + `posicao: centro` — o texto inteiro no meio do quadro.
+    pecas = h.get("pecas") or []
+    transparente = bool(hook.get("semFundo")) or ("blur" in pecas and hook.get("semBlur"))
+    if h.get("cheia") and ("svg" in pecas or not transparente):
+        return {"pula": f"'{style_id}' é cartela de tela cheia — cobre o vídeo, não há rosto atrás"}
+    H = int(data.get("height", ALTURA))
+    end = float(hook.get("endSec", 4.0))
+    # Tela dividida no ar durante o gancho: quem decide a altura é o layout
+    # (`split.<layout>.hookTop`, na costura) — mexer no `hook.top` não teria
+    # efeito nenhum, e dizer "movi" seria mentira.
+    for it in (data.get("splitInserts") or []):
+        if float(it.get("start", 0)) < end:
+            return {"pula": "tela dividida durante o gancho — a altura é a do layout"}
+
+    h = {**h, **{k: hook[k] for k in ("cap", "safeW", "paint", "weights", "sizes") if k in hook}}
+    h = cs._hl_seguro(h, data)
+    if h.get("heroMid") and hook.get("hero") is not None:
+        h["heroIndex"] = hook["hero"]
+    if h.get("heroMid") and hook.get("lineK"):
+        h["lineK"] = hook["lineK"]
+    fonts = {"main": hook.get("fontMain") or VARIANTS["headlineFamily"],
+             "accent": hook.get("fontAccent") or VARIANTS["headlineAccentFamily"]}
+
+    extra = 0.0
+    if h.get("motor") == "cartela":
+        partes = cs.cartela_slots(hook, h)
+        linhas = ([partes["titulo"]] if h.get("linhaUnica") and "/" not in partes["titulo"]
+                  else cs.hl_lines(partes["titulo"], h))
+        linhas = [x for x in linhas if x] or [""]
+        if h.get("pecas"):
+            extra += HL_FOLGA_PECA
+        if partes["olho"]:
+            extra += HL_FOLGA_OLHO
+        if partes["meta"]:
+            extra += HL_FOLGA_OLHO * len(partes["meta"])
+    else:
+        linhas = [x for x in (hook.get("lines") or []) if x]
+        if len(linhas) <= 1:
+            linhas = cs.hl_lines(linhas[0] if linhas else (hook.get("text") or ""), h)
+        linhas = [x for x in linhas if x]
+    if not linhas or not any(linhas):
+        return {"pula": "headline sem texto"}
+    linhas = [x.upper() if cs.hl_is_upper(i, len(linhas), h) else x
+              for i, x in enumerate(linhas)]
+    size = cs.hl_fit(linhas, h, fonts)
+    ks = cs.hl_ks(linhas, h)
+    if h.get("motor") != "cartela":
+        if h.get("heroLast"):
+            ks[-1] = cs.hl_hero_size(linhas, h, fonts) / size
+        extra += HL_FOLGA_BANDA * size
+        if any(c in (h.get("paint") or {}) for c in ("box", "tagBox", "heroBox")):
+            extra += HL_FOLGA_CAIXA
+
+    if h.get("cheia"):
+        # Tela cheia transparente NÃO TEM `top`: o bloco é posto por flex em
+        # cartela.css — no alto com `padding-top: 170px` (o padrão do
+        # `semFundo`, "para não cobrir o rosto") ou centrado com `posicao:
+        # "centro"` (padding 120px dos dois lados, logo centro = meio do
+        # quadro). Também não se arrasta (`dy`/`scale` não valem para ela). A
+        # checagem aqui só INFORMA: a saída é trocar a `posicao`, ligar o fundo
+        # ou escolher outro estilo, e as três são escolhas de desenho do
+        # usuário — não se resolvem escrevendo um número.
+        altura = sum(ks) * size * float(h["lh"]) + extra
+        topo = (H - altura) / 2 if hook.get("posicao") == "centro" else 170.0
+        return {"estilo": style_id, "linhas": len(linhas), "corpo": round(size, 1),
+                "topoPx": round(topo), "alturaPx": round(altura),
+                "fundoPx": round(topo + altura), "end": end, "H": H, "fixa": True}
+
+    top = float(hook.get("top", h["top"]))
+    if area_segura.vale(data):
+        top = max(top, area_segura.topo_minimo(H))
+    # O arrasto do editor: `hook_markup` escreve `--hl-top: (top - dy)/k` e a
+    # folha multiplica por `--hl-scale: k`, então o topo real é `top - dy` e
+    # só a ALTURA cresce com a escala.
+    k = min(1.6, max(0.5, float(hook.get("scale") or 1)))
+    topo = top - float(hook.get("dy") or 0)
+    altura = (sum(ks) * size * float(h["lh"]) + extra) * k
+    return {"estilo": style_id, "linhas": len(linhas), "corpo": round(size, 1),
+            "topoPx": round(topo), "alturaPx": round(altura), "fundoPx": round(topo + altura),
+            "end": end, "H": H}
+
+
+def rosto_na_janela(video, start: float = 0.0, end: float | None = None,
+                    amostras: int = 30) -> dict:
+    """Topo da cabeça (p10 — a mais ALTA) E queixo (p90 — o mais BAIXO) numa
+    janela do corte. A legenda só precisa do queixo e a caixinha só do topo;
+    a headline precisa do rosto inteiro, porque o bloco dela pode cair em
+    cima dele por qualquer um dos dois lados. Mesmo detector, mesmos
+    percentis, mesma razão: um quadro de detecção duvidosa não decide."""
+    import cv2
+    cap = cv2.VideoCapture(str(video))
+    H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    n_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    f0 = max(0, int(start * fps))
+    f1 = n_total if end is None else min(n_total, int(end * fps))
+    n = max(1, f1 - f0)
+    casc = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    topos: list[float] = []
+    queixos: list[float] = []
+    for i in range(f0, f1, max(1, n // amostras)):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        ok, fr = cap.read()
+        if not ok:
+            continue
+        g = cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY)
+        fs = casc.detectMultiScale(g, 1.15, 5, minSize=(120, 120))
+        if len(fs):
+            x, y, w, h = max(fs, key=lambda f: f[2] * f[3])
+            topos.append(y / H)
+            queixos.append((y + h) / H)
+    cap.release()
+    if not topos:
+        return {"rosto": False}
+    topos.sort()
+    queixos.sort()
+    return {"rosto": True, "amostras": len(topos),
+            "topoCabecaP10": round(topos[max(0, int(len(topos) * 0.1))], 4),
+            "queixoP90": round(queixos[min(len(queixos) - 1, int(len(queixos) * 0.9))], 4)}
+
+
+def _topo_legenda(data: dict) -> float | None:
+    """Onde a legenda começa NESTE projeto (fração), com o ajuste do edit-data
+    — inclusive o que a própria medição do queixo acabou de escrever. É o
+    chão da headline quando ela tem de descer para baixo do rosto: as duas
+    não podem disputar a mesma faixa."""
+    caps = data.get("captions") or {}
+    if not caps.get("enabled", True):
+        return None
+    ajuste = {}
+    if "paddingBottom" in caps:
+        ajuste["bottom"] = caps["paddingBottom"]
+    if "offsetY" in caps:
+        ajuste["offsetY"] = caps["offsetY"]
+    return geometria(caps.get("style", "karaoke"), ajuste)["topo"]
+
+
+def headline_bate_no_rosto(video, data: dict) -> dict:
+    """A HEADLINE COBRE O ROSTO? E, se cobre, para onde ela vai.
+
+    Mede o rosto só na JANELA em que a headline está no ar — do 0 ao
+    `hook.endSec`, no tempo do corte, o mesmo relógio da composição (a
+    headline nasce em `data-start="0"`). Medir o vídeo inteiro deixaria um
+    aperto da câmera dinâmica lá no minuto 1 decidir onde fica um texto que
+    saiu de cena aos 4 segundos — o mesmo erro corrigido na caixinha.
+
+    A ordem das saídas é a do desenho: a headline é um texto do ALTO, então a
+    primeira tentativa é ACIMA da cabeça, se couber abaixo da área segura do
+    topo (interface do app). Não cabendo, ABAIXO do queixo, se couber acima
+    da legenda e do rodapé da plataforma. Não cabendo em nenhum dos dois, NÃO
+    se resolve em silêncio: `conflito` sai com o motivo, e a posição fica a de
+    fábrica para o usuário decidir (reenquadrar, encurtar o texto, uma
+    cartela de tela cheia, ou `hook.top` à mão).
+    """
+    import area_segura
+
+    g = geometria_headline(data)
+    if g.get("pula"):
+        return {"mexer": False, "pula": True, "motivo": g["pula"]}
+    H = g["H"]
+    rosto = rosto_na_janela(video, 0.0, g["end"])
+    base = {**g, **rosto}
+    if not rosto.get("rosto"):
+        return {**base, "mexer": False,
+                "motivo": "nenhum rosto detectado na janela da headline — a posição de fábrica fica"}
+
+    margem = MARGEM * H
+    cabeca = rosto["topoCabecaP10"] * H
+    queixo = rosto["queixoP90"] * H
+    topo, fundo, altura = g["topoPx"], g["fundoPx"], g["alturaPx"]
+    # O TESTE é sem folga, como o da caixinha (`fundo > topo da cabeça`): só
+    # conta como "cobre" o bloco que entra de fato no retângulo do rosto. A
+    # folga (`MARGEM`) vale para ONDE ele vai, não para decidir se sai — com
+    # ela no teste, um bloco a 20px da testa virava conflito sem estar em
+    # cima de nada.
+    if fundo <= cabeca or topo >= queixo:
+        return {**base, "mexer": False,
+                "motivo": (f"headline em {topo}–{fundo}px fica fora do rosto "
+                           f"({cabeca:.0f}–{queixo:.0f}px)")}
+
+    if g.get("fixa"):
+        return {**base, "mexer": False, "conflito": True,
+                "motivo": (f"a cartela '{g['estilo']}' está sem chapa (semFundo/semBlur) e "
+                           f"o texto ({topo}–{fundo}px) cobre o rosto "
+                           f"({cabeca:.0f}–{queixo:.0f}px) — ela não tem `top` para mover; "
+                           f"troque `hook.posicao` (alto/centro), devolva o fundo "
+                           f"ou use uma headline de banda")}
+
+    teto = area_segura.topo_minimo(H) if area_segura.vale(data) else 0.0
+    acima = cabeca - margem - altura
+    if acima >= teto:
+        return {**base, "mexer": True, "lado": "acima", "sugestaoTopPx": round(acima),
+                "motivo": (f"headline ({topo}–{fundo}px) cobria o rosto "
+                           f"({cabeca:.0f}–{queixo:.0f}px) → sobe para acima da cabeça")}
+
+    chao = H - (area_segura.base_minima(H) if area_segura.vale(data) else RODAPE_PLATAFORMA * H)
+    leg = _topo_legenda(data)
+    if leg is not None:
+        chao = min(chao, leg * H - margem)
+    abaixo = queixo + margem
+    if abaixo + altura <= chao:
+        return {**base, "mexer": True, "lado": "abaixo", "sugestaoTopPx": round(abaixo),
+                "motivo": (f"headline ({topo}–{fundo}px) cobria o rosto "
+                           f"({cabeca:.0f}–{queixo:.0f}px) e não cabe acima da cabeça "
+                           f"(área segura em {teto:.0f}px) → desce para abaixo do queixo")}
+
+    return {**base, "mexer": False, "conflito": True,
+            "motivo": (f"a headline ({altura}px de altura) cobre o rosto "
+                       f"({cabeca:.0f}–{queixo:.0f}px) e não cabe nem acima da cabeça "
+                       f"(sobram {max(0, cabeca - margem - teto):.0f}px abaixo da área "
+                       f"segura) nem entre o queixo e a legenda/rodapé "
+                       f"(sobram {max(0, chao - abaixo):.0f}px) — posição atual "
+                       f"mantida; considere encurtar o texto, uma cartela de tela "
+                       f"cheia, reenquadrar ou `hook.top` à mão")}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("edit", type=Path)
     ap.add_argument("--aplicar", action="store_true", help="grava captions.offsetY no edit-data.json")
     ap.add_argument("--caixinha", action="store_true",
                     help="checa a Caixinha de perguntas contra o rosto (em vez da legenda)")
+    ap.add_argument("--headline", action="store_true",
+                    help="checa a headline do gancho contra o rosto (em vez da legenda)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
@@ -276,6 +558,37 @@ def main() -> None:
                   f"a cabeça (topo {rec['topoCabecaP10']:.3f})")
         if args.aplicar and dp.exists() and rec.get("rosto") and rec["bate"]:
             data.setdefault("questionBox", {})["top"] = rec["sugestaoTopPx"]
+            dp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+            print(f"  aplicado em {dp.name}")
+        return
+
+    if args.headline:
+        hook = data.get("hook") or {}
+        rec = headline_bate_no_rosto(video, data)
+        # VALOR POSTO À MÃO VENCE A MEDIÇÃO, como em toda regra desta família:
+        # `hook.top` escrito no edit-data, ou `hook.dy` vindo do arrasto no
+        # editor, é decisão de alguém — a medição só informa.
+        manual = "top" in hook or "dy" in hook
+        if args.json:
+            print(json.dumps({**rec, "manual": manual}, ensure_ascii=False))
+        elif rec.get("pula"):
+            print(f"  headline: nada a checar ({rec['motivo']})")
+        else:
+            if rec.get("rosto"):
+                print(f"  headline {rec['estilo']} · {rec['linhas']} linha(s) · corpo "
+                      f"{rec['corpo']} · bloco {rec['topoPx']}–{rec['fundoPx']}px (estimado) "
+                      f"· rosto {rec['topoCabecaP10']:.3f}–{rec['queixoP90']:.3f} "
+                      f"em {rec['amostras']} amostras até {rec['end']:.1f}s")
+            if rec.get("mexer"):
+                print(f"  → hook.top = {rec['sugestaoTopPx']}  ({rec['motivo']})")
+            elif rec.get("conflito"):
+                print(f"  ATENÇÃO — headline sem posição boa: {rec['motivo']}")
+            else:
+                print(f"  → nada a mexer  ({rec['motivo']})")
+            if manual and rec.get("mexer"):
+                print("  posição da headline posta à mão (hook.top/dy) — não sobrescrevo")
+        if args.aplicar and dp.exists() and rec.get("mexer") and not manual:
+            data.setdefault("hook", {})["top"] = rec["sugestaoTopPx"]
             dp.write_text(json.dumps(data, ensure_ascii=False, indent=2))
             print(f"  aplicado em {dp.name}")
         return

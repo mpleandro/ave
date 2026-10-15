@@ -51,9 +51,18 @@ ENV = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
 # pedido fora desta lista precisa falhar com nome, não renderizar outra coisa.
 PORTED_CAPTIONS = {"karaoke", "simples", "serifada", "classica", "scatter", "stacked",
                    "pop", "popLinha", "popBloco", "revelar", "editorial", "dinamico"}
+# os dezenove do motor `palavra` (marcador…barra) são portados desde que o motor
+# existe — sem esta linha o portão os recusava, enquanto a aba e o compositor
+# os tratavam como prontos
+try:
+    PORTED_CAPTIONS |= {k for k, v in json.loads(
+        (Path(__file__).resolve().parent.parent / "assets" / "styles" / "variants.json")
+        .read_text())["styles"].items() if v.get("css") == "palavra"}
+except (OSError, KeyError, json.JSONDecodeError):
+    pass
 PORTED_HEADLINES = {"outline", "card", "realce", "misto",
                     "bloco", "etiqueta", "manuscrito", "gigante",
-                    "relevo", "grifo", "contorno_duplo", "tarjas"}
+                    "relevo", "grifo", "contorno_duplo", "tarjas", "vidro"}
 
 LOUDNORM = "loudnorm=I=-14:TP=-1:LRA=11"
 
@@ -316,9 +325,86 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         for k in ("base", "cabecaVaza", "fundo"):
             if k in op:
                 ex[k] = op[k]
+    # CTA DE FECHAMENTO (aba CTA). `modelo` vazio é "Nenhum" e LIMPA o dado —
+    # mesma razão da Caixinha: trocar para nenhum não pode deixar o CTA da
+    # rodada anterior vazado no render. Tempo e posição postos à mão no
+    # edit-data sobrevivem à troca de modelo.
+    if "cta" in pick:
+        c = pick.get("cta") or {}
+        if c.get("modelo"):
+            cur = data.setdefault("cta", {})
+            cur["modelo"] = c["modelo"]
+            if (c.get("arroba") or "").strip():
+                cur["arroba"] = c["arroba"].strip()
+        else:
+            data.pop("cta", None)
+    # EFEITO DO GANCHO (camada Headline, motor de efeitos). Vazio é "nenhum" e
+    # LIMPA o dado; os parâmetros escritos à mão (texto da capa, manchetes)
+    # sobrevivem à troca de tipo.
+    if "ganchoEfeito" in pick:
+        if pick.get("ganchoEfeito"):
+            data.setdefault("ganchoEfeito", {})["tipo"] = pick["ganchoEfeito"]
+        else:
+            data.pop("ganchoEfeito", None)
     if pick.get("observation"):
         data["observation"] = pick["observation"]
     return data, True
+
+
+def check_cta(data: dict, proj: Path) -> None:
+    """O CTA que pede foto não entra sem foto — recusa pelo nome (Hard Rule 10).
+
+    A foto do perfil é de QUEM FAZ, não do vídeo: a última enviada fica em
+    `~/.avelin/cta/perfil.png` e vale para o projeto que ainda não tem a sua.
+    O @ segue a mesma ordem: o do projeto, senão o `instagram` do brand.json.
+    """
+    import cta as C
+    c = data.get("cta") or {}
+    m = C.MODELOS.get(c.get("modelo") or "")
+    if not m:
+        if c.get("modelo"):
+            sys.exit(f"\nCTA '{c['modelo']}' não existe. Modelos: {', '.join(C.MODELOS)}\n")
+        return
+    # ONDE O CTA ENTRA é leitura da fala, não regra fixa (pedido do usuário,
+    # 2026-10-15): a chamada pode estar no meio do vídeo ("comenta aqui",
+    # "salva esse vídeo"). Sem `momento` escolhido, recusa pelo nome — e sem
+    # perguntar ao usuário: a IA lê, decide e grava.
+    if c.get("start") is None and c.get("momento") is None and not c.get("momentoRevisado"):
+        sys.exit(
+            f"\nO CTA '{m['nome']}' está ligado e ainda não tem MOMENTO.\n"
+            "NÃO pergunte ao usuário — leia a fala e decida:\n"
+            "  1. cta.py momentos <edit>   → as chamadas para ação, com o segundo de cada\n"
+            "  2. escolha a chamada de verdade (a que pede seguir/comentar/salvar — pode ser\n"
+            "     no meio do vídeo) e grave edit-data.json → cta.momento: <segundo>;\n"
+            "     sem chamada nenhuma, grave cta.momentoRevisado: true (o CTA fecha o vídeo)\n"
+            "  3. rode a Fase 2 de novo.\n")
+    # A foto salva entra também nos modelos em que ela é OPCIONAL (o
+    # "Recuo para o app" desenha um avatar): sem ela sai um círculo vazio.
+    salva = Path.home() / ".avelin" / "cta" / "perfil.png"
+    if not C.foto_do_projeto(proj) and (m["foto"] or salva.exists()):
+        if salva.exists():
+            (proj / "cta").mkdir(parents=True, exist_ok=True)
+            shutil.copy2(salva, proj / C.FOTO_REL)
+            print(f"  CTA: usando a foto de perfil salva ({salva})")
+        else:
+            sys.exit(
+                f"\nO CTA '{m['nome']}' precisa da foto do perfil, e o projeto não tem.\n"
+                f"Peça ao usuário para subir na aba CTA do editor (arquivo, quadro do vídeo\n"
+                f"ou print colado), ou grave você mesmo:\n"
+                f"  uv run python helpers/cta.py foto <edit> <imagem>\n"
+                f"  uv run python helpers/cta.py foto <edit> --quadro <segundos>\n")
+    if m["foto"] and not (c.get("arroba") or "").strip():
+        try:
+            marca = json.loads((Path.home() / ".avelin" / "brand.json").read_text())
+        except (OSError, json.JSONDecodeError):
+            marca = {}
+        if (marca.get("instagram") or "").strip():
+            c["arroba"] = marca["instagram"].strip()
+        else:
+            sys.exit(
+                f"\nO CTA '{m['nome']}' está ligado, mas falta o @ do perfil.\n"
+                f"Pergunte ao usuário (AskUserQuestion) e escreva em edit-data.json → "
+                f"cta.arroba (e em ~/.avelin/brand.json → instagram, para os próximos).\n")
 
 
 def _cartela_ids() -> set[str]:
@@ -492,6 +578,102 @@ def check_animacao(data: dict, edit: Path) -> None:
             )
 
 
+def check_efeitos(data: dict, edit: Path) -> None:
+    """EFEITOS DE CONTEÚDO previstos pelo formato e sem lugar escrito: recusa
+    pelo nome, com o caminho. Movimento (zoom digital, zoom através) o motor
+    posiciona sozinho; conteúdo (checklist, gráfico, celular, interface) tem
+    TEXTO, e texto nasce da leitura da fala — mas sem perguntar ao usuário:
+    a regra é aprovação automática, ele remove no editor o que não quiser."""
+    import efeitos as F
+    conteudo = [t for t in F.ligados(data) if F.CATALOGO[t]["camada"] == "efeitos"]
+    if not conteudo or data.get("efeitosRevisados"):
+        return
+    if any(e.get("tipo") in conteudo for e in (data.get("efeitos") or [])):
+        return
+    sys.exit(
+        f"\nO formato '{F.formato_de(data)}' prevê efeitos automáticos de conteúdo "
+        f"({', '.join(conteudo)}), e eles ainda não têm lugar.\n"
+        "NÃO pergunte ao usuário — é aprovação automática:\n"
+        "  1. efeitos.py candidatos <edit>   → a fala, com o efeito que cada frase pede\n"
+        "  2. escreva edit-data.json → efeitos[] (um efeito de conteúdo por vez, só onde a\n"
+        "     fala pede de verdade — ver references/shortform.md, 'Efeitos'); se nenhum\n"
+        "     trecho pedir, grave efeitosRevisados: true\n"
+        "  3. efeitos.py validar <edit> --gravar\n"
+        "  4. rode a Fase 2 de novo.\n")
+
+
+def preparar_recorte_efeitos(edit: Path, data: dict) -> None:
+    """Recorta os trechos que os efeitos pedem (atrás do apresentador, quebra
+    de moldura, fundo trocado, caderno). Aprovação automática: sem motor
+    aprovado, aprova o `rvm` — o teste de 5s continua disponível a pedido."""
+    import efeitos as F
+    import explicativo as _X
+    dur = _X.sonda(edit / "preview.mp4")[2]
+    try:
+        ws = _X.palavras(edit)
+    except SystemExit:
+        ws = []
+    itens, erros, _ = F.resolver(data, ws, dur)
+    if erros:
+        sys.exit("efeitos com erro:\n  " + "\n  ".join(erros)
+                 + "\n(efeitos.py validar <edit> mostra a tabela)")
+    janelas = F.janelas_recorte(data, itens, dur)
+    if not janelas:
+        return
+    import instalar
+    if not instalar.garantir("recorte", progresso=lambda t: progress.step(edit, detail=t)):
+        sys.exit("o recurso de recorte não ficou pronto — rode: "
+                 "uv run python helpers/instalar.py recorte")
+    man = edit / "recorte" / "recorte.json"
+    if not (json.loads(man.read_text()) if man.exists() else {}).get("aprovado"):
+        print("  recorte: aprovando o motor rvm (aprovação automática)")
+        run([sys.executable, str(HELPERS / "recorte.py"), "aprovar", str(edit), "--motor", "rvm"],
+            quiet=True)
+    for i, (a, b, novo) in enumerate(janelas, 1):
+        progress.step(edit, detail=f"recortando a pessoa — trecho {i} de {len(janelas)}")
+        run([sys.executable, str(HELPERS / "recorte.py"), "processar", str(edit),
+             "--inicio", f"{a:.3f}", "--fim", f"{b:.3f}"] + (["--fundo-novo"] if novo else []))
+    link = edit / "hyperframes" / "recorte"
+    if not link.exists():
+        link.symlink_to(edit / "recorte")
+
+
+def preparar_vertigo(edit: Path, data: dict) -> bool:
+    """VERTIGO (efeito do gancho): o dolly zoom é efeito de PIXEL — fundo
+    recuando com a pessoa parada não se faz em CSS. Gravado numa cópia do corte
+    pelo anim3d_fx.py (o mesmo caminho da Animação em 3D) e usado como vídeo
+    base (`baseVideo`). Reaproveita a cópia enquanto o corte e a janela não
+    mudarem. Devolve True quando mexeu no edit-data."""
+    import efeitos as F
+    g = F.gancho(data)
+    if not g or g["tipo"] != "vertigo":
+        if data.get("baseVideo") == "preview_vertigo.mp4":
+            data.pop("baseVideo")
+            return True
+        return False
+    if data.get("baseVideo") and data["baseVideo"] != "preview_vertigo.mp4":
+        print("  aviso: vertigo ignorado — o vídeo base já é outro "
+              f"({data['baseVideo']}, Animação em 3D)")
+        return False
+    import instalar
+    if not instalar.garantir("anim3d", progresso=lambda t: progress.step(edit, detail=t)):
+        sys.exit("o vertigo precisa das bibliotecas da Animação em 3D — rode: "
+                 "uv run python helpers/instalar.py anim3d")
+    plano = {"base": "preview.mp4", "saida": "preview_vertigo.mp4",
+             "janelas": [{"fx": "vertigo", "start": g["start"], "end": g["end"]}]}
+    pasta = edit / "fx3d"
+    pasta.mkdir(exist_ok=True)
+    pp = pasta / "vertigo_plano.json"
+    saida = edit / "preview_vertigo.mp4"
+    igual = pp.exists() and json.loads(pp.read_text()) == plano
+    if not (igual and saida.exists() and saida.stat().st_mtime > (edit / "preview.mp4").stat().st_mtime):
+        pp.write_text(json.dumps(plano))
+        progress.step(edit, detail="gravando o vertigo no vídeo base")
+        run([sys.executable, str(HELPERS / "anim3d_fx.py"), str(edit), "--plano", str(pp)])
+    data["baseVideo"] = "preview_vertigo.mp4"
+    return True
+
+
 def scaffold(proj: Path, cut: Path) -> None:
     proj.mkdir(parents=True, exist_ok=True)
     (proj / "package.json").write_text(
@@ -508,16 +690,33 @@ def scaffold(proj: Path, cut: Path) -> None:
     link.symlink_to(cut.resolve())
 
 
-def deliver(rendered: Path, final: Path) -> None:
+def deliver(rendered: Path, final: Path, velocidade: float = 1.0) -> None:
     """Normaliza a loudness da entrega (-14 LUFS / -1 dBTP / LRA 11).
 
     A Fase 1 já normaliza o preview.mp4, mas a Fase 2 acrescenta trilha e efeitos —
     a mistura final é outra, então o alvo tem que ser reaferido na saída, não
     herdado da entrada.
+
+    `velocidade` (edit-data → "velocidade", ex.: 1.1) acelera a ENTREGA inteira:
+    imagem por `setpts`, som por `atempo` (tom preservado). É aqui, e não no
+    corte, porque a legenda é posicionada palavra a palavra no relógio do corte
+    — acelerar o preview.mp4 desalinharia cada palavra. Acelerando o render já
+    composto, legenda, gráficos, efeitos e trilha andam juntos. O preço: a
+    entrega tem outro relógio que a linha do tempo do editor (marcações feitas
+    sobre o vídeo final caem ~10% mais cedo no corte).
     """
+    if abs(velocidade - 1.0) < 1e-3:
+        run(["ffmpeg", "-y", "-v", "error", "-i", str(rendered),
+             "-c:v", "copy", "-af", LOUDNORM, "-c:a", "aac", "-b:a", "192k",
+             str(final)], quiet=True)
+        return
+    v = float(velocidade)
     run(["ffmpeg", "-y", "-v", "error", "-i", str(rendered),
-         "-c:v", "copy", "-af", LOUDNORM, "-c:a", "aac", "-b:a", "192k",
-         str(final)], quiet=True)
+         "-filter_complex", f"[0:v]setpts=PTS/{v}[v];[0:a]atempo={v},{LOUDNORM}[a]",
+         "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "16", "-preset", "medium",
+         "-pix_fmt", "yuv420p", "-color_primaries", "bt709", "-color_trc", "bt709",
+         "-colorspace", "bt709", "-color_range", "tv", "-r", "30",
+         "-c:a", "aac", "-b:a", "192k", str(final)], quiet=True)
 
 
 def main() -> None:
@@ -603,6 +802,7 @@ def main() -> None:
         data.setdefault("captions", {})["style"] = args.style
     check_supported(data)
     check_elements_filled(data)
+    check_cta(data, proj)
     # roteiro da moldura explicativa: os tempos resolvidos (frase → segundo)
     # ficam GRAVADOS — é o que a pista "Cenas" do editor desenha
     if (data.get("explicativo") or {}).get("cenas"):
@@ -618,6 +818,12 @@ def main() -> None:
     # depois de gravar: a escolha do formato tem de sobreviver à recusa, senão
     # o agente que vai montar as cenas não sabe qual formato foi pedido
     check_animacao(data, edit)
+    # EFEITOS: depois de gravar, pela mesma razão — o agente que vai escrever
+    # `efeitos[]` lê o formato escolhido do edit-data
+    check_efeitos(data, edit)
+    preparar_recorte_efeitos(edit, data)
+    if preparar_vertigo(edit, data):
+        data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
     if picked:
         print("  escolhas da aba Estilo aplicadas")
         progress.step(edit, detail="escolhas da aba Estilo aplicadas")
@@ -708,6 +914,32 @@ def main() -> None:
              "--caixinha", "--aplicar"], allow_fail=True)
         data = load(data_path, data) or data
 
+    # A HEADLINE TAMBÉM NÃO PODE CAIR SOBRE O ROSTO — a terceira peça da mesma
+    # regra (pedido do usuário, 14/10/2026: "ela só cuida da legenda e da
+    # Caixinha; a headline nunca foi incluída"). A headline do gancho nasce no
+    # alto do quadro, na faixa da testa de quem grava em plano médio, e nada
+    # a checava. `caption_safe.py --headline` mede topo da cabeça E queixo só
+    # na janela do gancho (0 → `hook.endSec`) e move `hook.top` para ACIMA da
+    # cabeça (se couber abaixo da área segura do topo) ou ABAIXO do queixo (se
+    # couber acima da legenda e do rodapé); sem lugar bom, AVISA em vez de
+    # resolver em silêncio. Vem DEPOIS da legenda de propósito: o chão da
+    # headline é o topo da legenda que a medição acabou de escrever.
+    #
+    # Fora da checagem: a Caixinha e a Notícia ligadas (as duas disputam a
+    # mesma zona alta e têm arbitragem própria), e — dentro do helper — a
+    # cartela de tela cheia com chapa (ela cobre o vídeo) e o gancho sob tela
+    # dividida (a altura é a do layout). `hook.top`/`hook.dy` postos à mão
+    # vencem: o helper ainda mede e avisa, mas não sobrescreve.
+    hk = data.get("hook") or {}
+    els = data.get("elements") or {}
+    if (hk.get("enabled") and (hk.get("lines") or hk.get("text"))
+            and not els.get("caixinha") and not els.get("noticia")):
+        print("  checando se a headline bate no rosto…")
+        progress.step(edit, detail="checando a headline contra o rosto")
+        run([sys.executable, str(SKILL / "helpers" / "caption_safe.py"), str(edit),
+             "--headline", "--aplicar"], allow_fail=True)
+        data = load(data_path, data) or data
+
     if data.get("captions", {}).get("style") == "stacked":
         cues = pub / "caption-cues.json"
         # a MESMA origem das legendas — o mapeado, se existir. Duas origens
@@ -785,9 +1017,9 @@ def main() -> None:
     html = (proj / "index.html").read_text()
     total = amostra.duracao(html)
     state0 = load(edit / "state.json", {})
-    quer_amostra = (args.amostra is not None) or (
-        not args.completo and not args.end and not state0.get("semAmostra")
-        and total >= amostra.VALE_A_PENA)
+    # Sem amostra por padrão (pedido do usuário, 2026-10-14): ela caía no
+    # meio/fim do corte e não mostrava headline + legenda. Só com --amostra.
+    quer_amostra = args.amostra is not None
     if quer_amostra and not args.completo:
         fazer_amostra(edit, proj, cut, data, html, total, args.amostra)
         return
@@ -801,7 +1033,7 @@ def main() -> None:
 
     final = edit / "final.mp4"
     progress.step(edit, pct=92, detail="normalizando a loudness da entrega")
-    deliver(renders[-1], final)
+    deliver(renders[-1], final, float(data.get("velocidade") or 1.0))
 
     amostra_st = load(edit / "state.json", {}).get("amostra")
     if isinstance(amostra_st, dict):
@@ -844,21 +1076,53 @@ def gravar_estado(edit: Path, data: dict, extra: dict) -> None:
     pick = load(edit / "preview_style.json") or {}
     hook = data.get("hook") or {}
     linhas = [l for l in (hook.get("lines") or []) if str(l).strip()]
-    state["style"] = {
-        "edit": data.get("editStyle") or pick.get("edit"),
-        "headline": hook.get("style") or pick.get("headline"),
+    # REGISTRO COMPLETO, e que não esquece. O editor reabre o projeto com
+    # ESTE registro por cima de tudo; chave ausente aqui era preenchida pelo
+    # gosto da última vez (~/.avelin/estilo.json) e aparecia como "1
+    # alteração" num projeto que ninguém tocou — um clique em "Enviar"
+    # refazia o vídeo com escolhas que ele nunca teve. Por isso: parte do
+    # registro anterior, aplica a escolha nova (se houver) e por fim o que o
+    # edit-data diz que foi de fato renderizado. Render sem escolha nova
+    # (agente rodando à mão) mantém as posições arrastadas em vez de zerá-las.
+    prev = state.get("style") or {}
+    rec = dict(prev)
+    for k in ("edit", "headline", "headlineText", "captions", "accent", "capColor",
+              "textColor", "fontMain", "fontAccent", "capFont", "capDy", "hookDx",
+              "hookDy", "hookScale", "elements", "cta", "ganchoEfeito",
+              "explicativoOpcoes", "estiloSalvo"):
+        if k in pick:
+            rec[k] = pick[k]
+    cap = data.get("captions") or {}
+    cta = data.get("cta") or {}
+    rec.update({
+        "edit": data.get("editStyle") or rec.get("edit"),
+        "headline": hook.get("style") or rec.get("headline"),
         # reunidas pela BARRA, que é a mesma quebra que o usuário digita —
         # o texto volta para a caixa exatamente como ele o escreveria
-        "headlineText": " / ".join(linhas) or pick.get("headlineText", ""),
-        "captions": (data.get("captions") or {}).get("style") or pick.get("captions"),
-        "accent": data.get("accent") or pick.get("accent"),
-        "capColor": (data.get("captions") or {}).get("color") or pick.get("capColor"),
-        "capDy": pick.get("capDy", 0),
-        "hookDx": pick.get("hookDx", 0), "hookDy": pick.get("hookDy", 0),
-        "hookScale": pick.get("hookScale", 1),
-        "elements": data.get("elements") or pick.get("elements") or {},
+        "headlineText": " / ".join(linhas) or rec.get("headlineText", ""),
+        "captions": cap.get("style") or rec.get("captions"),
+        "accent": data.get("accent") or rec.get("accent"),
+        "capColor": cap.get("color") or rec.get("capColor"),
+        "elements": data.get("elements") or rec.get("elements") or {},
+        "ganchoEfeito": (data.get("ganchoEfeito") or {}).get("tipo") or "",
         "estiloSalvo": data.get("estiloSalvo"),
-    }
+        # o @ fica como a aba o mandou ("" = o do brand.json), senão a
+        # comparação acusaria mudança a cada reabertura
+        "cta": {"modelo": cta.get("modelo") or "",
+                "arroba": ((rec.get("cta") or {}).get("arroba") or "") if cta.get("modelo") else ""},
+    })
+    for k in ("capDy", "hookDx", "hookDy"):
+        rec.setdefault(k, 0)
+    rec.setdefault("hookScale", 1)
+    if hook.get("fontMain"):
+        rec["fontMain"] = hook["fontMain"]
+    if hook.get("fontAccent"):
+        rec["fontAccent"] = hook["fontAccent"]
+    if hook.get("color"):
+        rec["textColor"] = hook["color"]
+    if cap.get("fontMain"):
+        rec["capFont"] = cap["fontMain"]
+    state["style"] = rec
     state["awaitingStyle"] = False
     (edit / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2))
     (edit / "preview_style.json").unlink(missing_ok=True)
