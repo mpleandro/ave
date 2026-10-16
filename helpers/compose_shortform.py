@@ -1588,6 +1588,12 @@ def cartela_markup(data: dict, hook: dict, h: dict, style_id: str, fonts: dict,
     # CARD FLUTUANTE em vez de captura de borda a borda — os dois números que
     # cartela.css aponta. Ausentes, nada muda (a folha tem 0 nos dois).
     nt = "".join(f'--nt-{k}:{hook[k]}px; ' for k in ("inset", "radius") if k in hook)
+    # ÁREA SEGURA LATERAL do TEXTO: a folha usa `--ct-lat` como piso do recuo
+    # nos layouts alinhados à esquerda (o `safeW` só limita a LARGURA — texto
+    # alinhado à esquerda com 52px de recuo cabia em 820px e mesmo assim
+    # nascia colado na borda). Fora do 9:16, ou forçado, vale 0 e nada muda.
+    if area_segura.vale(data):
+        nt += f'--ct-lat:{area_segura.lateral_minima(int(data.get("width", 1080))):.0f}px; '
     bloco = (f'  <div id="hook" class="ave-cartela ct-{style_id}{cheia} clip" '
              f'data-start="0" data-duration="{end:.3f}" '
              f'data-track-index="{TRACK["hook"]}" '

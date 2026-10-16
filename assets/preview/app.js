@@ -1300,6 +1300,8 @@ function buildCartelaDemo(host, styleId) {
   box.style.setProperty('--hl-accent', acc);
   box.style.setProperty('--hl-accent-rgb', trioRGB(acc));
   box.style.setProperty('--hl-sobre-accent', sobreAccent(acc));
+  // a mesma margem lateral segura do compositor (area_segura.lateral_minima)
+  box.style.setProperty('--ct-lat', (130 * sc) + 'px');
   C.assentar(box);
   return () => {};
 }

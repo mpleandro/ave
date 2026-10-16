@@ -36,6 +36,14 @@ def base_minima(H: int = REF_H) -> float:
     return (BASE + FOLGA) * H / REF_H
 
 
+def lateral_minima(W: int = REF_W) -> float:
+    """Menor distância da borda lateral até o TEXTO. O Reels no celular corta
+    ~55px de cada lado (o 9:16 é escalado para encher a altura de uma tela mais
+    estreita) — texto a 52px da borda saiu colado na borda no Instagram
+    (2026-10-16, cartela notícia). Fundos e cartões podem sangrar; texto não."""
+    return (LATERAL + FOLGA) * W / REF_W
+
+
 def largura_util(W: int = REF_W) -> float:
     """Largura máxima de qualquer elemento centrado (fora da faixa dos ícones)."""
     return (REF_W - 2 * (LATERAL + FOLGA)) * W / REF_W
