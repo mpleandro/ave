@@ -57,6 +57,15 @@ curl -s localhost:4820/api/state | python3 -m json.tool | sed -n '/deps/,/}/p'
 
 ## Install prompt contract
 
+- **Talk to the user in plain Portuguese, never in tooling terms** (the user's
+  rule, 2026-10-19). The person installing or updating Avelin is a creator, not
+  a developer. Never say package, extra, dependency, `uv sync`, virtual
+  environment, compile, PATH, or model sizes without context. Say what they
+  get and what *they* need to do next — e.g. "Agora vou instalar o programa que
+  mexe nos vídeos. Vai aparecer um pedido de permissão aqui no chat: é só
+  aceitar." Commands, paths and flags stay with you; the user only ever sees
+  the next step in conversational language. Same for every on-demand feature
+  `helpers/instalar.py` installs later.
 - Only ask the user for things you cannot generate — the Groq API key, and confirmation before any package-manager install that needs sudo/admin.
 - Never tell the user to open a separate terminal for a setup step (`uv sync`,
   `brew install`, `winget install`, `apt-get install`, …). Claude Code's normal
@@ -312,6 +321,10 @@ Tell the user, in one short message:
 - That all outputs land in `<videos_dir>/edit/` — the repo stays clean.
 
 ## Keeping the skill current
+
+When the user asks to update ("atualiza o Avelin"), do it for them and report
+in plain language — what's new for *them*, and whether they need to do
+anything. Never paste a changelog, commit list or command output at them.
 
 - `git -C <AVE> pull --ff-only` pulls the latest code — same command on every OS, and no `cd` needed. The next run picks it up automatically (the clone *is* the skill dir on the user layout; the symlink/junction resolves to it on the contributor layout).
 - `git clone` does **not** update an existing install — it fails on a non-empty directory. Clone once, pull forever.

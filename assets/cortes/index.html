@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avelin — Cortes</title>
+<link rel="icon" href="/icone.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Os tokens do editor (assets/preview/app.css), sem literal espalhado. */
+:root {
+  --orange: #ff6b1a; --orange-rgb: 255 107 26; --orange-hover: #ff8c47; --orange-soft: #ffad7a;
+  --blue: #7a95aa; --blue-mid-rgb: 74 127 165;
+  --ok: #5fd39a; --warn: #ffc857; --bad: #ff5470;
+  --bg0: #081726; --bg1: #0d2137; --panel: #142a42;
+  --glass: rgba(255,255,255,.045); --glass-strong: rgba(255,255,255,.08);
+  --stroke: rgba(255,255,255,.09);
+  --text: #f5f2ee; --dim: #7a95aa;
+  --radius: 16px; --ease: cubic-bezier(.2,.8,.2,1);
+  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans); color: var(--text); font-size: 14px; min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgb(var(--blue-mid-rgb) / .14), transparent 60%),
+    linear-gradient(180deg, var(--bg1), var(--bg0)) fixed;
+  background-color: var(--bg0);
+}
+button { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+
+header {
+  display: flex; align-items: center; gap: 12px; padding: 18px 28px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--stroke);
+}
+header img { width: 26px; height: 26px; }
+header h1 { font-size: 17px; font-weight: 700; }
+header .fonte { color: var(--dim); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40ch; }
+header .resumo { margin-left: auto; color: var(--dim); font-size: 12px; }
+
+.galeria {
+  display: grid; gap: 22px; padding: 28px; max-width: 1480px; margin: 0 auto;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+.card {
+  background: var(--glass); border: 1px solid var(--stroke); border-radius: var(--radius);
+  overflow: hidden; cursor: pointer; text-align: left; display: flex; flex-direction: column;
+  transition: transform .25s var(--ease), border-color .25s var(--ease), background .25s;
+}
+.card:hover { transform: translateY(-3px); border-color: rgb(var(--orange-rgb) / .45); background: var(--glass-strong); }
+.capa { position: relative; aspect-ratio: 9 / 16; background: #000; overflow: hidden; }
+.capa img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.capa::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,.45) 0%, transparent 28%, transparent 55%, rgba(0,0,0,.85) 100%);
+}
+.nota {
+  position: absolute; top: 10px; left: 10px; z-index: 1; min-width: 54px; padding: 6px 10px;
+  border-radius: 12px; background: rgba(8,23,38,.82); backdrop-filter: blur(6px);
+  display: flex; flex-direction: column; align-items: center; line-height: 1;
+}
+.nota b { font-size: 24px; font-weight: 800; }
+.nota small { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-top: 3px; }
+.rank { position: absolute; top: 12px; right: 12px; z-index: 1; font-size: 12px; font-weight: 700; color: rgba(255,255,255,.8); }
+.capa .titulo {
+  position: absolute; left: 12px; right: 12px; bottom: 34px; z-index: 1;
+  font-weight: 700; font-size: 15px; line-height: 1.25; text-shadow: 0 1px 8px rgba(0,0,0,.6);
+}
+.capa .dur { position: absolute; left: 12px; bottom: 12px; z-index: 1; font-size: 12px; color: rgba(255,255,255,.85); }
+.rodape { padding: 10px 12px; display: flex; align-items: center; gap: 8px; }
+.tag { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--glass-strong); }
+.baixar-mini {
+  margin-left: auto; width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--stroke);
+  background: var(--glass-strong); cursor: pointer; display: grid; place-items: center;
+}
+.baixar-mini:hover { background: rgb(var(--orange-rgb) / .9); border-color: var(--orange); }
+.baixar-mini svg { width: 15px; height: 15px; }
+.vazio { padding: 80px 28px; text-align: center; color: var(--dim); line-height: 1.6; }
+.vazio code { color: var(--text); background: var(--glass-strong); padding: 2px 6px; border-radius: 6px; }
+
+/* ---------------- modal ---------------- */
+.modal { position: fixed; inset: 0; z-index: 10; display: none; background: rgba(4,12,20,.78); backdrop-filter: blur(8px); }
+.modal.aberto { display: grid; place-items: center; }
+.caixa {
+  width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
+  background: var(--panel); border: 1px solid var(--stroke); border-radius: 20px;
+  display: grid; grid-template-columns: auto 1fr; gap: 28px; padding: 24px; position: relative;
+}
+.fechar, .nav {
+  position: absolute; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--stroke);
+  background: var(--glass-strong); cursor: pointer; display: grid; place-items: center;
+}
+.fechar { top: 14px; right: 14px; }
+.fechar svg, .nav svg { width: 16px; height: 16px; }
+.navs { position: absolute; top: 14px; right: 58px; display: flex; gap: 6px; }
+.navs .nav { position: static; }
+.player { display: flex; flex-direction: column; gap: 10px; width: min(340px, calc((100vh - 200px) * 9 / 16)); }
+.tela { position: relative; aspect-ratio: 9 / 16; width: 100%; border-radius: var(--radius); overflow: hidden; background: #000; }
+.tela video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.tela .grande {
+  position: absolute; inset: 0; margin: auto; width: 64px; height: 64px; border-radius: 50%;
+  border: 0; background: rgb(var(--orange-rgb) / .92); cursor: pointer; display: grid; place-items: center;
+  transition: opacity .2s;
+}
+.tela.tocando .grande { opacity: 0; pointer-events: none; }
+.barra { height: 6px; background: var(--glass-strong); border-radius: 99px; cursor: pointer; position: relative; }
+.barra i { position: absolute; inset: 0 auto 0 0; background: var(--orange); border-radius: 99px; width: 0; }
+.transporte { display: flex; align-items: center; gap: 8px; }
+.transporte .tempo { margin-left: auto; color: var(--dim); font-size: 12px; }
+.btn {
+  background: var(--glass-strong); border: 1px solid var(--stroke); border-radius: 10px;
+  padding: 8px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: rgba(255,255,255,.12); }
+.btn svg { width: 16px; height: 16px; }
+.btn.acao { background: var(--orange); border-color: var(--orange); color: #fff; font-weight: 600; justify-content: center; padding: 11px 16px; }
+.btn.acao:hover { background: var(--orange-hover); }
+.btn:disabled { opacity: .6; cursor: progress; }
+.ok { color: var(--ok); font-size: 12px; }
+.extras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.extras .btn { justify-content: center; font-size: 13px; padding: 9px 8px; }
+
+.info { display: flex; flex-direction: column; gap: 16px; min-width: 0; padding-top: 4px; }
+.info .topo { display: flex; gap: 16px; align-items: center; padding-right: 110px; }
+.placar { flex: none; width: 76px; height: 76px; border-radius: 18px; display: grid; place-items: center; background: var(--glass-strong); }
+.placar b { font-size: 30px; font-weight: 800; line-height: 1; }
+.placar small { display: block; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); text-align: center; margin-top: 4px; }
+.info h2 { font-size: 20px; line-height: 1.25; }
+.info .sub { color: var(--dim); font-size: 13px; margin-top: 4px; }
+.bloco { background: var(--glass); border: 1px solid var(--stroke); border-radius: 14px; padding: 14px 16px; }
+.bloco h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin-bottom: 8px; font-weight: 600; }
+.bloco p { line-height: 1.5; }
+.gancho .tipo { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px; background: var(--glass-strong); margin-bottom: 8px; }
+.gancho blockquote { font-size: 15px; line-height: 1.45; border-left: 3px solid var(--orange); padding-left: 12px; margin: 6px 0; }
+.gancho ul { margin: 6px 0 0 18px; line-height: 1.7; }
+.gancho .tipo + .tipo { margin-left: 6px; color: var(--dim); }
+.gancho .tres { margin: 4px 0 6px; }
+.nota-mini { color: var(--dim); font-size: 12px; margin-bottom: 6px; }
+.padrao { color: var(--dim); font-size: 12px; margin-left: 4px; }
+.tag.ritmo { color: var(--blue); }
+.sinais { display: grid; grid-template-columns: 112px 1fr 30px; gap: 7px 12px; align-items: center; font-size: 13px; }
+.sinais .trilho { height: 6px; background: var(--glass-strong); border-radius: 99px; overflow: hidden; }
+.sinais .trilho i { display: block; height: 100%; border-radius: 99px; }
+.sinais .why { grid-column: 1 / -1; color: var(--dim); font-size: 12px; margin: -3px 0 5px; line-height: 1.4; }
+details summary { cursor: pointer; color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+.texto { font-size: 14px; line-height: 1.65; color: rgba(245,242,238,.86); margin-top: 10px; }
+.texto mark { background: rgb(var(--orange-rgb) / .25); color: var(--text); border-radius: 3px; padding: 0 2px; }
+
+/* versões, ações e diálogo */
+.versoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.versao {
+  flex: 1 1 auto; text-align: left; background: var(--glass); border: 1px solid var(--stroke);
+  border-radius: 10px; padding: 7px 10px; cursor: pointer; font-size: 12px; line-height: 1.25;
+}
+.versao b { display: block; font-size: 13px; }
+.versao small { color: var(--dim); }
+.versao.on { border-color: rgb(var(--orange-rgb) / .6); background: rgb(var(--orange-rgb) / .12); }
+.versao.on small { color: var(--orange-soft); }
+.btn.avelin { justify-content: center; gap: 8px; border-color: rgb(var(--blue-mid-rgb) / .6); }
+.subir {
+  margin-top: 10px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  background: rgb(var(--orange-rgb) / .14); border: 1px solid rgb(var(--orange-rgb) / .5);
+  color: var(--orange-soft); border-radius: 10px; padding: 8px 12px; font-weight: 600;
+}
+.subir:hover { background: rgb(var(--orange-rgb) / .22); }
+.subir svg { width: 16px; height: 16px; }
+.tela .carregando {
+  position: absolute; inset: 0; display: none; flex-direction: column; gap: 12px;
+  align-items: center; justify-content: center; text-align: center;
+  background: rgba(8,23,38,.72); color: var(--text); font-size: 13px; padding: 20px;
+}
+.tag.sobe { color: var(--orange-soft); }
+/* processando: o card e a tela do corte avisam, e a pessoa segue navegando */
+.capa .trabalho {
+  position: absolute; inset: 0; z-index: 2; display: none; flex-direction: column; gap: 10px;
+  align-items: center; justify-content: center; text-align: center; padding: 14px;
+  background: rgba(8,23,38,.74); backdrop-filter: blur(2px); font-size: 13px; font-weight: 600;
+}
+.card.processando .capa .trabalho, .tela.ocupada .carregando { display: flex; }
+.giro {
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
+  border: 3px solid rgb(var(--orange-rgb) / .25); border-top-color: var(--orange);
+  animation: giro .8s linear infinite;
+}
+@keyframes giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .giro { animation-duration: 2.4s; } }
+.versao.gerando { opacity: .7; cursor: progress; }
+.versao.gerando small::after { content: " · gerando…"; }
+
+.dialogo { position: fixed; inset: 0; z-index: 20; display: none; place-items: center; background: rgba(4,12,20,.6); }
+.dialogo.aberto { display: grid; }
+.dialogo .janela {
+  width: min(440px, calc(100vw - 32px)); background: var(--panel); border: 1px solid var(--stroke);
+  border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.45);
+}
+.dialogo h4 { font-size: 16px; }
+.dialogo p { color: rgba(245,242,238,.85); line-height: 1.5; font-size: 14px; }
+.dialogo .acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+/* avisos: no TOPO e empilhados — embaixo eles cobriam o "Editar no Avelin",
+   e um aviso novo apagava o anterior antes de dar para ler */
+.avisos {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 30;
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  width: min(560px, calc(100vw - 32px)); pointer-events: none;
+}
+.aviso-item {
+  pointer-events: auto; display: flex; align-items: center; gap: 12px;
+  background: var(--panel); border: 1px solid var(--stroke); border-radius: 12px; padding: 10px 16px;
+  font-size: 13px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  animation: entra .2s var(--ease);
+}
+.aviso-item button {
+  background: var(--orange); color: #fff; border: 0; border-radius: 8px; padding: 5px 12px;
+  font-weight: 600; cursor: pointer; flex: none;
+}
+@keyframes entra { from { opacity: 0; transform: translateY(-6px); } }
+/* ritmo e fala: duas peças lado a lado; transcrição marcada */
+.peca + .peca { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--stroke); }
+.peca h4 { font-size: 13px; margin-bottom: 6px; }
+.peca p + p { margin-top: 6px; }
+#transcricao .texto { margin-top: 10px; font-size: 14px; line-height: 1.75; color: rgba(245,242,238,.86); }
+#transcricao del { color: var(--bad); text-decoration-thickness: 2px; opacity: .85; }
+#transcricao .pode { text-decoration: underline dotted rgb(var(--orange-rgb) / .8); text-underline-offset: 3px; }
+#transcricao .pausa { font-size: 12px; color: var(--dim); white-space: nowrap; }
+#transcricao .cold { color: var(--orange-soft); font-size: 13px; margin-bottom: 6px; }
+.legenda-tr { margin-top: 8px; font-size: 12px; color: var(--dim); }
+.legenda-tr del { color: var(--bad); }
+.legenda-tr .pode { text-decoration: underline dotted; }
+.versoes .versao { cursor: default; }
+/* recomendação aplicada: estado + reprocessar + desfazer */
+.aplicada { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.aplicada .selo { color: var(--ok); font-weight: 600; font-size: 13px; margin-right: 4px; }
+.aplicada .btn { padding: 6px 10px; font-size: 12px; }
+
+@media (max-width: 860px) {
+  .caixa { grid-template-columns: 1fr; justify-items: center; padding: 56px 16px 16px; }
+  .player { width: min(340px, 100%); }
+  .info { width: 100%; }
+  .info .topo { padding-right: 0; }
+}
+@media (max-width: 520px) {
+  header { padding: 14px 16px; }
+  .galeria { padding: 16px; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+  .capa .titulo { font-size: 13px; }
+  .nota b { font-size: 19px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <img src="/icone.png" alt="">
+  <h1>Cortes</h1>
+  <span class="fonte" id="fonte"></span>
+  <span class="resumo num" id="resumo"></span>
+</header>
+<main class="galeria" id="galeria"></main>
+
+<div class="modal" id="modal">
+  <div class="caixa">
+    <div class="navs">
+      <button class="nav" id="ant" aria-label="Anterior"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></button>
+      <button class="nav" id="prox" aria-label="Próximo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></button>
+    </div>
+    <button class="fechar" id="fechar" aria-label="Fechar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    <div class="player">
+      <div class="tela" id="tela">
+        <video id="video" preload="metadata" playsinline></video>
+        <button class="grande" id="grande" aria-label="Tocar"><svg width="26" height="26" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></button>
+        <div class="carregando"><span class="giro"></span><span id="carregando">Reprocessando o corte…</span></div>
+      </div>
+      <div class="barra" id="barra"><i id="prog"></i></div>
+      <div class="transporte">
+        <button class="btn" id="play" aria-label="Tocar ou pausar"></button>
+        <button class="btn" id="voltar" aria-label="Do início do corte"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+        <span class="tempo num" id="tempo">0:00 / 0:00</span>
+      </div>
+      <div class="versoes" id="versoes"></div>
+      <button class="btn acao" id="baixar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg><span>Baixar corte</span></button>
+      <div class="extras">
+        <button class="btn" id="baixar-leg" title="Um segundo arquivo, com o karaokê queimado — o corte limpo continua igual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M13 15h4M7 11h10"/></svg><span>Com legenda</span></button>
+        <button class="btn" id="baixar-srt" title="Arquivo de legenda separado, para Avelin, CapCut ou Premiere"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>Legenda .srt</span></button>
+      </div>
+      <button class="btn avelin" id="avelin" title="Abrir este corte no editor do Avelin"><img src="/icone.png" alt="" width="16" height="16"><span>Editar no Avelin</span></button>
+      <span class="ok" id="exportado"></span>
+    </div>
+    <div class="info" id="info"></div>
+  </div>
+</div>
+
+<div class="dialogo" id="dialogo" role="dialog" aria-modal="true">
+  <div class="janela">
+    <h4 id="dlg-titulo"></h4>
+    <p id="dlg-texto"></p>
+    <div class="acoes">
+      <button class="btn" id="dlg-nao">Cancelar</button>
+      <button class="btn acao" id="dlg-sim"></button>
+    </div>
+  </div>
+</div>
+<div class="avisos" id="avisos" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const IC_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const IC_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+const IC_DOWN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>';
+const IC_UP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>';
+const ROTULOS = { gancho: 'Gancho', fluxo: 'Fluxo', valor: 'Valor', completude: 'Completude',
+  picos: 'Picos', audio: 'Áudio', autocontencao: 'Autocontenção' };
+const PADROES = { pergunta: 'Pergunta provocativa', contraste: 'Contraste incongruente',
+  promessa: 'Promessa específica', confissao: 'Confissão verificável', loop: 'Loop aberto com payoff',
+  lista: 'Lista com tensão', visual: 'Prova visual primeiro', hipotese: 'Hipótese testável',
+  erro_invisivel: 'Erro invisível', pov: 'POV', comando: 'Comando', nenhum: 'Sem gancho' };
+// uma versão é um conjunto de PEÇAS; a chave é a lista delas, nesta ordem, com "+"
+const PECAS = ['gancho', 'respiros', 'falhas'];
+const NOME_PECA = { gancho: 'gancho puxado', respiros: 'sem respiros', falhas: 'erros de fala corrigidos' };
+const pecasDe = k => !k || k === 'original' ? new Set() : new Set(k.split('+'));
+const chaveDe = ps => PECAS.filter(p => ps.has(p)).join('+') || 'original';
+const nomeVersao = k => pecasDe(k).size ? maiuscula(PECAS.filter(p => pecasDe(k).has(p)).map(p => NOME_PECA[p]).join(' + ')) : 'Original';
+const maiuscula = s => s ? s[0].toUpperCase() + s.slice(1) : '';
+const GANCHO = {
+  tem: ['Gancho pronto', 'var(--ok)'],
+  puxar: ['Puxar o gancho', 'var(--warn)'],
+  regravar: ['Regravar o gancho', 'var(--bad)'],
+};
+
+let cortes = [], atual = -1, versao = 'original';
+// o que o player toca agora: a janela do corte no vídeo original, ou o
+// arquivo reprocessado de uma versão (que começa no 0)
+let fonte = null;
+const prontas = {};            // `${id}:${versao}` → {tocar, dur}
+const escolhida = {};          // id → última versão reprocessada, para reabrir nela
+const processando = {};        // id → [rótulos do que está rodando agora]
+const ROTULO_PECA = { gancho: 'Puxando o gancho…', respiros: 'Tirando os respiros…', falhas: 'Corrigindo a fala…' };
+// o rótulo do trabalho: a peça que entra (ou "Reprocessando…" se nenhuma entra)
+const rotuloVersao = (c, k) => {
+  const novas = [...pecasDe(k)].filter(p => !pecasDe(versao).has(p));
+  return novas.length === 1 ? ROTULO_PECA[novas[0]] : novas.length ? 'Aplicando as recomendações…' : 'Reprocessando…';
+};
+const scoreDe = (c, k = escolhida[c.id] || 'original') => c.variantes?.[k]?.score ?? c.score_final;
+
+// Todo trabalho demorado de um corte passa por aqui: o card dele na galeria e,
+// se ele estiver aberto, a tela do player mostram o que está rodando — a pessoa
+// pode fechar ou ir para outro corte enquanto isso.
+async function emTrabalho(c, rotulo, fn) {
+  (processando[c.id] ||= []).push(rotulo);
+  pintar(c.id);
+  try { return await fn(); }
+  finally {
+    processando[c.id].splice(processando[c.id].indexOf(rotulo), 1);
+    if (!processando[c.id].length) delete processando[c.id];
+    pintar(c.id);
+  }
+}
+// trabalhos que o SERVIDOR diz estarem rodando — inclusive os pedidos antes de
+// a página ser recarregada; consultados a cada 2,5s enquanto houver algum
+const doServidor = {};
+async function vigiar() {
+  try {
+    const d = await (await fetch('/api/processando')).json();
+    const ids = new Set([...Object.keys(d), ...Object.keys(doServidor)]);
+    for (const id of ids) {
+      const antes = doServidor[id];
+      if (d[id]) doServidor[id] = d[id]; else delete doServidor[id];
+      if (antes !== d[id]) {
+        pintar(id);
+        if (antes && !d[id] && !processando[id]) {
+          const c = cortes.find(x => x.id === id);
+          if (c) {
+            // o que foi pedido antes de recarregar chega aplicado: atualiza o card
+            const ap = (await (await fetch('/api/cortes')).json()).aplicadas || {};
+            if (ap[id]) escolhida[id] = ap[id]; else delete escolhida[id];
+            atualizarCard(c);
+            avisar(`“${c.titulo_sugerido}”: processamento concluído${ap[id] ? ` — score ${scoreDe(c)}` : ''}.`,
+                   { texto: 'Ver', fn: () => abrir(cortes.indexOf(c)) });
+          }
+        }
+      }
+    }
+  } catch (e) { /* servidor fora: tenta de novo */ }
+  setTimeout(vigiar, Object.keys(doServidor).length ? 2500 : 6000);
+}
+
+function pintar(id) {
+  const rot = processando[id]?.at(-1) || doServidor[id];
+  const card = document.querySelector(`.card[data-id="${id}"]`);
+  if (card) {
+    card.classList.toggle('processando', !!rot);
+    card.querySelector('.trabalho .rotulo').textContent = rot || '';
+  }
+  if (cortes[atual]?.id === id) {
+    $('#tela').classList.toggle('ocupada', !!rot);
+    $('#carregando').textContent = rot || '';
+    if (!rot) versoes(cortes[atual]);
+  }
+}
+const mmss = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+const hms = t => t >= 3600 ? `${Math.floor(t / 3600)}:${mmss(t % 3600).padStart(5, '0')}` : mmss(t);
+const cor = n => n >= 75 ? 'var(--ok)' : n >= 55 ? 'var(--warn)' : 'var(--bad)';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const s1 = n => String(Math.round(n * 10) / 10).replace('.', ',');
+
+function confirmar({ titulo, texto, sim }) {
+  return new Promise(ok => {
+    $('#dlg-titulo').textContent = titulo;
+    $('#dlg-texto').innerHTML = texto;
+    $('#dlg-sim').textContent = sim;
+    $('#dialogo').classList.add('aberto');
+    const fim = r => { $('#dialogo').classList.remove('aberto'); ok(r); };
+    $('#dlg-sim').onclick = () => fim(true);
+    $('#dlg-nao').onclick = () => fim(false);
+    $('#dialogo').onclick = e => { if (e.target.id === 'dialogo') fim(false); };
+    $('#dlg-sim').focus();
+  });
+}
+function avisar(msg, acao) {
+  const el = document.createElement('div');
+  el.className = 'aviso-item';
+  el.innerHTML = `<span>${esc(msg)}</span>${acao ? `<button>${esc(acao.texto)}</button>` : ''}`;
+  if (acao) el.querySelector('button').onclick = () => { el.remove(); acao.fn(); };
+  $('#avisos').append(el);
+  while ($('#avisos').children.length > 3) $('#avisos').firstElementChild.remove();
+  setTimeout(() => el.remove(), acao ? 9000 : 5000);
+}
+
+async function carregar() {
+  const d = await (await fetch('/api/cortes')).json();
+  $('#fonte').textContent = d.video;
+  if (d.estagio !== 'selecao') {
+    $('#resumo').textContent = '';
+    $('#galeria').innerHTML = `<p class="vazio" style="grid-column:1/-1">Os cortes deste vídeo ainda não foram avaliados.<br>
+      Rode <code>garimpo_cortes.py</code> até o fim e recarregue a página.</p>`;
+    return;
+  }
+  Object.assign(escolhida, d.aplicadas || {});
+  cortes = d.cortes.sort((a, b) => scoreDe(b) - scoreDe(a));
+  $('#resumo').textContent = `${cortes.length} cortes · vídeo de ${hms(d.duracao)}`;
+  $('#galeria').innerHTML = cortes.map((c, i) => {
+    const g = GANCHO[c.gancho?.tipo];
+    // o melhor score que as recomendações alcançam juntas
+    const melhor = Math.max(...Object.values(c.variantes || {}).map(x => x.score));
+    const vg = melhor > c.score_final ? { score: melhor } : null;
+    const sc = scoreDe(c), aplicada = escolhida[c.id];
+    return `<article class="card" data-i="${i}" data-id="${c.id}" tabindex="0">
+      <div class="capa">
+        ${c.thumb ? `<img src="/thumb/${encodeURIComponent(c.thumb)}" alt="" loading="lazy">` : ''}
+        <span class="nota num"><b style="color:${cor(sc)}">${sc}</b><small>${aplicada ? 'era ' + c.score_final : 'viral'}</small></span>
+        <span class="rank num">#${i + 1}</span>
+        <span class="titulo">${esc(c.titulo_sugerido)}</span>
+        <span class="dur num">${hms(c.start)} · ${Math.round(c.dur)}s</span>
+        <span class="trabalho" aria-live="polite"><span class="giro"></span><span class="rotulo"></span></span>
+      </div>
+      <div class="rodape">
+        ${aplicada ? `<span class="tag" style="color:var(--ok)" title="${esc(nomeVersao(aplicada))}">${pecasDe(aplicada).size} recomendação${pecasDe(aplicada).size > 1 ? 'ões' : ''} aplicada${pecasDe(aplicada).size > 1 ? 's' : ''}</span>`
+          : g ? `<span class="tag" style="color:${g[1]}">${g[0]}</span>` : ''}
+        ${!aplicada && vg && vg.score > c.score_final ? `<span class="tag sobe num" title="Score com todas as recomendações aplicadas">↑${vg.score}</span>` : ''}
+        <button class="baixar-mini" data-baixar="${i}" aria-label="Baixar corte" title="Baixar corte">${IC_DOWN}</button>
+      </div>
+    </article>`;
+  }).join('');
+  document.querySelectorAll('.card').forEach(el => {
+    el.onclick = e => { if (!e.target.closest('[data-baixar]')) abrir(+el.dataset.i); };
+    el.onkeydown = e => { if (e.key === 'Enter') abrir(+el.dataset.i); };
+  });
+  document.querySelectorAll('[data-baixar]').forEach(b => b.onclick = e => {
+    e.stopPropagation(); baixar(cortes[+b.dataset.baixar], b, 'limpo', 'original');
+  });
+  const pedido = cortes.findIndex(c => '#' + c.id === location.hash);
+  if (pedido >= 0) abrir(pedido);
+  vigiar();
+}
+
+const v = $('#video');
+function tocar(f, play = false) {
+  fonte = f;
+  v.pause();
+  const ir = () => { v.currentTime = f.ini; tique(); if (play) v.play(); };
+  if (!v.src.endsWith(f.src)) {
+    v.src = f.src;
+    v.addEventListener('loadedmetadata', ir, { once: true });
+  } else if (v.readyState >= 1) ir();
+  else v.addEventListener('loadedmetadata', ir, { once: true });
+}
+
+function abrir(i) {
+  atual = i;
+  const c = cortes[i];
+  versao = 'original';
+  history.replaceState(null, '', '#' + c.id);
+  $('#play').innerHTML = IC_PLAY;
+  $('#modal').classList.add('aberto');
+  $('#exportado').textContent = '';
+  const k = escolhida[c.id];
+  if (k && prontas[`${c.id}:${k}`]) mostrarVersao(c, k, false);
+  else {
+    tocar({ src: '/media', ini: c.start, fim: c.end });
+    if (k) gerarVersao(c, k).then(ok => { if (ok && cortes[atual] === c) mostrarVersao(c, k, false); });
+  }
+  versoes(c);
+  info(c);
+  placar(c);
+  pintar(c.id);
+}
+function fechar() {
+  v.pause(); $('#modal').classList.remove('aberto'); atual = -1;
+  history.replaceState(null, '', location.pathname);
+}
+
+// sob o player: qual versão está tocando (e sendo baixada). Os botões de cada
+// recomendação ficam nos blocos de Gancho e de Ritmo e fala.
+function versoes(c) {
+  const x = c.variantes?.[versao] || { score: c.score_final, dur: c.dur };
+  $('#versoes').innerHTML = `<div class="versao on"><b>${esc(nomeVersao(versao))}</b>
+    <small class="num">score ${x.score} · ${s1(x.dur)}s${versao === 'original' ? '' : ` · era ${c.score_final}`}</small></div>`;
+}
+
+function textoVersao(c, k) {
+  const x = c.variantes[k], o = c.variantes[versao] || c.variantes.original;
+  const novas = [...pecasDe(k)].filter(p => !pecasDe(versao).has(p));
+  const partes = novas.map(p => p === 'gancho'
+    ? `o gancho “${esc(c.gancho.frase)}” abre o vídeo e volta no lugar dele, com o contexto`
+    : p === 'respiros'
+    ? `saem ${c.pecas.respiros.n} pausa${c.pecas.respiros.n > 1 ? 's' : ''} de ar morto (as pausas de efeito ficam)`
+    : `saem os erros de fala: ${c.pecas.falhas.aprovadas.map(t => `“${esc(t)}”`).join(', ')}`);
+  return `Vamos reprocessar o corte: ${partes.join('; ')}${pecasDe(k).size > 1 || novas[0] !== 'gancho' ? ', com zoom alternado em cada emenda' : ''}.
+    Fica com <b class="num">${s1(x.dur)}s</b> (era ${s1(o.dur)}s) e o score vai de <b class="num">${o.score} → ${x.score}</b>. Leva alguns segundos.`;
+}
+
+function placar(c) {
+  const el = document.querySelector('#info .placar');
+  if (!el) return;
+  const sc = scoreDe(c, versao);
+  el.innerHTML = `<b class="num" style="color:${cor(sc)}">${sc}</b><small>${versao === 'original' ? 'viral' : 'era ' + c.score_final}</small>`;
+}
+// o card da galeria acompanha a versão aplicada: score, "era X" e o rótulo
+function atualizarCard(c) {
+  const card = document.querySelector(`.card[data-id="${c.id}"]`);
+  if (!card) return;
+  const sc = scoreDe(c), k = escolhida[c.id];
+  card.querySelector('.nota').innerHTML = `<b style="color:${cor(sc)}">${sc}</b><small>${k ? 'era ' + c.score_final : 'viral'}</small>`;
+  const tag = card.querySelector('.rodape .tag');
+  const g = GANCHO[c.gancho?.tipo];
+  if (tag) {
+    tag.textContent = k ? `${pecasDe(k).size} recomendaç${pecasDe(k).size > 1 ? 'ões aplicadas' : 'ão aplicada'}` : (g ? g[0] : '');
+    tag.title = k ? nomeVersao(k) : '';
+    tag.style.color = k ? 'var(--ok)' : (g ? g[1] : '');
+  }
+  card.querySelector('.tag.sobe')?.remove();
+}
+async function aplicarNoServidor(c, k) {
+  try {
+    await fetch('/api/aplicar', { method: 'POST', body: JSON.stringify({ id: c.id, versao: k }) });
+  } catch (e) { /* a escolha vale na tela mesmo sem salvar */ }
+}
+
+function mostrarVersao(c, k, play = true) {
+  versao = k;
+  if (k === 'original') tocar({ src: '/media', ini: c.start, fim: c.end }, play);
+  else tocar({ src: prontas[`${c.id}:${k}`].tocar, ini: 0, fim: prontas[`${c.id}:${k}`].dur + 1 }, play);
+  versoes(c);
+  placar(c);
+  acoes(c);
+  transcricao(c);
+}
+
+// gera (ou reaproveita) o arquivo da versão; o card e a tela mostram o trabalho
+async function gerarVersao(c, k, refazer = false) {
+  const chave = `${c.id}:${k}`;
+  if (prontas[chave]) return true;
+  try {
+    await emTrabalho(c, refazer ? 'Reprocessando…' : rotuloVersao(c, k), async () => {
+      const r = await fetch('/api/exportar', { method: 'POST', body: JSON.stringify({ id: c.id, versao: k, formato: 'limpo', refazer, aplicar: true, rotulo: refazer ? 'Reprocessando…' : rotuloVersao(c, k) }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro);
+      // o arquivo refeito tem o MESMO nome: sem o carimbo, o navegador tocaria o velho do cache
+      prontas[chave] = { tocar: `${d.tocar}?t=${Date.now()}`, dur: c.variantes[k].dur };
+    });
+    return true;
+  } catch (e) { avisar(`Não consegui reprocessar “${c.titulo_sugerido}”: ${e.message}`); return false; }
+}
+
+async function escolherVersao(k, perguntar = true) {
+  const c = cortes[atual];
+  if (!c || k === versao) return;
+  const chave = `${c.id}:${k}`;
+  const aplicar = () => {
+    if (k === 'original') delete escolhida[c.id]; else escolhida[c.id] = k;
+    aplicarNoServidor(c, k);
+    atualizarCard(c);
+  };
+  if (k === 'original' || prontas[chave]) { aplicar(); return mostrarVersao(c, k); }
+  if (processando[c.id]?.length) return;   // já tem trabalho rodando neste corte
+  if (perguntar && !await confirmar({ titulo: nomeVersao(k), texto: textoVersao(c, k), sim: 'Reprocessar' })) return;
+  if (!await gerarVersao(c, k)) return;
+  aplicar();
+  if (cortes[atual] === c) {
+    mostrarVersao(c, k);
+    avisar(`${nomeVersao(k)} — score ${c.score_final} → ${scoreDe(c, k)}. Os downloads agora são desta versão.`);
+  } else {
+    // a pessoa foi ver outro corte: avisa e deixa voltar com um clique
+    avisar(`“${c.titulo_sugerido}”: ${nomeVersao(k).toLowerCase()} (score ${scoreDe(c, k)}).`,
+           { texto: 'Ver', fn: () => abrir(cortes.indexOf(c)) });
+  }
+}
+
+function info(c) {
+  const sub = Object.entries(c.subscores || {}).map(([k, s]) => `
+    <span>${ROTULOS[k] || k}</span><span class="trilho"><i style="width:${s.nota}%;background:${cor(s.nota)}"></i></span>
+    <span class="num">${Math.round(s.nota)}</span><span class="why">${esc(s.motivo)}</span>`).join('');
+  const g = c.gancho || {}, tg = GANCHO[g.tipo];
+  const vs = c.variantes || {};
+  const vg = vs.gancho, pc = c.pecas || {};
+  $('#info').innerHTML = `
+    <div class="topo">
+      <div class="placar"></div>
+      <div><h2>${esc(c.titulo_sugerido)}</h2>
+      <p class="sub num">#${atual + 1} · ${hms(c.start)} → ${hms(c.end)} · ${Math.round(c.dur)}s</p></div>
+    </div>
+    <div class="bloco"><h3>Por que esta nota</h3><p>${esc(c.motivo)}</p>
+      ${c.motivo_ranking ? `<p class="nota-mini" style="margin-top:8px">No comparativo com os outros ${cortes.length - 1}: ${esc(c.motivo_ranking)}
+        <span class="num">(nota no lote: ${c.score_lote})</span></p>` : ''}</div>
+    <div class="bloco gancho"><h3>Gancho</h3>
+      ${tg ? `<span class="tipo" style="color:${tg[1]}">${tg[0]}</span>` : ''}
+      ${g.padrao && g.padrao !== 'nenhum' ? `<span class="tipo">${PADROES[g.padrao] || esc(g.padrao)}</span>` : ''}
+      <p class="tres"><b>Primeiros 3s:</b> “${esc(maiuscula(c.abertura_3s || c.abertura)).replace(/[.,;:!?…]+$/, '')}…”</p>
+      ${c.refinado?.tirou ? `<p class="nota-mini">O corte começa sem o “${esc(c.refinado.tirou)}” do início da frase.</p>` : ''}
+      ${g.tipo === 'puxar' && g.frase ? `<blockquote>${esc(g.frase)}</blockquote>` : ''}
+      ${g.instrucao && g.tipo !== 'tem' ? `<p>${esc(g.instrucao)}</p>` : ''}
+      ${g.sugestoes?.length ? `<ul>${g.sugestoes.map(s => typeof s === 'string' ? `<li>${esc(s)}</li>`
+        : `<li>“${esc(s.texto)}” <span class="padrao">${PADROES[s.padrao] || esc(s.padrao)}</span></li>`).join('')}</ul>` : ''}
+      <div class="acao-versao" data-comp="gancho"></div>
+      ${g.tipo === 'puxar' && !vg ? `<p class="nota-mini">Não deu para isolar a frase do gancho com segurança — puxe no editor.</p>` : ''}
+    </div>
+    <div class="bloco"><h3>Ritmo e fala</h3>
+      <div class="peca"><h4>Respiros</h4>
+        ${pc.respiros ? `<p>O Avelin encurtaria <b>${pc.respiros.n} pausa${pc.respiros.n > 1 ? 's' : ''}</b> de ar morto: <b class="num">${s1(vs.original.dur)}s → ${s1(vs.respiros.dur)}s</b>. As pausas de efeito ficam.</p>
+          <div class="acao-versao" data-comp="respiros"></div>`
+        : `<p>Nada para tirar: as pausas deste corte são respiração normal ou pausa de efeito.</p>`}
+      </div>
+      <div class="peca"><h4>Erros de fala</h4>
+        ${pc.falhas ? `<p>Saem ${pc.falhas.aprovadas.map(t => `<b>“${esc(t)}”</b>`).join(', ')} — cada emenda conferida ouvindo.</p>
+          <div class="acao-versao" data-comp="falhas"></div>`
+        : `<p>${(c.fala_mantida || []).length ? 'Nenhum erro de fala para tirar com segurança.' : 'Nenhum erro de fala neste trecho — sem frase refeita, gaguejo ou muleta.'}</p>`}
+        ${(c.fala_mantida || []).map(m => `<p class="nota-mini">Detectado e mantido: <b>“${esc(m.texto)}”</b> (${esc(m.tipo)}) — ${esc(m.motivo)}.</p>`).join('')}
+      </div>
+    </div>
+    <div class="bloco"><h3>Sinais</h3><div class="sinais">${sub}</div></div>
+    <details class="bloco" id="transcricao" open><summary>Transcrição do trecho</summary>
+      <p class="legenda-tr"><del>riscado</del> sai nesta versão · <span class="pode">pontilhado</span> pode sair · ⏸ pausa</p>
+      <div class="texto"></div></details>`;
+  transcricao(c);
+  acoes(c);
+}
+
+// Cada recomendação (peça) tem o seu botão: aplicar soma a peça à versão atual,
+// desfazer tira só ela. Depois de aplicada: o selo, Reprocessar e Desfazer.
+function acoes(c) {
+  const vs = c.variantes || {};
+  const atuais = pecasDe(versao);
+  const NOME = { gancho: '✓ Gancho puxado', respiros: '✓ Respiros tirados', falhas: '✓ Erros de fala corrigidos' };
+  const ROT = { gancho: 'puxar o gancho', respiros: 'tirar os respiros', falhas: 'corrigir os erros de fala' };
+  document.querySelectorAll('#info .acao-versao').forEach(el => {
+    const p = el.dataset.comp;
+    const com = chaveDe(new Set([...atuais, p])), sem = chaveDe(new Set([...atuais].filter(x => x !== p)));
+    if (!vs[com] && !atuais.has(p)) { el.innerHTML = ''; return; }
+    if (!atuais.has(p)) {
+      const de = scoreDe(c, versao), para = scoreDe(c, com);
+      el.innerHTML = para > de
+        ? `<button class="subir">${IC_UP}<span>Subir score: <span class="num">${de} → ${para}</span> — ${ROT[p]}</span></button>`
+        : `<button class="subir"><span>${maiuscula(ROT[p])} — score fica em <span class="num">${para}</span></span></button>`;
+      el.querySelector('button').onclick = () => escolherVersao(com);
+    } else {
+      el.innerHTML = `<div class="aplicada"><span class="selo">${NOME[p]}</span>
+        <button class="btn" data-a="refazer" title="Refaz o arquivo desta versão do zero">Reprocessar</button>
+        <button class="btn" data-a="desfazer">Desfazer</button></div>`;
+      el.querySelector('[data-a="refazer"]').onclick = () => reprocessar(c);
+      // desfazer não pergunta: é voltar atrás, não uma recomendação nova
+      el.querySelector('[data-a="desfazer"]').onclick = () => escolherVersao(sem, false);
+    }
+  });
+}
+
+// O texto inteiro do corte. O que a versão atual tira aparece RISCADO; o que
+// uma recomendação ainda não aplicada tiraria, sublinhado em pontilhado.
+function transcricao(c) {
+  const el = document.querySelector('#transcricao .texto');
+  if (!el) return;
+  const ps = pecasDe(versao);
+  const tok = c.transcricao || [];
+  if (!tok.length) { el.textContent = c.texto || ''; return; }
+  let html = '';
+  if (ps.has('gancho') && c.gancho?.frase)
+    html += `<p class="cold">▶ abre com o gancho, repetido: “${esc(c.gancho.frase)}”</p>`;
+  html += tok.map(t => {
+    if (t.t === 'w') {
+      if (t.falha === undefined) return esc(t.w);
+      return ps.has('falhas') ? `<del title="erro de fala — sai">${esc(t.w)}</del>`
+                              : `<span class="pode" title="erro de fala — sai se corrigir">${esc(t.w)}</span>`;
+    }
+    const d = `⏸ ${s1(t.dur)}s`;
+    if (t.respiro === undefined) return `<span class="pausa" title="pausa de efeito — fica">${d}</span>`;
+    return ps.has('respiros')
+      ? `<span class="pausa"><del title="ar morto — encurtado">${d}</del> ${s1(t.fica)}s</span>`
+      : `<span class="pausa pode" title="ar morto — encurta se tirar os respiros">${d}</span>`;
+  }).join(' ');
+  el.innerHTML = html;
+}
+
+async function reprocessar(c) {
+  const k = versao;
+  if (k === 'original') return;
+  if (!await confirmar({ titulo: `Reprocessar: ${nomeVersao(k)}`,
+      texto: `Vamos refazer esta versão do zero — o vídeo, o vídeo legendado e o .srt dela. Leva alguns segundos.`,
+      sim: 'Reprocessar' })) return;
+  delete prontas[`${c.id}:${k}`];
+  if (!await gerarVersao(c, k, true)) return;
+  if (cortes[atual] === c && versao === k) mostrarVersao(c, k);
+  avisar(`“${c.titulo_sugerido}”: ${nomeVersao(k).toLowerCase()} — reprocessado.`);
+}
+
+function tique() {
+  if (!fonte) return;
+  const dur = fonte.fim - fonte.ini;
+  const t = Math.min(Math.max(v.currentTime - fonte.ini, 0), dur);
+  $('#prog').style.width = `${(t / dur) * 100}%`;
+  $('#tempo').textContent = `${mmss(t)} / ${mmss(isFinite(v.duration) && fonte.ini === 0 ? Math.min(dur, v.duration) : dur)}`;
+  $('#play').innerHTML = v.paused ? IC_PLAY : IC_PAUSE;
+  $('#tela').classList.toggle('tocando', !v.paused);
+}
+v.addEventListener('timeupdate', () => {
+  if (fonte && v.currentTime >= fonte.fim) { v.pause(); v.currentTime = fonte.fim; }
+  tique();
+});
+v.addEventListener('play', tique); v.addEventListener('pause', tique); v.addEventListener('ended', tique);
+function alternar() {
+  if (!fonte) return;
+  if (v.paused) {
+    if (v.currentTime < fonte.ini || v.currentTime >= Math.min(fonte.fim, v.duration || Infinity) - 0.05) v.currentTime = fonte.ini;
+    v.play();
+  } else v.pause();
+}
+$('#play').onclick = alternar; $('#grande').onclick = alternar; v.onclick = alternar;
+$('#voltar').onclick = () => { if (fonte) { v.currentTime = fonte.ini; v.play(); } };
+$('#barra').onclick = e => {
+  if (!fonte) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const dur = fonte.ini === 0 && isFinite(v.duration) ? Math.min(fonte.fim, v.duration) : fonte.fim - fonte.ini;
+  v.currentTime = fonte.ini + ((e.clientX - r.left) / r.width) * dur;
+};
+$('#fechar').onclick = fechar;
+$('#modal').onclick = e => { if (e.target.id === 'modal') fechar(); };
+$('#ant').onclick = () => abrir((atual - 1 + cortes.length) % cortes.length);
+$('#prox').onclick = () => abrir((atual + 1) % cortes.length);
+$('#baixar').onclick = () => baixar(cortes[atual], $('#baixar'));
+$('#baixar-leg').onclick = () => baixar(cortes[atual], $('#baixar-leg'), 'legendado');
+$('#baixar-srt').onclick = () => baixar(cortes[atual], $('#baixar-srt'), 'srt');
+$('#avelin').onclick = () => editarNoAvelin(cortes[atual]);
+
+const ROTULO_BAIXAR = { limpo: 'Recortando…', legendado: 'Queimando a legenda…', srt: 'Gerando a legenda…' };
+
+async function baixar(c, botao, formato = 'limpo', qual = versao) {
+  if (!c || botao.disabled) return;
+  const rotulo = botao.querySelector('span');
+  const original = rotulo ? rotulo.textContent : '';
+  botao.disabled = true;
+  if (rotulo) rotulo.textContent = ROTULO_BAIXAR[formato];
+  try {
+    const d = await emTrabalho(c, ROTULO_BAIXAR[formato], async () => {
+      const r = await fetch('/api/exportar', { method: 'POST', body: JSON.stringify({ id: c.id, formato, versao: qual, rotulo: ROTULO_BAIXAR[formato] }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro);
+      return d;
+    });
+    const a = document.createElement('a'); a.href = d.url; a.download = d.arquivo; a.click();
+    if (cortes[atual] === c) $('#exportado').textContent = `Salvo também em …_cortes/${d.arquivo}`;
+    else avisar(`“${c.titulo_sugerido}” baixado.`);
+  } catch (e) { avisar(`Não consegui exportar “${c.titulo_sugerido}”: ${e.message}`); }
+  botao.disabled = false;
+  if (rotulo) rotulo.textContent = original;
+}
+
+async function editarNoAvelin(c, forcar = false) {
+  if (!c) return;
+  if (!forcar && !await confirmar({
+    titulo: 'Editar no Avelin',
+    texto: `Vamos abrir “${esc(c.titulo_sugerido)}” no Avelin, na versão <b>${esc(nomeVersao(versao))}</b>, para a edição completa — corte fino, cor, legenda e efeitos.
+      Nenhum vídeo é copiado: o projeto aponta para o original. Se outro corte estiver em edição, o vídeo final dele vai para <b>editados/</b> e o resto é limpo.`,
+    sim: 'Abrir no Avelin' })) return;
+  const aba = window.open('about:blank', '_blank');   // aberta no clique: depois do await o navegador bloquearia
+  const qual = versao;
+  try {
+    const [r, d] = await emTrabalho(c, 'Abrindo no Avelin…', async () => {
+      const r = await fetch('/api/avelin', { method: 'POST', body: JSON.stringify({ id: c.id, versao: qual, forcar, rotulo: 'Abrindo no Avelin…' }) });
+      return [r, await r.json()];
+    });
+    if (r.status === 409) {
+      aba?.close();
+      if (await confirmar({ titulo: 'Outro corte em edição',
+          texto: `“${esc(d.emEdicao)}” ainda está no Avelin e não tem vídeo final. Importar este descarta aquela edição.`,
+          sim: 'Descartar e importar' })) return editarNoAvelin(c, true);
+      return;
+    }
+    if (!r.ok) throw new Error(d.erro);
+    if (aba) aba.location = d.url; else window.open(d.url, '_blank');
+    avisar('Aberto no Avelin — a Fase 1 começa por lá.');
+  } catch (e) { aba?.close(); avisar(e.message); }
+}
+
+document.addEventListener('keydown', e => {
+  if (atual < 0 || $('#dialogo').classList.contains('aberto')) return;
+  if (e.key === 'Escape') fechar();
+  if (e.code === 'Space') { e.preventDefault(); alternar(); }
+  if (e.key === 'ArrowRight') $('#prox').click();
+  if (e.key === 'ArrowLeft') $('#ant').click();
+});
+carregar();
+</script>
+</body>
+</html>

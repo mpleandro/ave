@@ -35,6 +35,11 @@ anim3d = ["mediapipe>=0.10.14", "transformers>=4.45", "torch", "torchvision"]
 escuta = ["mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'"]
 # Baixar de link (ingest_url.py): yt-dlp dentro do ambiente, sem pedir brew.
 link = ["yt-dlp"]
+# Enquadramento vertical do garimpo de cortes (helpers/cortes/enquadramento.py):
+# os pontos do rosto (abertura do maxilar, sorriso) vêm do MediaPipe. Os modelos
+# (rosto, pontos do rosto, impressão de voz) não são pacote — o instalar.py
+# baixa para ~/.avelin/modelos. Mesmo opencv-contrib 5.x do anim3d (ver acima).
+enquadramento = ["mediapipe>=0.10.14"]
 # Todos os recursos acima são instalados SOB DEMANDA por helpers/instalar.py, na
 # primeira vez em que o usuário pede o efeito — ninguém precisa citá-los aqui.
 

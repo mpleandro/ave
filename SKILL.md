@@ -1,6 +1,6 @@
 ---
 name: ave
-description: Avelin — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, mine the strongest recorded line as the HOOK — cold open when it sits mid-video — cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — HyperFrames visuals from a data-driven template: short-form gets karaoke captions, a hook headline (a band over the video or a full-screen cartela that hands the video over on exit), a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. Ask questions, confirm, execute, iterate, persist.
+description: Avelin — edit any video by conversation, in phases. Two tracks — SHORT-FORM (vertical 9:16 for Reels/TikTok/Shorts) and LONGFORM (horizontal 16:9 for YouTube: talking-head+B-roll, tutorials/screen-record, vlogs). PHASE 1 — clean cut + color grade + optional voice EQ/mastering (transcribe, select best takes, mine the strongest recorded line as the HOOK — cold open when it sits mid-video — cut on silence for short-form or retention arc + cold open for longform, grade; ask if shot in LOG; master the voice), then show the user for approval. PHASE 2 (after the cut is approved) — HyperFrames visuals from a data-driven template: short-form gets karaoke captions, a hook headline (a band over the video or a full-screen cartela that hands the video over on exit), a dynamic camera and behind-the-subject; longform gets B-roll cutaways, lower-thirds, chapter cards, callouts, plus YouTube chapters and .srt captions. PHASE 3 — soundtrack (AI via Treblo or a local file). Illustrative images/video via Pexels + Wikimedia/Google. LONG VIDEOS (5 min+) — ask first: CORTES (mine the most viral moments into a ranked 0–100 gallery of vertical clips with hook diagnosis, breath/speech-error cleanup, captions and active-speaker vertical crop) or EDIÇÃO (edit the whole video). Ask questions, confirm, execute, iterate, persist.
 ---
 
 # Avelin — editor de vídeo
@@ -162,6 +162,17 @@ rodada do `phase2.py` — move o conteúdo, não sobrescreve nada.
 
 First-time install lives in `install.md`. On cold start just verify:
 
+> **INSTALAR E ATUALIZAR SE EXPLICA EM LINGUAGEM SIMPLES** (regra do usuário,
+> 2026-10-19). Quem instala ou atualiza o Avelin não é programador: nada de
+> nome de pacote, extra, `uv sync`, "compilar", "dependência", "ambiente
+> virtual", MB de modelo jogado sem contexto. Diga o que a pessoa ganha e o
+> que ela precisa fazer — "vou baixar o detector de rostos, que é o que deixa o
+> vídeo deitado em pé seguindo quem fala; leva uns minutos, só na primeira
+> vez". Comandos e caminhos ficam com você; para a pessoa, só o próximo passo
+> dela, em português de conversa. Vale para `install.md`, para a atualização e
+> para cada recurso que `instalar.py` instala sob demanda.
+
+
 - `GROQ_API_KEY` resolves (env or `.env` at the Avelin repo root — this fork has its own). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
 - `ELEVENLABS_API_KEY` (optional) — used for LONG sources (>5 min, e.g. YouTube/course lessons) via ElevenLabs Scribe `scribe_v1`, since Groq's free tier chokes on long uploads. `backend=auto` (default) picks Scribe over 5 min when the key exists, else Groq; short clips stay on Groq. No key → long sources fall back to Groq. Ask for it lazily the first time a >5 min source shows up, write to `.env`.
 - `whispercpp` (optional) — fully local transcription, no key, no upload cap, no network. Opt-in only: `auto` never picks it. Needs whisper.cpp built with a ggml model (auto-detected in `~/whisper.cpp`, or `WHISPERCPP_BIN`/`WHISPERCPP_MODEL` in `.env`). Offer it when the user has no Groq key or hits quota. **Text matches Groq; word TIMES don't** (measured: 66% of words inside a real speech region vs Groq's 97%, median drift 240ms). Phase 1 is unaffected — cut edges come from `speech_regions.py`. For Phase-2 karaoke captions, prefer Groq and say why.
@@ -171,13 +182,15 @@ First-time install lives in `install.md`. On cold start just verify:
   `helpers/instalar.py` tem o registro: `recorte` (torch + RVM, ~2 GB — cabeça
   vazando, teste de recorte, atrás do apresentador), `anim3d` (~2,5 GB),
   `escuta` (mlx-whisper, ~1,6 GB, só Apple Silicon — o portão da Fase 1 ouve o
-  corte com ele) e `link` (yt-dlp, ~10 MB). Quem usa o recurso chama
+  corte com ele), `enquadramento` (detector de rosto e de voz, ~100 MB — o
+  vídeo horizontal vira vertical seguindo quem fala, no garimpo de cortes) e
+  `link` (yt-dlp, ~10 MB). Quem usa o recurso chama
   `instalar.garantir("<id>")` (ou `reexecutar_com`, que instala e reinicia o
   script num processo novo) — `recorte.py`, `person_matte.py`, `verify_takes.py`,
   `ingest_url.py` e o `phase2.py` já chamam. **O pedido do efeito é o
-  consentimento**: não pergunte se pode instalar; diga em UMA linha o que vai
-  instalar e o tamanho ("primeira vez — vou instalar o recorte, ~2 GB, uma vez
-  só") e siga. Nunca pré-instale tudo no setup, e nunca `uv sync --extra X` sem
+  consentimento**: não pergunte se pode instalar; diga em UMA linha, sem termo
+  técnico, o que vai baixar e para quê ("primeira vez — vou baixar o recorte do
+  apresentador, que leva alguns minutos, uma vez só") e siga. Nunca pré-instale tudo no setup, e nunca `uv sync --extra X` sem
   `--inexact` (desinstala os outros extras). `instalar.py status` mostra o estado.
 - Lazy keys, ask on first use, write to `.env` (never to `<videos_dir>`): `PEXELS_API_KEY` (images), `GOOGLE_API_KEY`+`GOOGLE_CSE_ID` (brand/people images fallback), `TREBLO_API_KEY` (AI music).
 
@@ -346,6 +359,26 @@ entre o drop e o processamento: a que perguntava formato e briefing foi
 removida. O corte **segue o aspect ratio do material de origem** — vertical
 corta como short-form, horizontal como longform — e formato ou briefing
 diferentes o usuário pede no chat, a qualquer momento.
+
+**VÍDEO DE 5 MINUTOS OU MAIS: CORTE OU EDIÇÃO? — pergunte ANTES da Fase 1**
+(regra do usuário, 2026-10-19). Um vídeo longo pode ser duas coisas opostas:
+uma aula, live ou podcast de onde saem VÁRIOS cortes curtos, ou um vídeo para
+publicar inteiro. Adivinhar errado custa a Fase 1 inteira. Então, em todo
+projeto novo — drop na tela, `/ave <pasta>` ou link —, meça a fonte mais longa
+com ffprobe e, **se tiver 5 min (300 s) ou mais**, pergunte com
+`AskUserQuestion` antes de transcrever:
+
+- **Cortes** — "achar os melhores trechos e transformar em vários vídeos curtos,
+  com nota de 0 a 100" → **GARIMPO DE CORTES** (seção própria, abaixo).
+- **Edição** — "editar o vídeo inteiro" → a Fase 1 de sempre (formato pelo
+  aspect ratio, como abaixo).
+
+Enquanto ele não responde, deixe o `message` do `state.json` em "esperando:
+cortes ou edição?" — a tela de carregamento mostra. Abaixo de 5 min, não
+pergunte: é edição. **Exceção:** projeto que JÁ é um corte vindo da galeria
+("Editar no Avelin" — `edit/cortes_origem.json` existe, ou o `brief` começa com
+"Corte importado do garimpo") não pergunta nada: a fonte é longa, mas o
+trabalho é só o trecho do EDL.
 
 **`preview_request.json` — o drop chegando até você.** É o `/ave <pasta>` sem o
 terminal: o servidor escreve o arquivo ao criar o projeto, e o watcher te avisa:
@@ -884,6 +917,43 @@ Goal: best take of every beat, cut on silence, graded image, clean `preview.mp4`
    user pick the editing style, the caption style and the edit elements in the UI
    (see "The Estilo tab"). Do NOT ask this in chat. Only then read the track
    reference: **`references/shortform.md`** or **`references/longform.md`**.
+
+## GARIMPO DE CORTES — de um vídeo longo, os melhores trechos
+
+O fluxo "Cortes" da pergunta dos 5 minutos. Sai uma GALERIA (estilo Opus Clip)
+com os trechos de maior potencial ordenados por uma nota de viralização de 0 a
+100, cada um com a capa do início, o motivo da nota, o diagnóstico do gancho e
+as versões melhoradas — e o download. Tudo vive em `<pasta do vídeo>/<stem>_cortes/`
+(nunca um `edit/` solto numa pasta com vários projetos). Os estágios moram em
+`helpers/cortes/`, um arquivo cada, e cada docstring explica a regra e o
+defeito real que ela evita — leia antes de mudar.
+
+1. **Transcreva para a pasta do garimpo:**
+   `transcribe.py "<video>" --edit-dir "<pasta>/<stem>_cortes" --language pt`.
+2. **Rode o garimpo:** `garimpo_cortes.py "<video>"`. Candidatos (janelas de
+   20–90 s em fronteira de frase), pré-filtro sem custo (áudio, autocontenção,
+   gancho) e as finalistas. **Sai com código 2 duas vezes, de propósito:**
+   - `analise/para_avaliar.md` → você lê (a rubrica e o guia de ganchos vêm
+     dentro) e grava `analise/notas.json`: início e fim de cada corte, notas
+     de gancho/fluxo/valor/completude/picos, diagnóstico do gancho, ruído;
+   - `analise/para_ranquear.md` → todos os finalistas JUNTOS; grave
+     `analise/ranking.json` com a nota comparativa espalhada.
+   Rode de novo depois de cada um. Notas fora do esquema são recusadas com o
+   motivo — corrija e rode.
+3. **Abra a galeria:** `cortes_view.py "<video>"` (porta 4830) e dê a URL. Na
+   tela: versões (gancho puxado, sem respiros, erros de fala corrigidos — cada
+   uma aplica, reprocessa e desfaz sozinha, com o score novo), legenda
+   separada (.srt) ou queimada, download e **Editar no Avelin** (um projeto
+   por vídeo longo, sem cópia de vídeo, reaproveitado a cada corte).
+4. **Fonte horizontal:** o download sai em 9:16 seguindo quem fala
+   (`enquadramento.py` + `voz.py`); o recurso `enquadramento` instala na
+   primeira vez.
+
+Parâmetros e pesos em `helpers/cortes/config.json` (sobrescreva por projeto em
+`<stem>_cortes/cortes_config.json`). Na galeria entram só cortes com nota
+comparativa ≥ 70 (`selecao.nota_min`); o número de cortes é proporcional à
+duração (`contexto.cortes: "auto"`, um a cada 5 min, entre 5 e 20). Testes:
+`tests/cortes_*.py`.
 
 ## PHASE 2 — HyperFrames
 
