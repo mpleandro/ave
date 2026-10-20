@@ -1,0 +1,101 @@
+{
+  "contexto": {
+    "objetivo": "alcance",
+    "publico": "",
+    "cortes": "auto"
+  },
+  "candidatos": {
+    "dur_min_s": 20,
+    "dur_max_s": 90,
+    "alvos_s": [
+      30,
+      45,
+      60,
+      75,
+      90
+    ],
+    "borda_min_s": 0.15
+  },
+  "audio": {
+    "ar_morto_s": 0.7
+  },
+  "autocontencao": {
+    "conector": -35,
+    "referencia": -30,
+    "muleta": -30,
+    "minuscula": -10,
+    "live": -8,
+    "live_max": -24,
+    "tela": -6,
+    "tela_max": -24,
+    "promessa": -20,
+    "virada": -20
+  },
+  "prefiltro": {
+    "finalistas": 30,
+    "autocontencao_min": 50,
+    "sobreposicao_max": 0.5
+  },
+  "pesos": {
+    "audio": {
+      "energia": 0.35,
+      "variacao": 0.2,
+      "ritmo": 0.25,
+      "pausas": 0.2
+    },
+    "prefiltro": {
+      "audio": 0.35,
+      "autocontencao": 0.3,
+      "gancho": 0.35
+    },
+    "texto": {
+      "gancho": 0.3,
+      "valor": 0.25,
+      "completude": 0.15,
+      "fluxo": 0.15,
+      "picos": 0.15
+    },
+    "final": {
+      "texto": 0.6,
+      "audio": 0.25,
+      "autocontencao": 0.15
+    }
+  },
+  "selecao": {
+    "nota_min": 70,
+    "nota_min_lote": 45
+  },
+  "ritmo": {
+    "pausa_min_s": 0.3,
+    "manter_s": 0.15,
+    "recomendar_s": 2.0,
+    "recomendar_pct": 0.06
+  },
+  "legenda": {
+    "fonte": "Poppins Black",
+    "tamanho": 104,
+    "cor": "#FFFFFF",
+    "destaque": "#FF522D",
+    "base_px": 430,
+    "max_palavras": 3,
+    "max_chars": 16,
+    "destaque_secundario": "#FFAB51",
+    "titulo": {
+      "ativo": true,
+      "tamanho": 72,
+      "topo_px": 270,
+      "ate_s": 4.0,
+      "max_chars": 18
+    }
+  },
+  "zoom_cortes": {
+    "fator": 1.1,
+    "alvo_x": 0.5,
+    "alvo_y": 0.4
+  },
+  "ranking": {
+    "max": 20,
+    "min": 5,
+    "por_minutos": 5
+  }
+}

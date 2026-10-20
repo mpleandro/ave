@@ -24,6 +24,8 @@ Os recursos:
   escuta   — mlx-whisper + modelo turbo (~1,6 GB, só Apple Silicon): ouvir o
              corte atrás de repetição — o portão da Fase 1
   link     — yt-dlp (~10 MB): editar a partir de um link (YouTube, Instagram…)
+  enquadramento — MediaPipe + 3 modelos pequenos (~100 MB): o garimpo de cortes
+             deixa o vídeo horizontal em pé seguindo quem está falando
 
 Três regras, cada uma com um defeito por trás (herdadas do instalar_anim3d):
   1. `uv sync --extra X --inexact`: sem `--inexact`, instalar um extra
@@ -66,6 +68,47 @@ def _baixar_whisper(py: str) -> None:
            "baixando o modelo de escuta (whisper-large-v3-turbo, ~1,6 GB)")
 
 
+MODELOS = Path.home() / ".avelin" / "modelos"
+# (arquivo, endereço oficial, sha256, para que serve — em linguagem simples)
+MODELOS_ENQUADRAMENTO = [
+    ("face_detection_yunet_2023mar.onnx",
+     "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/"
+     "face_detection_yunet/face_detection_yunet_2023mar.onnx",
+     "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4", "o detector de rostos"),
+    ("face_landmarker.task",
+     "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/"
+     "float16/1/face_landmarker.task",
+     "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff", "o leitor de boca (quem está falando)"),
+    ("wespeaker_resnet34.onnx",
+     "https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM/resolve/main/"
+     "voxceleb_resnet34_LM.onnx",
+     "7bb2f06e9df17cdf1ef14ee8a15ab08ed28e8d0ef5054ee135741560df2ec068", "o reconhecedor de vozes"),
+]
+
+
+def _baixar_modelos_enquadramento(py: str) -> None:
+    """Baixa o que falta e confere o sha256 — arquivo corrompido ou trocado no
+    caminho não entra: um modelo errado detectaria rosto errado em silêncio."""
+    import hashlib  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+    MODELOS.mkdir(parents=True, exist_ok=True)
+    for nome, url, sha, o_que in MODELOS_ENQUADRAMENTO:
+        alvo = MODELOS / nome
+        if alvo.exists() and hashlib.sha256(alvo.read_bytes()).hexdigest() == sha:
+            continue
+        say(f"baixando {o_que}…")
+        tmp = alvo.with_suffix(".parcial")
+        urllib.request.urlretrieve(url, tmp)
+        if hashlib.sha256(tmp.read_bytes()).hexdigest() != sha:
+            tmp.unlink(missing_ok=True)
+            raise RuntimeError(f"o arquivo de {o_que} chegou diferente do esperado")
+        tmp.rename(alvo)
+
+
+def _modelos_ok() -> bool:
+    return all((MODELOS / nome).exists() for nome, *_ in MODELOS_ENQUADRAMENTO)
+
+
 RECURSOS: dict[str, dict] = {
     "recorte": {
         "nome": "Recorte do apresentador",
@@ -86,6 +129,13 @@ RECURSOS: dict[str, dict] = {
         "confere": "import mlx_whisper",
         "depois": _baixar_whisper,
         "so_apple": True,
+    },
+    "enquadramento": {
+        "nome": "Enquadramento vertical",
+        "para": "vídeo deitado vira em pé seguindo quem está falando (garimpo de cortes)",
+        "tamanho": "~100 MB", "extra": "enquadramento",
+        "confere": "import mediapipe, cv2; cv2.FaceDetectorYN",
+        "depois": _baixar_modelos_enquadramento,
     },
     "link": {
         "nome": "Baixar de link",
@@ -138,6 +188,8 @@ def pronto(rid: str) -> bool:
         return False
     py = python_do_projeto()
     ok = subprocess.run([py, "-c", r["confere"]], capture_output=True).returncode == 0
+    if ok and rid == "enquadramento":
+        ok = _modelos_ok()
     if ok and rid == "recorte":
         hub = Path.home() / ".cache" / "torch" / "hub"
         ok = any(hub.glob("PeterL1n_RobustVideoMatting*"))
