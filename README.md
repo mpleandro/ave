@@ -9,6 +9,12 @@ trilha.
 Funciona em **short-form vertical** (Reels/TikTok/Shorts) e **longform
 horizontal** (YouTube).
 
+**Tem um vídeo longo — uma aula, uma live, um podcast?** Mande o vídeo inteiro:
+o Avelin pergunta se você quer **cortes** ou a **edição** completa. Escolhendo
+cortes, ele encontra os trechos com mais chance de viralizar e entrega uma
+galeria com nota de 0 a 100, o porquê de cada nota e o download de cada corte
+já em pé.
+
 > **Estado atual.** A Fase 2 renderiza em **HyperFrames** (Apache 2.0) — sem a
 > restrição de licença comercial do motor anterior. Portados: seis estilos de
 > legenda, quatro headlines, três tipos de edição, a câmera dinâmica e as quatro
@@ -283,6 +289,32 @@ não são tocados.
 Use esta lista como cardápio **enquanto edita**: tudo aqui se pede em
 português, no chat, sem decorar comando nenhum.
 
+### Cortes de vídeos longos (5 minutos ou mais)
+
+Todo vídeo de 5 minutos ou mais começa com uma pergunta: **cortes** ou
+**edição**? Escolhendo cortes:
+
+- **Os melhores trechos, com nota.** O Avelin lê o vídeo inteiro, escolhe os
+  momentos que se sustentam sozinhos — começando numa ideia e terminando
+  nela — e dá a cada um uma nota de viralização de 0 a 100. Bastidor de live
+  (chat, brinde, procurar algo na tela) fica de fora.
+- **Uma galeria para escolher.** Cada corte com a capa, a nota, o porquê dela
+  e um player para assistir antes de baixar. Só entram os cortes com nota 70
+  ou mais.
+- **O gancho avaliado.** Os 3 primeiros segundos de cada corte são julgados à
+  parte: se já seguram, se a frase forte está mais adiante (o Avelin pode
+  trazê-la para o começo com um clique) ou se vale gravar outra — com
+  sugestões de frase.
+- **Melhorias com um clique, cada uma com o score novo:** puxar o gancho, tirar
+  os respiros e corrigir os erros de fala (frase repetida, gaguejo, "né",
+  "tipo"). A transcrição mostra riscado o que saiu.
+- **Legenda separada ou na tela.** Baixe o corte limpo, o arquivo de legenda
+  para usar em outro editor, ou o vídeo com a legenda animada já aplicada.
+- **Vídeo deitado sai em pé.** Num podcast ou entrevista gravado na
+  horizontal, o corte vertical acompanha quem está falando.
+- **Editar no Avelin.** Quer finalizar um corte com os efeitos do editor? Um
+  botão leva o corte para o Avelin, sem duplicar o vídeo no seu computador.
+
 ### Fase 1 — o corte limpo
 
 - **Transcrição automática** de tudo que foi falado (Groq; fontes longas via
@@ -418,8 +450,9 @@ git -C "$HOME/.claude/skills/ave" pull --ff-only
 `clone` baixa pela primeira vez; `pull` atualiza o que já existe. Rodar o
 `clone` de novo não funciona — ele reclama que a pasta já existe.
 
-Se o anúncio da versão disser que houve mudança de dependências, rode o
-`uv sync` de novo depois do pull.
+Mais fácil ainda: peça no chat *"atualiza o Avelin"*. O Claude baixa a versão
+nova, ajeita o que precisar e conta, em português simples, o que mudou para
+você.
 
 ---
 

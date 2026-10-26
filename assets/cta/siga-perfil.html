@@ -17,6 +17,9 @@
   @font-face { font-family: 'Montserrat'; font-weight: 500; src: local('Montserrat Medium'), local('Montserrat-Medium'); }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
+  /* o palco leva pílula e cursor juntos: a ESCALA vive nele (o GSAP já anima
+     o transform da pílula) e o cursor continua mirando o botão no mesmo espaço */
+  #{{ID}}-palco { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; }
   #{{ID}}-pilula { position: absolute; top: 150px; left: 190px; width: 700px; height: 120px; border-radius: 60px; overflow: hidden;
     background: rgba(24,24,24,.94); border: 1.5px solid rgba(255,255,255,.08);
     box-shadow: 0 18px 50px rgba(0,0,0,.45); opacity: 0; font-family: 'Montserrat', sans-serif; }
@@ -38,16 +41,29 @@
 <body>
 <div id="root" data-composition-id="{{ID}}" data-start="0" data-duration="{{DURACAO}}"
      data-width="1080" data-height="1920">
+  <div id="{{ID}}-palco">
   <div id="{{ID}}-pilula">
     <div id="{{ID}}-anel"><img src="{{FOTO}}" alt="" /></div>
     <div id="{{ID}}-textos"><div id="{{ID}}-titulo">Siga o perfil</div><div id="{{ID}}-arroba">@{{ARROBA}}</div></div>
     <div id="{{ID}}-botao"><span class="a">Seguir</span><span class="b">Seguindo ✓</span></div>
   </div>
   <svg id="{{ID}}-cursor" viewBox="0 0 24 24"><path d="M4 2.5l15 9.2-6.6 1.3 3.9 7.3-2.6 1.4-3.9-7.3L5 19z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/></svg>
+  </div>
 </div>
 <script>
   var tl = gsap.timeline({ paused: true });
-  var LARG = 700, ESQ = (1080 - LARG) / 2;
+  /* POSIÇÃO E TAMANHO (cta.top/left/width, em % do quadro, gravados pelo
+     cta.py): TOPO é a borda de cima VISÍVEL da pílula — a escala nasce dela,
+     então encolher não a tira do lugar. Placeholder não substituído (a
+     demonstração do editor) cai no padrão de sempre: topo, 700px, centrada. */
+  var num = function (v, d) { v = parseFloat(v); return isFinite(v) ? v : d; };
+  var TOPO = num('{{PTOP}}', 150), ESC = num('{{PESC}}', 1), CX = num('{{PCX}}', 540);
+  if (ESC <= 0) ESC = 1;
+  var LARG = 700, ESQ = CX - LARG / 2;
+  var pil = document.getElementById('{{ID}}-pilula'), palco = document.getElementById('{{ID}}-palco');
+  pil.style.top = TOPO + 'px'; pil.style.left = ESQ + 'px';
+  palco.style.transformOrigin = CX + 'px ' + TOPO + 'px';
+  palco.style.transform = 'scale(' + ESC + ')';
   /* 1. nasce a bolinha com a foto */
   /* a cápsula já está no lugar final; um recorte mostra só a foto e um
      deslocamento a centraliza — abrir é desfazer os dois (transform + clip,
@@ -61,8 +77,8 @@
   tl.fromTo('#{{ID}}-botao', { opacity: 0, scale: .6 }, { opacity: 1, scale: 1, duration: .35, ease: 'back.out(2.2)' }, .78);
   /* 3. o cursor entra e vai até o botão */
   var CLIQUE = {{CLIQUE}};
-  var alvoX = ESQ + LARG - 16 - 98, alvoY = 150 + 60;
-  tl.fromTo('#{{ID}}-cursor', { opacity: 0, x: 900, y: 560 }, { opacity: 1, x: alvoX - 8, y: alvoY - 4, duration: .85, ease: 'power2.inOut' }, CLIQUE - .95);
+  var alvoX = ESQ + LARG - 16 - 98, alvoY = TOPO + 60;
+  tl.fromTo('#{{ID}}-cursor', { opacity: 0, x: ESQ + LARG + 10, y: Math.min(TOPO + 410, 1860) }, { opacity: 1, x: alvoX - 8, y: alvoY - 4, duration: .85, ease: 'power2.inOut' }, CLIQUE - .95);
   tl.to('#{{ID}}-cursor', { scale: .8, duration: .08, ease: 'power1.in' }, CLIQUE);
   tl.to('#{{ID}}-cursor', { scale: 1, duration: .14, ease: 'power1.out' }, CLIQUE + .08);
   tl.to('#{{ID}}-botao', { scale: .9, duration: .08, ease: 'power1.in' }, CLIQUE);

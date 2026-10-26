@@ -133,8 +133,14 @@ def main() -> None:
     entrada = {"id": slug(nome), "nome": nome, "criado": time.strftime("%Y-%m-%d %H:%M"),
                "origem": json.loads((args.edit / "state.json").read_text()).get("project", "")
                if (args.edit / "state.json").exists() else "", **novo}
-    # mesmo nome = atualização (o usuário refinou o padrão), não duplicata
-    lista = [e for e in lista if e["id"] != entrada["id"]] + [entrada]
+    # mesmo nome = atualização (o usuário refinou o padrão), não duplicata —
+    # mas o que foi escrito À MÃO na entrada (rótulo do cartão, receita) não
+    # vem do projeto e sobrevive à atualização
+    antiga = next((e for e in lista if e["id"] == entrada["id"]), {})
+    for k in ("rotulo", "detalhe", "receita"):
+        if k in antiga:
+            entrada.setdefault(k, antiga[k])
+    lista =[e for e in lista if e["id"] != entrada["id"]] + [entrada]
     gravar(lista)
     st = entrada["style"]
     print(f"salvo: {nome} — formato {st.get('edit')} · headline {st.get('headline')} · "

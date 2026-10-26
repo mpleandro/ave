@@ -60,7 +60,15 @@ try:
         .read_text())["styles"].items() if v.get("css") == "palavra"}
 except (OSError, KeyError, json.JSONDecodeError):
     pass
-PORTED_HEADLINES = {"outline", "card", "realce", "misto",
+# as LEGENDAS PRIVADAS (~/.avelin/legendas, fora do repositório) também estão
+# prontas: quem as monta é o motor delas, que o compositor chama pelo nome
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import legendas_privadas as _LP
+    PORTED_CAPTIONS |= _LP.ids()
+except Exception:   # noqa: BLE001 — pasta pessoal quebrada não derruba a Fase 2
+    pass
+PORTED_HEADLINES = {"outline", "texto", "card", "realce", "misto",
                     "bloco", "etiqueta", "manuscrito", "gigante",
                     "relevo", "grifo", "contorno_duplo", "tarjas", "vidro"}
 

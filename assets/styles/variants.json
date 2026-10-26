@@ -1158,6 +1158,55 @@
       "bloco": 0.063,
       "blocoMedido": true,
       "ancora": "rodape"
+    },
+    "grafico": {
+      "animated": true,
+      "css": "palavra",
+      "js": "palavra",
+      "family": "Montserrat",
+      "cssFamily": "'Montserrat', 'Poppins', sans-serif",
+      "gfont": "family=Montserrat:wght@900",
+      "weight": 900,
+      "size": 92,
+      "maxWords": 3,
+      "lines": 1,
+      "maxW": 840,
+      "tracking": -1,
+      "sx": 1,
+      "sy": 1,
+      "lineHeight": 1.08,
+      "_note": "Gráfico — legenda Hormozi (2–3 palavras, grande, centro, caixa alta, contorno preto) com palavras-chave no accent da legenda o tempo todo (números automáticos + `captions.destaques`). Vem junto com os cartões visuais de efeitos[] (conta, versus, chartGrow, checklist), que o estilo libera em qualquer formato.",
+      "pal": {
+        "destaque": "chave",
+        "hi": {
+          "cor": "accent"
+        },
+        "antes": {
+          "cor": "corpo"
+        },
+        "ativa": {
+          "cor": "corpo",
+          "escala": 1.06
+        },
+        "dita": {
+          "cor": "corpo",
+          "escala": 1
+        },
+        "entrada": {
+          "opacidade": 0,
+          "escala": 0.7
+        },
+        "centro": 0.55,
+        "bloco": true
+      },
+      "motion": {
+        "dur": 0.14,
+        "ease": "back.out(2.4)"
+      },
+      "bloco": 0.06,
+      "blocoMedido": false,
+      "ancora": "centro",
+      "upper": true
     }
   },
   "_headlines_readme": "Números de CADA layout de headline, lidos pela prévia do editor E pelo compositor. `paint` diz quem recebe a cor PRINCIPAL e quem recebe o DESTAQUE — por linha, por palavra ou no fundo. `gradient` é regra do MODELO, não escolha do usuário: quando existe, a cor escolhida vira a parada de cima e a de baixo é DERIVADA dela (escurecendo ou clareando por `amount`), para o usuário escolher uma cor e receber um degradê coerente em vez de ter de casar duas pontas na mão. `sizes` por linha (multiplicadores do corpo ajustado) é o que permite layouts com uma linha herói — sem ele toda headline é um bloco de linhas do mesmo tamanho.",
@@ -1179,6 +1228,25 @@
       },
       "gradient": null,
       "align": "center"
+    },
+    "texto": {
+      "weights": [
+        700,
+        700
+      ],
+      "cap": 96,
+      "safeW": 900,
+      "lh": 1.08,
+      "top": 330,
+      "upper": false,
+      "stroke": 0,
+      "usesAccent": false,
+      "paint": {
+        "lines": "main"
+      },
+      "gradient": null,
+      "align": "center",
+      "_note": "Texto simples (2026-10-16, pedido do usuário: 'texto simples, sem efeito ou background'). Só a letra na cor principal: sem contorno, sem caixa, sem animação. A sombra suave do CSS não é enfeite — é o mínimo para o branco ler sobre parede cinza."
     },
     "card": {
       "weights": [
@@ -2582,6 +2650,10 @@
     "camera": {
       "file": "camera.mp3",
       "volume": 0.26
+    },
+    "caching": {
+      "file": "caching.mp3",
+      "volume": 0.3
     }
   },
   "insert": {
@@ -2598,6 +2670,7 @@
     {
       "n": "Poppins",
       "w": [
+        300,
         400,
         500,
         600,
@@ -2909,7 +2982,9 @@
       "chartGrow": 3.5,
       "phoneMockup": 4.0,
       "uiWorld": 4.0,
-      "zoomPunch": 1.2
+      "zoomPunch": 1.2,
+      "conta": 3.5,
+      "versus": 2.5
     },
     "ganchoPadrao": 3.0,
     "entrada": 0.38,
@@ -2952,6 +3027,25 @@
       "raio": 46,
       "transicao": 0.5,
       "_note": "Quebra de moldura: o quadro encolhe para um cartão (inset em % do quadro) e a cabeça recortada passa por cima da borda de cima."
+    },
+    "legendas": {
+      "grafico": [
+        "conta",
+        "versus",
+        "chartGrow",
+        "checklist"
+      ]
+    },
+    "conta": {
+      "largura": 840,
+      "linha": 112,
+      "segura": 1.5,
+      "_note": "Cálculo na tela: fundo preto 80%, fonte grossa; cada linha entra na palavra que a cita e o resultado SEGURA parado `segura` segundos — é o momento de salvar o vídeo."
+    },
+    "versus": {
+      "largura": 860,
+      "altura": 560,
+      "_note": "Pessoa A × Pessoa B: dois lados com rótulo e dado, rodapé com a conclusão; pattern interrupt de ~2s."
     }
   }
 }

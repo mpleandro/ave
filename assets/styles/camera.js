@@ -22,6 +22,43 @@
     var push = opts.pushIn || 0;
     if (!el || !segs.length) return tl;
 
+    // NAVEGAÇÃO: plano com `zoom` explícito (e opcionalmente `x`/`y` em px de
+    // referência e `glide` em s) é uma POSIÇÃO de câmera, não um degrau do
+    // ciclo. Com `glide` a câmera DESLIZA da posição anterior até esta — é o
+    // vídeo ampliado "andando" entre trechos do quadro para abrir espaço a um
+    // gráfico. A translação é grampeada para nunca revelar a borda do vídeo.
+    var nav = segs.some(function (s) { return typeof s.zoom === 'number'; });
+    if (nav) {
+      var W = opts.width || 1080, H = opts.height || 1920;
+      var ox = opts.originX == null ? 0.5 : opts.originX;
+      var oy = opts.originY == null ? 0.5 : opts.originY;
+      var clamp = function (v, lo, hi) { return Math.min(hi, Math.max(lo, v)); };
+      var st = function (s) {
+        var S = typeof s.zoom === 'number' ? Math.max(1, s.zoom) : 1;
+        return {
+          scale: S,
+          x: clamp(s.x || 0, -(1 - ox) * W * (S - 1), ox * W * (S - 1)),
+          y: clamp(s.y || 0, -(1 - oy) * H * (S - 1), oy * H * (S - 1))
+        };
+      };
+      tl.set(el, st(segs[0]), 0);
+      for (var k = 0; k < segs.length; k++) {
+        var g = segs[k], to = st(g);
+        var gl = Math.max(0, Math.min(g.glide || 0, g.end - g.start));
+        if (k > 0 && gl > 0) {
+          tl.fromTo(el, st(segs[k - 1]),
+            Object.assign({}, to, { duration: gl, ease: g.ease || 'power3.inOut' }), g.start);
+        } else {
+          tl.set(el, to, g.start);
+        }
+        if (push && opts.zoomAuto && g.end - g.start - gl > 0.5) {
+          tl.to(el, { scale: to.scale + push * 0.5, duration: g.end - g.start - gl, ease: 'none' },
+                g.start + gl);
+        }
+      }
+      return tl;
+    }
+
     for (var i = 0; i < segs.length; i++) {
       var s = segs[i];
       var z = opts.zoomCuts ? zooms[i % zooms.length] : 1;

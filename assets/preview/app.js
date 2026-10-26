@@ -116,6 +116,8 @@ const PAL = [
   ['onda', 'Onda'], ['rotativo', 'Rotativo'], ['maquina', 'Máquina de escrever'],
   ['rolagem', 'Rolagem'],
   ['cinema', 'Cinema'], ['manchete', 'Manchete'], ['barra', 'Barra lateral'],
+  // legenda Hormozi + cartões visuais (conta, versus, gráfico) acompanhando a fala
+  ['grafico', 'Gráfico'],
 ];
 const PAL_IDS = new Set(PAL.map((p) => p[0]));
 
@@ -148,7 +150,7 @@ const PORTED = {
   captions: new Set(['karaoke', 'simples', 'serifada', 'classica', 'scatter', 'stacked',
                      'pop', 'popLinha', 'popBloco', 'revelar', 'editorial', 'dinamico',
                      ...PAL.map((p) => p[0])]),
-  headlines: new Set(['caixinha', 'noticia', '', 'outline', 'card', 'realce', 'misto',
+  headlines: new Set(['caixinha', 'noticia', '', 'outline', 'texto', 'card', 'realce', 'misto',
                       'bloco', 'etiqueta', 'manuscrito', 'gigante',
                       'relevo', 'grifo', 'contorno_duplo', 'tarjas', 'vidro',
                       ...CARTELAS.map((c) => c[0])]),
@@ -282,6 +284,7 @@ const STYLE_CATALOG = {
   // mirror HL_STYLES in the template's Main.tsx — keep the two in step.
   headlines: [
     {id: 'outline', name: 'Contorno', hl: 'outline'},
+    {id: 'texto', name: 'Texto simples', hl: 'texto'},
     {id: 'card', name: 'Cartão', hl: 'card'},
     {id: 'realce', name: 'Realce', hl: 'realce'},
     {id: 'misto', name: 'Misto', hl: 'misto'},
@@ -598,6 +601,14 @@ const STYLE_CATALOG = {
     {
       id: 'chartGrow', efx: true, name: 'Gráfico crescendo', def: true,
       icon: '<svg viewBox="0 0 16 16"><rect x="1.6" y="9" width="2.6" height="5" rx=".7"/><rect x="5.4" y="6.4" width="2.6" height="7.6" rx=".7"/><rect x="9.2" y="3.8" width="2.6" height="10.2" rx=".7"/><path d="M12.6 2.2h2v2" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+    },
+    {
+      id: 'conta', efx: true, name: 'Cálculo na tela', def: true,
+      icon: '<svg viewBox="0 0 16 16"><rect x="2" y="1.6" width="12" height="12.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="4.4" y="4" width="7.2" height="2" rx=".6"/><path d="M5 9.4h2.4M6.2 8.2v2.4M9 9.4h2.4M9 11.6h2.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>',
+    },
+    {
+      id: 'versus', efx: true, name: 'A vs B', def: true,
+      icon: '<svg viewBox="0 0 16 16"><rect x="1.4" y="3" width="5.6" height="8" rx="1.4"/><rect x="9" y="3" width="5.6" height="8" rx="1.4" opacity=".6"/><rect x="3" y="12.6" width="10" height="1.6" rx=".8"/></svg>',
     },
     {
       id: 'phoneMockup', efx: true, name: 'Celular na tela', def: true,
@@ -1569,7 +1580,12 @@ function palRoteiro(palavras) {
    cinema (nove) mostraria três — e a prévia estaria mentindo sobre a única
    coisa que ela existe para mostrar. */
 function palLinhas(v) {
-  const todas = palRoteiro(CAP_TEXT.split(' '));
+  const todas = palRoteiro((v.upper ? CAP_TEXT.toUpperCase() : CAP_TEXT).split(' '));
+  // palavra-chave (`pal.hi`): no exemplo, a mais longa faz o papel do número
+  if ((v.pal || {}).hi && todas.length) {
+    todas.slice(0, v.maxWords || 5)
+      .reduce((a, b) => (b.texto.length > a.texto.length ? b : a)).hi = true;
+  }
   const cola = (v.pal || {}).cola;
   let cap = Math.max(1, Math.min(v.maxWords || 5, todas.length));
   // com `cola` (o rotativo), palavra curta não fecha a deixa: senão o cartão
@@ -1733,9 +1749,11 @@ function elLocked(e) {
    * helpers/efeitos.py aplica no render — sem o variants carregado, não trava. */
   if (e.efx) {
     const fm = ((LIVE.variants || {}).efeitos || {}).formatos;
+    // a LEGENDA também prevê: o estilo "Gráfico" traz os cartões dele
+    const fl = ((LIVE.variants || {}).efeitos || {}).legendas || {};
     if (fm) {
       const f = formatoEl() || S.style.edit || 'limpa';
-      if (!(fm[f] || []).includes(e.id)) {
+      if (!(fm[f] || []).includes(e.id) && !(fl[S.style.captions] || []).includes(e.id)) {
         return `O formato "${formatoName()}" não prevê este efeito.\n\n`
           + 'Efeito automático só entra quando o formato prevê — escolha "Ilustrado" '
           + '(ou outro formato que o preveja) na camada Formato.';
@@ -2829,6 +2847,42 @@ async function loadEstilosSalvos() {
   } catch (e) { S.salvosAt = Date.now(); return false; }
 }
 
+/* LEGENDAS PRIVADAS — estilos de legenda de UMA pessoa, que moram em
+   ~/.avelin/legendas e nunca entram no repositório (helpers/legendas_privadas.py).
+   O servidor lista; aqui a folha e o script de cada uma são carregados de
+   /legpriv/<id>/, e ela entra PRIMEIRO na galeria de legendas, com a borda
+   laranja dos estilos pessoais. A prévia é do próprio script dela
+   (`AVE_LEGPRIV[id].demo`) — a galeria não sabe nada do estilo. */
+async function loadLegendasPrivadas() {
+  try {
+    const d = await (await fetch('/api/legendas-privadas')).json();
+    const lista = (d && d.legendas) || [];
+    const novas = lista.filter((m) => !STYLE_CATALOG.captions.some((o) => o.id === m.id));
+    if (!novas.length) return false;
+    await Promise.all(novas.map((m) => new Promise((ok) => {
+      if (m.css) {
+        const l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = `/legpriv/${m.id}/${m.css}`;
+        document.head.appendChild(l);
+      }
+      const sc = document.createElement('script');
+      sc.src = `/legpriv/${m.id}/${m.js}`;
+      sc.onload = sc.onerror = () => ok();
+      document.head.appendChild(sc);
+      CAP_BUILDERS[m.id] = (h) => {
+        const L = (window.AVE_LEGPRIV || {})[m.id];
+        return (L && L.demo) ? (L.demo(h, { largura: projW(), altura: quadroProj().h,
+                                         accent: S.style.accent || ACCENT_DEFAULT })
+                                || (() => {})) : (() => {});
+      };
+    })));
+    STYLE_CATALOG.captions.unshift(
+      ...novas.map((m) => ({ id: m.id, name: m.nome, demo: m.id, priv: true, desc: m.descricao })));
+    return true;
+  } catch (e) { return false; }
+}
+
 /* Aplicar um salvo = trocar as escolhas da aba pelas dele, inteiras. Texto
    (headline, caixinha) NÃO vem junto: é conteúdo do vídeo, não estilo. */
 function aplicaEstiloSalvo(id) {
@@ -2892,7 +2946,7 @@ const LAYERS = [
      formato os prevê (regra do usuário; "Nenhum" não prevê nada). O chip é a
      permissão; o lugar de cada um sai da leitura da fala (helpers/efeitos.py). */
   { id: 'efeitos', name: 'Efeitos', sub: 'Ilustram a fala — entram sozinhos quando o formato prevê',
-    ico: 'fx', elements: ['checklist', 'chartGrow', 'phoneMockup', 'uiWorld'] },
+    ico: 'fx', elements: ['checklist', 'chartGrow', 'conta', 'versus', 'phoneMockup', 'uiWorld'] },
   { id: 'movimento', name: 'Movimento & tracking', sub: 'Animações, máscaras, rastreamento e keyframes',
     ico: 'video', elements: ['tracking', 'zoomAuto', 'zoomCuts', 'zoomPunch', 'zoomThrough'] },
   { id: 'trilha', name: 'Trilha & mixagem', sub: 'Áudio, níveis, ducking e mixagem final',
@@ -3034,9 +3088,12 @@ function renderSetup() {
           + ` · legenda ${styleName('captions', st.captions)}${e.criado ? ' · salvo em ' + e.criado : ''}`;
         const prev = el('div', 'opt-preview frame salvo-mock', card);
         el('div', 'salvo-cor', prev).style.background = st.accent || ACCENT_DEFAULT;
-        el('div', 'salvo-fmt', prev).textContent = fmtNome;
+        /* `rotulo`/`detalhe` na entrada salva vencem o nome do catálogo: um
+           estilo cujo valor está na RECEITA (títulos sob medida, câmera) e não
+           no formato aparecia como "Nenhum · — · —", que descreve o oposto. */
+        el('div', 'salvo-fmt', prev).textContent = e.rotulo || fmtNome;
         el('div', 'salvo-det', prev).textContent =
-          `${hlNome} · ${styleName('captions', st.captions)}`;
+          e.detalhe || `${hlNome} · ${styleName('captions', st.captions)}`;
         el('div', 'opt-name salvo-nome', card).textContent = e.nome;
         el('div', 'opt-mark', card);
       }
@@ -3070,10 +3127,11 @@ function renderSetup() {
         : group === 'headlines'
           ? (HEADLINE_ELEMENTS.includes(o.id) ? o.id === hlAtivo : !hlAtivo && o.id === chosen)
           : o.id === chosen;
-      const card = el('div', `opt${on ? ' on' : ''}${off ? ' unavailable' : ''}`, host);
+      const card = el('div', `opt${o.priv ? ' salvo' : ''}${on ? ' on' : ''}${off ? ' unavailable' : ''}`, host);
       card.dataset.group = group;
       card.dataset.id = o.id;
       if (off) card.title = offMsg;
+      else if (o.priv) card.title = `${o.name} — legenda exclusiva sua${o.desc ? ' · ' + o.desc : ''}`;
       // headline previews are two short lines — they do not need the caption
       // box's height, and with four groups on one screen that height is scarce
       const kind = o.mock ? 'frame' : o.ct ? 'cap ctbox' : o.hl ? 'cap hlbox' : 'cap';
@@ -3091,6 +3149,8 @@ function renderSetup() {
       // Only the abstract mockups get a title. A card that renders the real
       // caption or the real headline is already labelled — by itself.
       if (o.mock) el('div', 'opt-name', card).textContent = o.name;
+      // a legenda privada não é texto palavra por palavra: o cartão leva o NOME
+      else if (o.priv) el('div', 'opt-name salvo-nome', card).textContent = o.name;
       el('div', 'opt-mark', card);
     }
     // the ghost only earns its space where there is a single option to explain
@@ -4280,6 +4340,11 @@ function renderLive() {
   const w = syncOverlay();
   if (!w) return;
   const id = (S.style && S.style.captions) || 'karaoke';
+  // legenda privada: o texto dela é um ROTEIRO escrito por vídeo, não a fala
+  // crua — desenhar a deixa aqui mostraria um estilo que não existe
+  if ((STYLE_CATALOG.captions.find((o) => o.id === id) || {}).priv) {
+    ov.innerHTML = ''; LIVE.key = null; return;
+  }
   const v = (LIVE.variants && LIVE.variants.styles && LIVE.variants.styles[id]) || {};
   liveCss(CAP_CSS[id]);
 
@@ -5123,7 +5188,8 @@ $('jcutToggle').addEventListener('click', () => {
 
 // a marca ANTES do primeiro poll: ela entra na montagem do estilo, e chegando
 // depois o painel abriria no laranja de fábrica e trocaria de cor sozinho
-Promise.all([loadBrand(), loadEstilo(), loadEstilosSalvos(), loadLocalFonts()]).then(poll);
+Promise.all([loadBrand(), loadEstilo(), loadEstilosSalvos(), loadLocalFonts(),
+             loadLegendasPrivadas()]).then(poll);
 rafLoop();
 // the headline fit is MEASURED, so it is wrong until Poppins is actually
 // loaded — rebuild once the fonts land

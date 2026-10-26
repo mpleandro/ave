@@ -71,6 +71,15 @@
   filter: drop-shadow(0 calc(6px * var(--hl-scale)) calc(14px * var(--hl-scale)) rgba(0, 0, 0, 0.45));
 }
 
+/* ---------- texto simples ---------- */
+/* só a letra: sem traço, sem caixa, sem animação. A sombra é rasa e larga —
+   não desenha contorno, só separa o branco de um fundo médio (parede cinza),
+   onde o branco puro fica abaixo de 3:1. */
+.ave-hook.texto {
+  font-weight: 700;
+  text-shadow: 0 calc(2px * var(--hl-scale)) calc(14px * var(--hl-scale)) rgba(0, 0, 0, 0.5);
+}
+
 /* ---------- cartão ---------- */
 /* caixa cinza-escura, texto em caixa alta, TODAS as linhas no mesmo corpo
    (nunca uma linha herói e uma menor). */

@@ -208,6 +208,9 @@ animations = [
     { name = "manim", version = "0.19.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "manim", version = "0.20.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
+enquadramento = [
+    { name = "mediapipe" },
+]
 escuta = [
     { name = "mlx-whisper", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
 ]
@@ -224,6 +227,7 @@ requires-dist = [
     { name = "fonttools", extras = ["woff"], specifier = ">=4.50" },
     { name = "manim", marker = "extra == 'animations'" },
     { name = "mediapipe", marker = "extra == 'anim3d'", specifier = ">=0.10.14" },
+    { name = "mediapipe", marker = "extra == 'enquadramento'", specifier = ">=0.10.14" },
     { name = "mlx-whisper", marker = "platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'escuta'", specifier = ">=0.4" },
     { name = "numpy" },
     { name = "opencv-python-headless", specifier = "==4.10.0.84" },
@@ -236,7 +240,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'anim3d'", specifier = ">=4.45" },
     { name = "yt-dlp", marker = "extra == 'link'" },
 ]
-provides-extras = ["animations", "matting", "anim3d", "escuta", "link"]
+provides-extras = ["animations", "matting", "anim3d", "escuta", "link", "enquadramento"]
 
 [[package]]
 name = "beautifulsoup4"

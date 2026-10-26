@@ -19,12 +19,14 @@ import math
 import re
 import shutil
 import subprocess
+import unicodedata
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from text_measure import measure  # noqa: E402
-import area_segura  # noqa: E402
+import area_segura
+import legendas_privadas  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 STYLES_DIR = SKILL_DIR / "assets" / "styles"
@@ -366,7 +368,10 @@ def split_windows(data: dict, H: int, duration: float) -> list[dict]:
         lay = VARIANTS["split"].get(layout)
         if lay is None:
             continue
-        band = lay["band"]
+        # ALTURA DA ARTE POR JANELA (`band`, Preparo 2026-10-17): uma cena
+        # vertical de celular cortada para a largura inteira pede faixa mais
+        # alta que a padrão de 750 — o padrão continua valendo sem o campo.
+        band = float(it.get("band", lay["band"]))
         is_top = layout == "top"
         # FAIXA DA LEGENDA — uma tarja lisa ENTRE a arte e o vídeo, com a
         # legenda dentro dela. Existe porque a legenda do split pousa sobre o
@@ -675,8 +680,12 @@ def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
             acc = set(o.get("accentWords") or (
                 [max(range(len(palavras)), key=lambda k: len(palavras[k]))]
                 if palavras else []))
+            # `wordAt` {índice: segundo}: a palavra sobe quando é DITA, não na
+            # cadência da janela (pedido do usuário, 2026-10-17)
+            _at = {int(k): float(v) for k, v in (o.get("wordAt") or {}).items()}
             spans = "".join(
-                f'<span class="bo-lw"><span class="bo-w{" acc" if k in acc else ""}">'
+                f'<span class="bo-lw"><span class="bo-w{" acc" if k in acc else ""}"'
+                + (f' data-at="{_at[k]:.3f}"' if k in _at else "") + '>'
                 f'{esc(p)}</span></span>'
                 for k, p in enumerate(palavras))
             inner = f'<div class="ave-bo-words">{spans}</div>'
@@ -757,13 +766,28 @@ def broll_markup(data: dict, duration: float, events: list, kit: dict) -> str:
         # `clip` + track são exigência do motor para elemento com timing — sem
         # eles o check barra (timed_element_missing_clip_class, medido). As
         # janelas não se sobrepõem entre si, então dividem um track só.
+        # ESTILO "destaque" (Preparo, 2026-10-17): tela preta, a palavra-chave
+        # numa linha só dela, grande e no accent; as demais menores e leves.
+        # `accSize` (px) vem do autor — ele sabe o comprimento da palavra; sem
+        # ele, a régua 800/(1,2·letras) cabe na área útil (Montserrat 900 em caixa alta mede ~1,15em por letra — medido no "QUALQUER", que estourou com 0,82 e 0,95).
+        extra_cls, extra_css = "", ""
+        if kind == "words" and o.get("estilo") == "destaque":
+            extra_cls = " destaque"
+            accw = [p for k, p in enumerate((o.get("text") or "").split()) if k in acc]
+            n = max((len(p) for p in accw), default=6)
+            tam = float(o.get("accSize") or min(190, 800 / (1.2 * n)))
+            # o `;` da frente é obrigatório: `vars_css` termina sem ele, e sem
+            # o separador o navegador lia "'Poppins' --bo-acc-size:…" como UM
+            # valor inválido e descartava o tamanho calado (medido: 70, 83 e
+            # 92px renderizavam todos no padrão de 150).
+            extra_css = f"; --bo-acc-size:{tam:.0f}px;"
         blocks.append(
-            f'  <div id="bo{i}" class="ave-bo-win pos-{pos} clip{kit_classes}"{scrim_attr} '
+            f'  <div id="bo{i}" class="ave-bo-win pos-{pos} clip{kit_classes}{extra_cls}"{scrim_attr} '
             f'data-start="{s:.3f}" data-duration="{d:.3f}" '
             f'data-track-index="{TRACK["overlay"]}" '
             f'data-in="{vin}" data-stagger="{stag}" '
             f"data-motion='{motion_attr}' "
-            f'style="{vars_css}">'
+            f'style="{vars_css}{extra_css}">'
             f'{cenario}{conteudo}</div>')
     return "\n".join(blocks)
 
@@ -1678,8 +1702,9 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
 
     raw = [l for l in (hook.get("lines") or []) if l]
     # Uma linha só, ou um `text` corrido: a quebra é resolvida aqui — e o "/"
-    # do usuário manda sobre o equilíbrio automático.
-    if len(raw) <= 1:
+    # do usuário manda sobre o equilíbrio automático. `hook.linhaUnica` pula a
+    # quebra (uma tarja só, como na cartela).
+    if len(raw) <= 1 and not (hook.get("linhaUnica") and raw):
         raw = hl_lines(raw[0] if raw else (hook.get("text") or ""), h)
     raw = [l for l in raw if l]
     if not raw:
@@ -1807,6 +1832,39 @@ def markup(timed: list[dict], st: dict, style_id: str, orphans, penalty,
     return "\n".join("    " + b for b in blocks)
 
 
+def _norm_chave(s: str) -> str:
+    s = unicodedata.normalize("NFD", str(s).lower())
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return re.sub(r"[^a-z0-9]", "", s)
+
+
+def palavras_chave(timed: list[dict], destaques: list[str]) -> set[tuple[int, int]]:
+    """(deixa, palavra) das PALAVRAS-CHAVE do estilo gráfico.
+
+    Duas fontes: todo NÚMERO dito (e o "reais"/"horas"/"por cento" colado
+    nele) entra sozinho — é o que o olho do espectador no mudo procura — e os
+    termos de `captions.destaques`, casados como SEQUÊNCIA de palavras sobre a
+    fala inteira, porque "25% a mais" cai às vezes partido entre duas deixas.
+    """
+    plano = [(i, k, _norm_chave(w["text"]))
+             for i, t in enumerate(timed) for k, w in enumerate(t["cue"])]
+    out: set[tuple[int, int]] = set()
+    unidades = {"reais", "real", "horas", "hora", "porcento", "mil", "milhoes"}
+    for n, (i, k, w) in enumerate(plano):
+        if re.search(r"\d", w):
+            out.add((i, k))
+            if n + 1 < len(plano) and plano[n + 1][2] in unidades:
+                out.add(plano[n + 1][:2])
+    for frase in destaques or []:
+        alvo = [_norm_chave(x) for x in str(frase).split() if _norm_chave(x)]
+        if not alvo:
+            continue
+        for n in range(len(plano) - len(alvo) + 1):
+            if all(plano[n + j][2] == alvo[j] for j in range(len(alvo))):
+                out.update(plano[n + j][:2] for j in range(len(alvo)))
+    return out
+
+
 def palavra_markup(timed: list[dict], st: dict, orphans, penalty,
                    splits: list[dict] | None = None) -> str:
     """Deixas do motor PALAVRA: um clipe por deixa, e cada palavra com o seu
@@ -1818,9 +1876,11 @@ def palavra_markup(timed: list[dict], st: dict, orphans, penalty,
     marca-texto e o cursor da máquina não se animam por pseudo-elemento.
     """
     pal = st.get("pal") or {}
+    chaves = (palavras_chave(timed, st.get("_destaques") or [])
+              if pal.get("destaque") == "chave" else set())
     blocks = []
     anterior: list[dict] = []
-    for t in timed:
+    for ti, t in enumerate(timed):
         dodge = ""
         for w in (splits or []):
             if t["start"] < w["end"] and t["end"] > w["start"]:
@@ -1843,7 +1903,7 @@ def palavra_markup(timed: list[dict], st: dict, orphans, penalty,
                 extra += '<i class="pal-grifo"></i>'
             if pal.get("cursor"):
                 extra += '<i class="pal-cursor"></i>'
-            cls = "pal-w pal-hi" if idx == hi else "pal-w"
+            cls = "pal-w pal-hi" if idx == hi or (ti, idx) in chaves else "pal-w"
             dur = max(0.08, (w.get("endMs", w["startMs"]) - w["startMs"]) / 1000)
             return (f'<span class="{cls}" data-at="{w["startMs"] / 1000:.3f}" '
                     f'data-dur="{dur:.3f}">{esc(w["text"])}{extra}</span>')
@@ -1971,6 +2031,9 @@ def camera_parts(data, duration):
             "pushIn": cam.get("pushIn", defaults["pushIn"]),
             "zoomCuts": zoom_cuts,
             "zoomAuto": zoom_auto,
+            "width": data.get("width", 1080), "height": data.get("height", 1920),
+            "originX": cam.get("targetX", defaults["targetX"]),
+            "originY": cam.get("targetY", defaults["targetY"]),
         }
         js = ("  AVE_CAMERA.buildCamera(document.getElementById('a-roll'), gsap, tl, "
               + json.dumps(opts) + ");")
@@ -2275,8 +2338,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         print(f"  aviso: {track_warn}", file=sys.stderr)
 
     splits = split_windows(data, H, duration)
-    hook_accent = accent
     hk = data.get("hook") or {}
+    # `hook.accent` — o destaque da headline pode divergir do da composição,
+    # pelo mesmo motivo de `captions.accent` (o estilo Gráfico pinta headline e
+    # palavras-chave no amarelo e deixa o CTA na cor da marca)
+    hook_accent = hk.get("accent") or accent
     # A cartela de TELA CHEIA não mede o vídeo: o fundo dela é a chapa da marca,
     # de cor conhecida, e o contraste ali é por construção. Medir a luminância
     # do vídeo atrás de uma chapa opaca escolheria a cor pelo que ninguém vê.
@@ -2300,7 +2366,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         # de um lugar onde ela não está. Medido: com `hook.top:1300` a banda
         # lida continuava sendo a de 300px.
         htop = float(hk.get("top", VARIANTS["headlines"][hk["style"]]["top"])) / H
-        hook_accent = adaptive_accent(hv, accent, max(0.0, htop - 0.01), 0.14,
+        hook_accent = adaptive_accent(hv, hook_accent, max(0.0, htop - 0.01), 0.14,
                                       [(0.0, float(hk.get("endSec", 4.0)))])[0]
     hook_block, hook_css = hook_markup(data, hook_accent, splits)
     # A câmera é desligada ENQUANTO a tela dividida está no ar — ela move o
@@ -2344,7 +2410,11 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     efx = None
     if data.get("_efx"):
         import efeitos_compose
-        efx = efeitos_compose.montar(data, data["_efx"], duration, accent, events) or None
+        # no estilo Gráfico os cartões falam a MESMA cor das palavras-chave da
+        # legenda — são as duas metades do mesmo estilo
+        efx = efeitos_compose.montar(data, data["_efx"], duration,
+                                     cap_accent if style_id == "grafico" else accent,
+                                     events) or None
         # A CAPA DE REVISTA desenha o texto do gancho ela mesma: a headline
         # por cima seria o mesmo texto duas vezes
         if efx and efx.get("substituiHook"):
@@ -2401,7 +2471,26 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     if efx and efx.get("gfont"):
         gfont = f"{gfont}&{efx['gfont']}"
 
-    if style_id == "stacked":
+    priv = None
+    if st.get("privada"):
+        # LEGENDA PRIVADA: o motor dela (fora do repositório) devolve a
+        # marcação; a folha e o script são copiados para styles/
+        css_f, js_f = legendas_privadas.copiar(style_id, Path(data.get("_proj", ".")))
+        import explicativo
+        try:
+            _ws = explicativo.palavras(Path(data.get("_proj", ".")).resolve().parent)
+        except SystemExit:
+            _ws = []
+        priv = legendas_privadas.motor(style_id).montar(
+            data, _ws, duration, cap_accent or accent, W, H, events) or {}
+        if priv.get("gfont"):
+            gfont = f"{gfont}&{priv['gfont']}"
+        cap_css = (f'<link rel="stylesheet" href="styles/{css_f}">\n'
+                   f'<script src="styles/{js_f}"></script>')
+        container = (f'<div class="ave-legpriv legpriv-{style_id}" style="--cap-accent:'
+                     f'{cap_accent or accent}; --cap-color:{cap_color}">')
+        data["_privMarkup"] = priv.get("markup", "")
+    elif style_id == "stacked":
         cap_css = ('<link rel="stylesheet" href="styles/stacked.css">\n'
                    '<script src="styles/stacked.js"></script>')
         # o DESTAQUE sai do accent escolhido, nao do `orange` da variante: o
@@ -2499,7 +2588,8 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         cap_css = ('<link rel="stylesheet" href="styles/karaoke.css">\n'
                    '<script src="styles/karaoke.js"></script>')
         container = (f'<div class="ave-cap {style_id}" style="--cap-scale:1;{fam_var}'
-                     f' --cap-color:{cap_color};'
+                     f' --cap-color:{cap_color}; --cap-weight:{st["weight"]};'
+                     + (f' --cap-shadow:{cfg["shadow"]};' if cfg.get("shadow") else '') +
                      f' --cap-size:{size}; --cap-bottom:{bottom}">')
     else:
         cap_css = '<link rel="stylesheet" href="styles/static.css">'
@@ -2514,7 +2604,10 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     # câmera ou transição. Sem nada em movimento, `data-no-timeline` evita 45s
     # perdidos por render esperando um registro que nunca vem.
     parts = []
-    if style_id == "stacked":
+    if priv is not None:
+        parts.append(f"  AVE_LEGPRIV[{json.dumps(style_id)}].buildTimeline("
+                     "document.getElementById('root'), gsap, tl);")
+    elif style_id == "stacked":
         parts.append("  AVE_STACKED.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
     elif style_id == "scatter":
         parts.append("  AVE_SCATTER.buildTimeline(document.getElementById('root'), gsap, tl, 1);")
@@ -2572,11 +2665,24 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     wa_colors = adaptive_accent(wa_video, accent, 0.36, 0.12,
                                 [(a, b) for a, b, _ in wa_items])
     wa_blocks = []
+    _wa_src = [w for w in (data.get("wordAccents") or [])
+               if float(w.get("start", 0)) < duration
+               and min(float(w.get("end", 0)), duration) > float(w.get("start", 0)) and w.get("text")]
     for i, ((st_, en, text), col) in enumerate(zip(wa_items, wa_colors)):
+        # `parts` [{text, at}]: a palavra se MONTA no ritmo da fala — "1", "7",
+        # "4" juntando em "174"; "GRA-", "VI-", "DA" (Preparo, 2026-10-17).
+        # Cada parte nasce invisível e o JS a acende no seu instante absoluto.
+        partes = (_wa_src[i].get("parts") if i < len(_wa_src) else None) or []
+        inner = ("".join(f'<span class="wa-part" data-at="{float(pt["at"]):.3f}">'
+                         f'{esc(str(pt["text"]))}</span>' for pt in partes)
+                 if partes else esc(text))
         wa_blocks.append(
             f'  <div id="wa{i}" class="ave-wordaccent clip" data-start="{st_:.3f}" '
             f'data-duration="{en - st_:.3f}" data-track-index="{TRACK['wordaccent']}" '
-            f'style="--wa-scale:1; --wa-accent:{col}">{esc(text)}</div>')
+            f'style="--wa-scale:1; --wa-accent:{col}'
+            + (f'; --wa-size:{float(_wa_src[i]["size"]):g}' if i < len(_wa_src) and _wa_src[i].get("size") else '')
+            + (f'; --wa-top:{float(_wa_src[i]["top"]):g}' if i < len(_wa_src) and _wa_src[i].get("top") is not None else '')
+            + f'">{inner}</div>')
 
     # Gráficos sob medida: substituem o CustomGraphics.tsx, que era "o único
     # arquivo de código editável" do template antigo. Aqui cada um é um HTML
@@ -2595,12 +2701,17 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
         if not f or st_ >= duration or en <= st_:
             continue
         src = ovdir / f
+        dest = Path(data.get("_proj", ".")) / "overlays" / f
+        # OVERLAY DO PROJETO: arte que só serve a este vídeo (os fogos do
+        # "1.000 seguidores", preparados para `screen`) mora direto em
+        # `<proj>/overlays/` e não vira item da biblioteca compartilhada.
+        if not src.exists() and dest.exists():
+            src = dest
         if not src.exists():
             ov_missing.append(f)
             continue
-        dest = Path(data.get("_proj", ".")) / "overlays" / f
         dest.parent.mkdir(parents=True, exist_ok=True)
-        if not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime:
+        if src != dest and (not dest.exists() or dest.stat().st_mtime < src.stat().st_mtime):
             shutil.copy2(src, dest)
         blend = (o.get("blend") or "").strip()
         amt = float(o.get("opacity", 1))
@@ -2655,7 +2766,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
             f'data-track-index="{TRACK["overlay"]}" style="{css}"'
             + (f'></{tag}>' if tag == "video" else '>'))
     for f in ov_missing:
-        print(f"  aviso: overlay '{f}' não existe em assets/overlays/ — "
+        print(f"  aviso: overlay '{f}' não existe em assets/overlays/ nem em <proj>/overlays/ — "
               f"não vai aparecer", file=sys.stderr)
 
     bg_blocks, bg_missing = [], []
@@ -2877,7 +2988,7 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
 {sfx_html}
 
   {container}
-{data["_stackedMarkup"] if style_id == "stacked" else (data.get("_editorialMarkup", "") if style_id == "editorial" else (data.get("_dinamicoMarkup", "") if style_id == "dinamico" else (scatter_markup(timed, st) if style_id == "scatter" else (palavra_markup(timed, st, orphans, penalty, splits) if st.get("css") == "palavra" else markup(timed, st, style_id, orphans, penalty, splits)))))}
+{data.get("_privMarkup", "") if st.get("privada") else data["_stackedMarkup"] if style_id == "stacked" else (data.get("_editorialMarkup", "") if style_id == "editorial" else (data.get("_dinamicoMarkup", "") if style_id == "dinamico" else (scatter_markup(timed, st) if style_id == "scatter" else (palavra_markup(timed, st, orphans, penalty, splits) if st.get("css") == "palavra" else markup(timed, st, style_id, orphans, penalty, splits)))))}
   </div>
 </div>
 
@@ -2908,10 +3019,19 @@ def main() -> None:
     data = json.loads(args.edit_data.read_text())
     cfg = data.get("captions", {})
     style_id = args.style or cfg.get("style", "karaoke")
-    if style_id not in VARIANTS["styles"]:
+    # LEGENDA PRIVADA (~/.avelin/legendas/<id>): o motor dela monta a marcação
+    _priv = legendas_privadas.carregar(style_id) if style_id not in VARIANTS["styles"] else None
+    if style_id not in VARIANTS["styles"] and not _priv:
         sys.exit(f"estilo '{style_id}' não existe. Prontos: "
                  f"{', '.join(VARIANTS['styles'])}")
-    st = dict(VARIANTS["styles"][style_id])
+    st = ({"privada": True, "animated": True, "size": 0, "maxW": 840,
+           "family": "Inter", "weight": 500, "cssFamily": "Inter, sans-serif",
+           "gfont": "family=Inter:wght@400;500;600",
+           # `css`/`js` aqui são os nomes de MOTOR dos estilos do repositório;
+           # os arquivos da privada viajam pelo legendas_privadas.copiar
+           **{k: v for k, v in _priv.items() if k not in ("css", "js")}} if _priv
+          else dict(VARIANTS["styles"][style_id]))
+    st["_destaques"] = cfg.get("destaques") or []
     # A geometria é POR ESTILO: simples é 82, serifada 84, classica 52. As
     # afinações soltas em captions (fontSize/safeWidth) pertencem ao estilo que
     # o edit-data declara — aplicá-las a qualquer estilo composto fazia as três
@@ -2919,6 +3039,10 @@ def main() -> None:
     tuned_for = cfg.get("style", "karaoke") == style_id
     if tuned_for and cfg.get("fontSize"):
         st["size"] = cfg["fontSize"]
+    # Peso pedido à mão (ex.: "fonte mais fina"). Entra ANTES da medição, para
+    # a largura medida ser a da letra que o render desenha.
+    if tuned_for and cfg.get("fontWeight"):
+        st["weight"] = int(cfg["fontWeight"])
 
     proj = args.output.parent
     proj.mkdir(parents=True, exist_ok=True)
@@ -3007,8 +3131,11 @@ def main() -> None:
     autor = [s for s in (data.get("segments") or [])
              if float(s.get("start", 0)) < duration]
     if autor:
+        # zoom/x/y/glide/ease: posição de câmera explícita (navegação — ver
+        # AVE_CAMERA.buildCamera). Ausentes, o plano segue o ciclo de `zooms`.
         segs = [{"start": round(float(s["start"]), 3),
-                 "end": round(min(float(s.get("end", duration)), duration), 3)}
+                 "end": round(min(float(s.get("end", duration)), duration), 3),
+                 **{k: s[k] for k in ("zoom", "x", "y", "glide", "ease") if k in s}}
                 for s in autor]
     data["_segments"] = segs
 
@@ -3083,6 +3210,24 @@ def main() -> None:
     # numa deixa só: medido no "OAB", aparecia "será? sabe aquela" enquanto ele
     # dizia "só que não" — palavras de antes e de depois, juntas, sobre a fala
     # errada.
+    # EMENDAS DE FRASE DO CORTE: num corte frase a frase a pausa some na
+    # emenda e o Whisper nem sempre põe ponto ("treinados" + "uma mulher"), então
+    # a própria emenda é a evidência. As emendas INTERNAS — as que o render cria
+    # ao encurtar um respiro dentro da mesma frase — vêm marcadas com
+    # jcut_tail_frames 0 / jcut_lead_frames 0 nas duas pontas e não quebram.
+    _emendas = []
+    try:
+        _e = json.loads(edl_path.read_text()) if edl_path.exists() else {}
+        _rg, _tl = _e.get("ranges") or [], _e.get("jcut_timeline") or []
+        for k in range(1, min(len(_rg), len(_tl))):
+            a_, b_ = _rg[k - 1], _rg[k]
+            interna = (a_.get("source") == b_.get("source")
+                       and a_.get("jcut_tail_frames") == 0 and b_.get("jcut_lead_frames") == 0
+                       and a_.get("quote") and b_.get("quote"))
+            if not interna:
+                _emendas.append(float(_tl[k].get("audio_start_in_output", 0)))
+    except (OSError, json.JSONDecodeError, ValueError):
+        _emendas = []
     words, _calou = [], False
     for w in json.loads(args.captions.read_text()):
         if w["startMs"] / 1000 >= duration:
@@ -3092,6 +3237,26 @@ def main() -> None:
             continue
         if _calou and words:
             w = {**w, "_quebra": True}
+        # FIM DE FRASE FECHA A DEIXA (usuário, 2026-10-17: "não trazer na
+        # mesma linha da legenda o final de uma frase e o começo de outra").
+        # Duas evidências, qualquer uma basta: a palavra anterior termina em
+        # pontuação de fim (.?!…) ou há uma PAUSA medida ≥ 0,9s entre as duas (pausa de efeito dentro da frase não quebra)
+        # — num corte frase a frase, cada emenda é uma dessas. Vírgula não
+        # quebra: é respiração dentro da mesma ideia.
+        elif words and cfg.get("quebraFrase", True):
+            ant = words[-1]
+            fim = str(ant.get("text", "")).rstrip().endswith((".", "?", "!", "…"))
+            pausa = (w["startMs"] - ant.get("endMs", ant["startMs"])) / 1000 >= 0.9
+            emenda = any(ant["startMs"] / 1000 < x <= w["startMs"] / 1000 + 0.05
+                         for x in _emendas)
+            # VÍRGULA QUEBRA só nas janelas pedidas (`captions.quebraVirgula`
+            # [[ini, fim]] em segundos do corte): enumeração em que cada item
+            # merece a tela sozinho — "ganha pouco / dorme mal / faz bico…"
+            virg = (str(ant.get("text", "")).rstrip().endswith(",")
+                    and any(float(a_) <= w["startMs"] / 1000 <= float(b_)
+                            for a_, b_ in (cfg.get("quebraVirgula") or [])))
+            if fim or pausa or emenda or virg:
+                w = {**w, "_quebra": True}
         _calou = False
         words.append(w)
 
@@ -3151,6 +3316,8 @@ def main() -> None:
             (c["figure"]["fromMs"] / 1000, "callout")
             for c in dcues
             if c.get("figure") and c["figure"]["fromMs"] / 1000 < duration]
+    elif st.get("privada"):
+        pass                      # sem deixas: o motor privado monta tudo
     elif cfg.get("enabled", True):
         budget = (cfg.get("safeWidth") if tuned_for else None) or st["maxW"]
         # ÁREA SEGURA: nunca mais larga que a área útil (x 120…960); e a legenda
@@ -3162,10 +3329,19 @@ def main() -> None:
             _H = int(data.get("height", 1920))
             _b = float(cfg.get("paddingBottom", st.get("bottom", VARIANTS["bottom"])))
             _alt = float(st.get("size", 80)) * float(st.get("lines", 1) or 1) * 1.3
-            if area_segura.na_faixa_dos_icones(_H - _b - _alt, _H - _b, _H):
+            # estilo de BLOCO CENTRAL (`pal.centro`): a deixa mora no meio do
+            # quadro, não no rodapé — medir a faixa pelo `bottom` encolhia o
+            # gráfico para 596px e partia o bloco de 3 palavras em uma
+            _c = (st.get("pal") or {}).get("centro")
+            _y1 = (_H * float(cfg.get("offsetY", _c)) + _alt / 2) if _c is not None else _H - _b
+            if area_segura.na_faixa_dos_icones(_y1 - _alt, _y1, _H):
                 budget = min(float(budget), area_segura.largura_centrada_icones(
                     int(data.get("width", 1080))))
         _pal = st.get("pal") or {}
+        # CAIXA ALTA NO DADO, não no CSS: `text-transform` aplica depois da
+        # medição e a deixa maiúscula (mais larga) estouraria o orçamento
+        if st.get("upper"):
+            words = [{**w, "text": w["text"].upper()} for w in words]
         cues = (cola_cues(words, int(_pal["cola"])) if _pal.get("cola")
                 else build_cues(words, st, budget))
         timed = time_cues(cues, fps, duration)
@@ -3209,6 +3385,12 @@ def main() -> None:
         if extra:
             print(f"  {extra} deixa(s) sozinha(s) esticada(s) até {st['minSoloMs']}ms — "
                   f"abaixo disso a palavra pisca em um quadro e lê como falha")
+        print(f"  duração {duration:.3f}s (stream de vídeo)")
+        return
+
+    if st.get("privada"):
+        print(f"{args.output}")
+        print(f"  legenda privada {style_id} ({st.get('nome', style_id)}) — montada pelo motor dela")
         print(f"  duração {duration:.3f}s (stream de vídeo)")
         return
 

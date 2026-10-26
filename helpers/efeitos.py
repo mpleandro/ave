@@ -11,7 +11,7 @@ em tempo. A aparência mora em `assets/styles/efeitos.css`, a animação em
 Quatro papéis, quatro lugares no editor:
 
   * EFEITOS (camada própria) — ilustram o que está sendo dito:
-      checklist · chartGrow · phoneMockup · uiWorld
+      checklist · chartGrow · conta · versus · phoneMockup · uiWorld
   * MOVIMENTO (camada "Movimento & tracking") — câmera:
       zoomPunch (zoom digital na frase de efeito) · zoomThrough (zoom que
       atravessa o corte)
@@ -54,6 +54,8 @@ VARIANTS = json.loads((SKILL / "assets" / "styles" / "variants.json").read_text(
 CATALOGO: dict[str, dict] = {
     "checklist":   {"camada": "efeitos",   "nome": "Checklist"},
     "chartGrow":   {"camada": "efeitos",   "nome": "Gráfico crescendo"},
+    "conta":       {"camada": "efeitos",   "nome": "Cálculo na tela"},
+    "versus":      {"camada": "efeitos",   "nome": "A vs B"},
     "phoneMockup": {"camada": "efeitos",   "nome": "Celular na tela"},
     "uiWorld":     {"camada": "efeitos",   "nome": "Mundo de interface", "recorte": "atras"},
     "zoomPunch":   {"camada": "movimento", "nome": "Zoom digital"},
@@ -85,8 +87,17 @@ def formato_de(data: dict) -> str:
 
 
 def permitidos(data: dict) -> list[str]:
-    """Efeitos AUTOMÁTICOS que o formato prevê. "Nenhum" não prevê nada."""
-    return list((VARIANTS["efeitos"]["formatos"]).get(formato_de(data), []))
+    """Efeitos AUTOMÁTICOS que o formato prevê. "Nenhum" não prevê nada.
+
+    A LEGENDA também prevê (`efeitos.legendas`): o estilo "Gráfico" é texto E
+    visual acompanhando a fala, então ele traz os cartões dele em qualquer
+    formato — sem isso, escolher a legenda Gráfico com o formato "Nenhum"
+    entregaria só metade do estilo."""
+    cfg = VARIANTS["efeitos"]
+    out = list(cfg["formatos"].get(formato_de(data), []))
+    cap = (data.get("captions") or {}).get("style")
+    out += [t for t in cfg.get("legendas", {}).get(cap, []) if t not in out]
+    return out
 
 
 # desmarcados por padrão no editor (pedido do usuário, 2026-10-15): sem a
@@ -169,6 +180,12 @@ def resolver(data: dict, ws: list[dict], duracao: float) -> tuple[list[dict], li
                 continue
             if len(itens) > MAX_ITENS:
                 erros.append(f"{nome}: {len(itens)} itens — no máximo {MAX_ITENS}")
+        if tipo == "conta" and not itens:
+            erros.append(f"{nome}: conta sem `itens` (as linhas do cálculo)")
+            continue
+        if tipo == "versus" and not (e.get("a") and e.get("b")):
+            erros.append(f"{nome}: versus precisa de `a` e `b` ({{rotulo, valor}})")
+            continue
         if tipo == "chartGrow":
             vals = e.get("valores") or []
             if not vals:
@@ -185,6 +202,22 @@ def resolver(data: dict, ws: list[dict], duracao: float) -> tuple[list[dict], li
                                   f"o item entra em sequência")
                 else:
                     it["at"] = round(t + 0.05, 3)
+        if tipo == "versus":
+            # B e o rodapé entram na palavra que os cita; A entra com o cartão
+            for chave in ("b", "rodape"):
+                alvo = e.get(chave) if isinstance(e.get(chave), dict) else None
+                if alvo and alvo.get("palavra"):
+                    t = _tempo(ws, alvo["palavra"], e["start"] - 0.3, e["end"])
+                    if t is not None:
+                        alvo["at"] = round(t + 0.05, 3)
+        if tipo == "conta":
+            # o RESULTADO segura parado `segura` segundos antes de sair — é o
+            # quadro que se salva; o fim da frase não pode cortá-lo
+            c = VARIANTS["efeitos"]
+            ult = max([it.get("at", e["start"]) for it in itens if isinstance(it, dict)]
+                      or [e["start"]])
+            e["end"] = round(min(max(e["end"], ult + c["conta"]["segura"] + c["saida"]),
+                                 duracao), 3)
         out.append(e)
     # DOIS EFEITOS DA MESMA CAMADA NÃO SE ENCAVALAM — disputariam a mesma tela.
     # Movimento convive com conteúdo (um mexe a câmera, o outro desenha).

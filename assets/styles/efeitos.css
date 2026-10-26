@@ -234,3 +234,32 @@
                 background-image:repeating-linear-gradient(0deg, rgba(80,110,160,.16) 0 2px, transparent 2px 64px),
                                  linear-gradient(90deg, transparent 112px, rgba(216,74,58,.35) 112px 115px, transparent 115px); }
 .efx-cd-rab { position:absolute; inset:0; width:100%; height:100%; }
+
+/* ---------------------------------------------------------------- conta
+   Cálculo na tela (estilo Gráfico): preto 80%, letra grossa, cada linha na
+   palavra que a cita; o resultado maior e no accent, segurando parado. */
+.efx-conta, .efx-versus { transform:scale(var(--efx-esc, 1)); }
+.efx-ct { padding:34px 44px 38px; border-radius:34px; background:rgba(0,0,0,.8);
+          box-shadow:0 30px 80px rgba(0,0,0,.45); }
+.efx-ct-tit { display:flex; align-items:center; gap:16px; margin-bottom:14px; font-size:28px;
+              font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:rgba(255,255,255,.6); }
+.efx-ct-linha { font-size:66px; line-height:112px; font-weight:900; letter-spacing:-.02em;
+                white-space:nowrap; color:#fff; }
+.efx-ct-linha.res { margin-top:18px; padding-top:22px; border-top:4px solid rgba(255,255,255,.18);
+                    font-size:92px; line-height:120px; color:var(--efx-accent, #ff3b30); }
+
+/* ---------------------------------------------------------------- versus */
+.efx-vs { display:flex; align-items:stretch; gap:22px; height:400px; }
+.efx-vs-lado { flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center;
+               gap:14px; border-radius:34px; background:rgba(0,0,0,.8);
+               border:3px solid rgba(255,255,255,.14); text-align:center; }
+.efx-vs-rot { font-size:40px; font-weight:900; letter-spacing:.08em; text-transform:uppercase;
+              color:rgba(255,255,255,.75); }
+.efx-vs-val { font-size:68px; font-weight:900; letter-spacing:-.03em; color:#fff; white-space:nowrap; }
+.efx-vs-det { font-size:32px; font-weight:700; color:rgba(255,255,255,.6); }
+.efx-vs-lado.vence { border-color:var(--efx-accent, #ff3b30); }
+.efx-vs-lado.vence .efx-vs-rot { color:var(--efx-accent, #ff3b30); }
+.efx-vs-x { align-self:center; font-size:38px; font-weight:900; text-transform:uppercase;
+            color:rgba(255,255,255,.55); }
+.efx-vs-rodape { margin-top:22px; padding:24px 30px; border-radius:28px; background:rgba(0,0,0,.8);
+                 text-align:center; font-size:48px; font-weight:900; letter-spacing:-.01em; color:#fff; }

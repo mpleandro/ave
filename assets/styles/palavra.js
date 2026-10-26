@@ -182,9 +182,11 @@
 
       /* A deixa inteira entrando de uma vez — é o estilo sem estado por
          palavra (cinema), onde o que aparece é a frase, não a fala. */
+      // as LINHAS, não a deixa: a deixa carrega o translate de posição (o
+      // centro do gráfico/rotativo) e um tween de escala nela o apagaria
       if (cfg.entrada && cfg.bloco) {
-        tl.fromTo(cue, props(cfg.entrada, cores, escala),
-                  { opacity: 1, duration: DUR, ease: EZ }, s0);
+        tl.fromTo(cue.querySelectorAll('.pal-line'), props(cfg.entrada, cores, escala),
+                  { opacity: 1, scale: 1, y: 0, filter: 'none', duration: DUR, ease: EZ }, s0);
       }
 
       /* A rolagem entra empurrando: a linha nova sobe de uma altura de linha,
@@ -207,19 +209,25 @@
         // terminando no escuro enquanto ela ainda está sendo dita
         var prox = i + 1 < ws.length ? num(ws[i + 1].getAttribute('data-at'), fim) : null;
 
-        tl.set(w, props(cfg.antes, cores, escala), s0);
+        // PALAVRA-CHAVE (`pal.hi`): a palavra marcada `pal-hi` pinta o estado
+        // por cima do comum — o gráfico deixa número e termo-chave no accent
+        // do começo ao fim, em vez de acender só enquanto é dito
+        var hi = cfg.hi && w.classList.contains('pal-hi') ? cfg.hi : null;
+        var est = function (e) { return hi ? Object.assign({}, e || {}, hi) : e; };
+
+        tl.set(w, props(est(cfg.antes), cores, escala), s0);
 
         if (cfg.entrada && !cfg.bloco) {
           tl.fromTo(w, props(cfg.entrada, cores, escala),
                     { opacity: 1, scale: 1, filter: 'blur(0px)', duration: DUR, ease: EZ }, at);
         }
         if (cfg.ativa) {
-          var a = props(cfg.ativa, cores, escala);
+          var a = props(est(cfg.ativa), cores, escala);
           a.duration = DUR; a.ease = EZ;
           tl.to(w, a, at);
         }
         if (cfg.dita && prox != null) {
-          var d = props(cfg.dita, cores, escala);
+          var d = props(est(cfg.dita), cores, escala);
           d.duration = DUR; d.ease = EZ;
           tl.to(w, d, prox);
         }
@@ -295,7 +303,9 @@
     var dur = (mo.dur != null ? mo.dur : 0.18) + 's';
     ws.forEach(function (w, i) {
       var est = i === idx ? cfg.ativa : (i < idx ? cfg.dita : cfg.antes);
-      var p = props(est || cfg.antes, cores, escala);
+      est = est || cfg.antes;
+      if (cfg.hi && w.classList.contains('pal-hi')) est = Object.assign({}, est || {}, cfg.hi);
+      var p = props(est, cores, escala);
       w.style.transition = 'color ' + dur + ', opacity ' + dur + ', transform ' + dur
         + ', filter ' + dur + ', background-color ' + dur;
       var tr = [];
