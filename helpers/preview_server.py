@@ -173,7 +173,32 @@ def _deps() -> dict:
         "hyperframes": (Path.home() / ".cache" / "hyperframes").exists(),
         # opcional: só quem traz fonte de URL precisa
         "ytdlp": bool(shutil.which("yt-dlp")),
+        # vídeo HDR (iPhone grava HLG) — o `ffmpeg` do Homebrew veio sem zscale
+        "ffmpeg_hdr": _ffmpeg_tem_zscale(),
     }
+
+
+_ZSCALE: tuple[str, bool] | None = None
+
+
+def _ffmpeg_tem_zscale() -> bool:
+    """A lista de filtros custa um processo — sonda uma vez por binário, não
+    por poll. A chave é o caminho: trocar o ffmpeg com o servidor no ar (um
+    `brew link` seguindo o aviso) reflete no próximo tique sem reiniciar."""
+    import shutil
+    global _ZSCALE
+    exe = shutil.which("ffmpeg") or ""
+    if _ZSCALE is None or _ZSCALE[0] != exe:
+        tem = False
+        if exe:
+            try:
+                r = subprocess.run([exe, "-hide_banner", "-filters"],
+                                   capture_output=True, text=True, timeout=10)
+                tem = any(l.split()[1:2] == ["zscale"] for l in r.stdout.splitlines())
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        _ZSCALE = (exe, tem)
+    return _ZSCALE[1]
 
 
 # ---- projetos ----

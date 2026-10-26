@@ -150,6 +150,36 @@ def is_hdr_source(video: Path) -> bool:
     return _color_tags(video).get("color_transfer", "") in HDR_TRANSFERS
 
 
+# O `zscale` (zimg) saiu da fórmula `ffmpeg` do Homebrew — o 9.0 dela vem
+# enxuto, e o build completo virou `ffmpeg-full` (keg-only). Sem ele o
+# TONEMAP_CHAIN não existe, e todo vídeo de iPhone (HLG por padrão) falha no
+# primeiro trecho com "No such filter: 'zscale'" — no meio do render, depois da
+# transcrição. Uma sonda, cacheada, e a pergunta é feita ANTES de extrair.
+_ZSCALE_CACHE: bool | None = None
+
+
+def zscale_disponivel() -> bool:
+    global _ZSCALE_CACHE
+    if _ZSCALE_CACHE is None:
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-filters"],
+                           capture_output=True, text=True)
+        _ZSCALE_CACHE = bool(re.search(r"^\s*\S+\s+zscale\s", r.stdout, re.M))
+    return _ZSCALE_CACHE
+
+
+def check_hdr_supported(edl: dict, edit_dir: Path) -> None:
+    """Fail before extraction when an HDR source meets an ffmpeg without zscale."""
+    if zscale_disponivel():
+        return
+    hdr = [name for name, src in edl.get("sources", {}).items()
+           if is_hdr_source(resolve_path(src, edit_dir))]
+    if hdr:
+        sys.exit(
+            f"fonte HDR ({', '.join(hdr)}) e este ffmpeg não tem o filtro zscale, "
+            "que converte HDR para SDR. macOS: brew install ffmpeg-full && "
+            "brew unlink ffmpeg && brew link --overwrite --force ffmpeg-full")
+
+
 # Wide-gamut SDR (BT.2020 primaries with an ordinary transfer) is NOT caught by
 # is_hdr_source — phone/mirrorless cameras routinely write bt2020 primaries with
 # color_transfer=unknown. Left unconverted, preview.mp4 inherits the bt2020 tags and
@@ -1766,6 +1796,7 @@ def main() -> None:
         print(f"  frame-aligned {snapped} range(s) to {target_fps}fps → edl.json updated")
 
     check_ranges_have_picture(edl, edit_dir)
+    check_hdr_supported(edl, edit_dir)
 
     if args.draft:
         base_name = "base_draft.mp4"

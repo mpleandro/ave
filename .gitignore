@@ -95,3 +95,6 @@ templates/
 prefs/
 tests/fixtures/*.json
 !tests/fixtures/exemplo.json
+
+# Estado do aviso de atualizações (helpers/atualizacoes.py) — por máquina
+.ave-atualizacoes.json

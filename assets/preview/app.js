@@ -6229,7 +6229,7 @@ const IS_WIN = /Win/i.test((navigator.userAgentData && navigator.userAgentData.p
 const DEP_ITEMS = [
   { id: 'ffmpeg', dep: 'ffmpeg', req: true, name: 'ffmpeg',
     why: 'corta, converte e exporta — a Fase 1 inteira passa por ele',
-    fix: IS_WIN ? 'winget install Gyan.FFmpeg' : 'brew install ffmpeg' },
+    fix: IS_WIN ? 'winget install Gyan.FFmpeg' : 'brew install ffmpeg-full && brew link --overwrite --force ffmpeg-full' },
   { id: 'ffprobe', dep: 'ffprobe', req: true, name: 'ffprobe',
     why: 'lê duração, resolução e fps das fontes',
     fix: 'vem junto com o ffmpeg' },
@@ -6245,6 +6245,10 @@ const DEP_ITEMS = [
     why: 'motor da Fase 2 (legendas, gráficos, imagens)',
     fix: IS_WIN ? 'winget install OpenJS.NodeJS.LTS' : 'brew install node' },
 
+  { id: 'ffmpeg_hdr', dep: 'ffmpeg_hdr', name: 'ffmpeg completo (HDR)',
+    why: 'vídeo de iPhone e de câmera em HDR — converte para cores normais no corte',
+    fix: IS_WIN ? 'winget install Gyan.FFmpeg (o build completo já traz)'
+      : 'brew install ffmpeg-full && brew unlink ffmpeg && brew link --overwrite --force ffmpeg-full' },
   { id: 'hyperframes', dep: 'hyperframes', name: 'Cache do HyperFrames',
     why: 'os ~365 MB do motor da Fase 2',
     fix: 'baixa sozinho na primeira Fase 2 — nada a fazer' },

@@ -233,7 +233,7 @@ def preparar_card(src: Path, tmp: Path) -> None:
     if frames_dir.exists():
         shutil.rmtree(frames_dir)
     frames_dir.mkdir(parents=True)
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-vsync", "0",
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-fps_mode", "passthrough",
                     str(frames_dir / "%04d.png")], check=True)
     frames = sorted(frames_dir.glob("*.png"))
     mapa = _medir_card(frames)
