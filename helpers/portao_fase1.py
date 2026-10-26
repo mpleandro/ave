@@ -491,6 +491,16 @@ def checar_render(edit: Path, render: str | None) -> list[dict]:
     except json.JSONDecodeError:
         pass
     def aceito(linha: str) -> bool:
+        # TELA PRETA PLANEJADA (Preparo, 2026-10-17): o preto de 0,5s no
+        # disparo e a cartela final são montagem, não defeito — e o verify_cut
+        # os acusa duas vezes, como ar morto E como quadro preto. A linha do
+        # preto lista vários intervalos; só passa se TODOS caem numa janela
+        # aceita, para um preto acidental no meio do corte continuar barrando.
+        if linha.startswith("black frames:"):
+            pares = re.findall(r"(\d+\.\d+)[-–](\d+\.\d+)s", linha)
+            return bool(pares) and all(
+                any(min(float(b), float(hi)) - max(float(a), float(lo)) > 0
+                    for lo, hi in aceitos) for a, b in pares)
         m = _DEADAIR_RE.search(linha)
         if not m:
             return False

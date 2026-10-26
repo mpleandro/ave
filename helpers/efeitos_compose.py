@@ -301,7 +301,74 @@ def _phone(eid, e, plano, W, H, track, events):
     return _bloco(eid, e, f"efx-phonebox {lado}", style, corpo, track)
 
 
-CONTEUDO = {"checklist": _checklist, "chartGrow": _chart, "phoneMockup": _phone}
+def _som(events, at, kind):
+    """`som` de um item: tipo do variants (`caching`, `impact`…) ou arquivo."""
+    if not kind:
+        return
+    sfx = F.VARIANTS.get("sfx", {})
+    events.append((at, kind if kind in sfx else {"file": kind, "volume": 0.3}))
+
+
+def _conta(eid, e, plano, W, H, track, events):
+    """CÁLCULO NA TELA: linhas da conta entrando na palavra que as cita e o
+    resultado (o item `resultado: true`) maior, no accent. Fundo preto 80% e
+    letra grossa — é informação, não enfeite, e precisa ler no mudo."""
+    c = CFG["conta"]
+    itens = [dict(i) if isinstance(i, dict) else {"texto": i} for i in e.get("itens") or []]
+    _sequencia(itens, e["start"], e["end"], 0.7)
+    n_res = sum(1 for it in itens if it.get("resultado"))
+    alto = (110 if e.get("titulo") else 50) + (len(itens) - n_res) * c["linha"] + n_res * 160
+    top, left, larg, esc = _zona_conteudo(plano, e["start"], e["end"], W, H, alto)
+    w = min(c["largura"], larg / esc)
+    left = left + (larg - w * esc) / 2
+    linhas = "".join(
+        f'<div class="efx-ct-linha{" res" if it.get("resultado") else ""}" '
+        f'data-at="{it["at"]:.3f}">{_txt(it.get("texto"))}</div>' for it in itens)
+    tit = (f'<div class="efx-ct-tit"><span class="efx-ponto"></span>{_txt(e["titulo"])}</div>'
+           if e.get("titulo") else "")
+    corpo = f'<div class="efx-ct">{tit}{linhas}</div>'
+    style = (f"left:{left:.0f}px; top:{top:.0f}px; width:{w:.0f}px; "
+             f"transform-origin:0 0; --efx-esc:{esc:.3f}")
+    events.append((e["start"], "element"))
+    for it in itens:
+        # `som` presente e vazio = linha muda (o vídeo pode querer UM som só)
+        _som(events, it["at"], it["som"] if "som" in it
+             else ("impact" if it.get("resultado") else "callout"))
+    return _bloco(eid, e, "efx-conta", style, corpo, track)
+
+
+def _versus(eid, e, plano, W, H, track, events):
+    """A × B: dois lados com rótulo e dado, rodapé com a conclusão. O lado
+    `vence` acende no accent quando o rodapé entra."""
+    c = CFG["versus"]
+    alto = c["altura"]
+    top, left, larg, esc = _zona_conteudo(plano, e["start"], e["end"], W, H, alto)
+    w = min(c["largura"], larg / esc)
+    left = left + (larg - w * esc) / 2
+
+    def lado(k):
+        d = e.get(k) or {}
+        at = d.get("at", e["start"] + (0.05 if k == "a" else 0.6))
+        vence = " vence" if e.get("vence") == k else ""
+        return (f'<div class="efx-vs-lado{vence}" data-at="{at:.3f}">'
+                f'<div class="efx-vs-rot">{_txt(d.get("rotulo") or k.upper())}</div>'
+                f'<div class="efx-vs-val">{_txt(d.get("valor") or "")}</div>'
+                f'<div class="efx-vs-det">{_txt(d.get("detalhe") or "")}</div></div>')
+    rd = e.get("rodape") or {}
+    rd = rd if isinstance(rd, dict) else {"texto": rd}
+    rd_at = rd.get("at", max(e["start"] + 1.0, e["end"] - 1.2))
+    corpo = (f'<div class="efx-vs">{lado("a")}<div class="efx-vs-x">vs</div>{lado("b")}</div>'
+             f'<div class="efx-vs-rodape" data-at="{rd_at:.3f}">{_txt(rd.get("texto") or "")}</div>')
+    style = (f"left:{left:.0f}px; top:{top:.0f}px; width:{w:.0f}px; height:{alto}px; "
+             f"transform-origin:0 0; --efx-esc:{esc:.3f}")
+    events.append((e["start"], "element"))
+    events.append(((e.get("b") or {}).get("at", e["start"] + 0.6), "element"))
+    _som(events, rd_at, rd["som"] if "som" in rd else "callout")
+    return _bloco(eid, e, "efx-versus", style, corpo, track)
+
+
+CONTEUDO = {"checklist": _checklist, "chartGrow": _chart, "phoneMockup": _phone,
+            "conta": _conta, "versus": _versus}
 
 # ---------------------------------------------------------------- recorte
 
@@ -783,5 +850,5 @@ def montar(data: dict, plano: dict, duracao: float, accent: str, events: list) -
             "tag": '<script src="styles/efeitos.js"></script>',
             "style": f"--efx-accent:{accent};",
             "arollSrc": arroll.get("arollSrc"), "arollStyle": arroll.get("arollStyle", ""),
-            "gfont": "family=Inter:wght@500;600;700;800&family=Playfair+Display:wght@700;900",
+            "gfont": "family=Inter:wght@500;600;700;800;900&family=Playfair+Display:wght@700;900",
             "substituiHook": bool(g and F.GANCHOS[g["tipo"]].get("substituiHook"))}

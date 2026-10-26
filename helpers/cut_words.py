@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -168,7 +169,16 @@ def noise_floor_for(video: Path) -> float:
 
     O ponto médio dá −47 aqui, que é o valor que as três sessões desta série
     encontraram na mão.
+
+    `AVELIN_LIMIAR_DB` passa por cima da calibração, e existe por um caso
+    medido (Preparo, 2026-10-17): gravação baixa (voz −46 dB RMS) em que só
+    20% do arquivo é fala — a "mediana da voz" saiu −51,9, ou seja, RUÍDO, o
+    ponto médio deu −54 e o detector não achou silêncio nenhum em 5 minutos.
+    Valor fixo é decisão de quem mediu o histograma, não chute: diga qual foi.
     """
+    manual = os.environ.get("AVELIN_LIMIAR_DB")
+    if manual:
+        return float(manual)
     floor, med = levels_for(video)
     if floor is not None and med is not None and floor < med:
         return round((floor + med) / 2)

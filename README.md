@@ -127,8 +127,13 @@ Abra o **Terminal** (Aplicativos → Utilitários).
 **2. Instale os pré-requisitos:**
 
 ```bash
-brew install git uv ffmpeg node
+brew install git uv node ffmpeg-full
+brew link --overwrite --force ffmpeg-full
 ```
+
+É o `ffmpeg-full`, e não o `ffmpeg`, de propósito: o `ffmpeg` do Homebrew hoje
+vem sem a peça que converte vídeo HDR — e o iPhone grava em HDR. Se você já
+tinha o `ffmpeg` instalado, rode `brew unlink ffmpeg` antes do `link`.
 
 **Confira antes de seguir.** Este comando tem que responder as quatro versões:
 
@@ -453,6 +458,11 @@ git -C "$HOME/.claude/skills/ave" pull --ff-only
 Mais fácil ainda: peça no chat *"atualiza o Avelin"*. O Claude baixa a versão
 nova, ajeita o que precisar e conta, em português simples, o que mudou para
 você.
+
+Você nem precisa lembrar: uma vez por semana o Avelin confere se saiu versão
+nova e, se saiu, avisa no começo da edição — até você atualizar. Ele só avisa;
+atualizar continua sendo decisão sua. Para conferir a cada edição, ou desligar
+o aviso, ponha `AVE_ATUALIZACOES=rodada` (ou `nunca`) no `.env`.
 
 ---
 

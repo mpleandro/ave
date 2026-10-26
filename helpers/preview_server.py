@@ -92,6 +92,7 @@ MIME = {
     ".webp": "image/webp",
     ".mp4": "video/mp4",
     ".mov": "video/quicktime",
+    ".webm": "video/webm",
     ".mp3": "audio/mpeg",
     ".srt": "text/plain; charset=utf-8",
 }
@@ -172,7 +173,32 @@ def _deps() -> dict:
         "hyperframes": (Path.home() / ".cache" / "hyperframes").exists(),
         # opcional: só quem traz fonte de URL precisa
         "ytdlp": bool(shutil.which("yt-dlp")),
+        # vídeo HDR (iPhone grava HLG) — o `ffmpeg` do Homebrew veio sem zscale
+        "ffmpeg_hdr": _ffmpeg_tem_zscale(),
     }
+
+
+_ZSCALE: tuple[str, bool] | None = None
+
+
+def _ffmpeg_tem_zscale() -> bool:
+    """A lista de filtros custa um processo — sonda uma vez por binário, não
+    por poll. A chave é o caminho: trocar o ffmpeg com o servidor no ar (um
+    `brew link` seguindo o aviso) reflete no próximo tique sem reiniciar."""
+    import shutil
+    global _ZSCALE
+    exe = shutil.which("ffmpeg") or ""
+    if _ZSCALE is None or _ZSCALE[0] != exe:
+        tem = False
+        if exe:
+            try:
+                r = subprocess.run([exe, "-hide_banner", "-filters"],
+                                   capture_output=True, text=True, timeout=10)
+                tem = any(l.split()[1:2] == ["zscale"] for l in r.stdout.splitlines())
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        _ZSCALE = (exe, tem)
+    return _ZSCALE[1]
 
 
 # ---- projetos ----
@@ -724,6 +750,10 @@ class Handler(BaseHTTPRequestHandler):
             self._estilo_get()
         elif path == "/api/estilos-salvos":
             self._estilos_salvos()
+        elif path == "/api/legendas-privadas":
+            self._legendas_privadas()
+        elif path.startswith("/legpriv/"):
+            self._legpriv_arquivo(path[len("/legpriv/"):])
         elif path == "/api/localfonts":
             self._localfonts()
         elif path == "/api/cta-foto":
@@ -1228,6 +1258,25 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, json.JSONDecodeError):
             d = {}
         self._json({"estilos": d.get("estilos", []) if isinstance(d, dict) else []})
+
+    def _legendas_privadas(self) -> None:
+        """As legendas de ~/.avelin/legendas (helpers/legendas_privadas.py) —
+        a galeria as mostra primeiro, com a borda laranja. Só os metadados:
+        o motor Python delas nunca sai daqui."""
+        import legendas_privadas as LP
+        self._json({"legendas": [{k: m.get(k) for k in ("id", "nome", "descricao", "css", "js")}
+                                 for m in LP.listar()]})
+
+    def _legpriv_arquivo(self, rel: str) -> None:
+        """Folha e script de uma legenda privada — SÓ os dois declarados no
+        legenda.json; o resto da pasta (motor, receita) não é servido."""
+        import legendas_privadas as LP
+        sid, _, nome = rel.partition("/")
+        meta = LP.carregar(sid)
+        if not meta or nome not in (meta.get("css"), meta.get("js")):
+            self._json({"error": "not found"}, 404)
+            return
+        self._send_file(LP.DIR / sid / nome)
 
     def _estilo_lembrar(self, body: dict) -> None:
         """Guarda as escolhas do envio de estilo para o PRÓXIMO projeto.

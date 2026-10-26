@@ -51,7 +51,8 @@
      karaokê passar a usar Open Sans, ele muda para todo projeto que já o
      escolheu. A identidade Avelin tem estilo próprio (`editorial`). */
   font-family: var(--cap-family);
-  font-weight: 900;
+  /* `captions.fontWeight` no edit-data troca o peso; sem ele, o 900 de origem. */
+  font-weight: var(--cap-weight, 900);
   color: var(--cap-color);
   line-height: 1;
   letter-spacing: calc(-1px * var(--cap-scale));
@@ -61,8 +62,10 @@
      azul-noite, "nunca preto" — mas isso vale para os estilos da Avelin, e
      mudar aqui alteraria o karaokê de todos os projetos existentes. Registrado
      como divergência conhecida, não corrigido de passagem. */
-  text-shadow: 0 calc(4px * var(--cap-scale)) calc(20px * var(--cap-scale))
-    rgba(0, 0, 0, 0.55);
+  /* `captions.shadow` no edit-data troca a sombra (ex.: peso fino sobre fundo
+     claro pede uma sombra mais fechada); sem ele, a de origem. */
+  text-shadow: var(--cap-shadow, 0 calc(4px * var(--cap-scale)) calc(20px * var(--cap-scale))
+    rgba(0, 0, 0, 0.55));
 }
 
 .ave-cap .ave-cap-line span {

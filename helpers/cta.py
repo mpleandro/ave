@@ -233,7 +233,7 @@ def preparar_card(src: Path, tmp: Path) -> None:
     if frames_dir.exists():
         shutil.rmtree(frames_dir)
     frames_dir.mkdir(parents=True)
-    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-vsync", "0",
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-fps_mode", "passthrough",
                     str(frames_dir / "%04d.png")], check=True)
     frames = sorted(frames_dir.glob("*.png"))
     mapa = _medir_card(frames)
@@ -388,6 +388,14 @@ def montar(data: dict, proj: Path, duration: float, words: list[dict],
         return "", []             # montado pelo efeitos_compose.py
     avisos: list[str] = []
     dur = m["duracao"]
+    clique = m["clique"]
+    # CLIQUE MAIS CEDO (`cta.clique`, só no siga-perfil): o padrão espera 5s
+    # com a cápsula parada antes do clique — num vídeo de 10s isso é metade
+    # dele. O que vem depois do clique (o "Seguindo ✓" e a saída do cursor)
+    # mantém a duração; só a espera encolhe.
+    if mid == "siga-perfil" and cta.get("clique") is not None:
+        clique = max(1.2, float(cta["clique"]))
+        dur = round(m["duracao"] - m["clique"] + clique, 3)
     if m["foto"] and not foto_do_projeto(proj):
         return "", [f"  aviso: CTA '{m['nome']}' sem foto em {FOTO_REL} — não vai aparecer"]
     arroba = (cta.get("arroba") or "").strip()
@@ -402,11 +410,11 @@ def montar(data: dict, proj: Path, duration: float, words: list[dict],
     elif cta.get("momento") is not None:
         # O MOMENTO DA CHAMADA, escolhido pela IA lendo a fala: o clique do
         # botão cai nele — no meio do vídeo, se a chamada é no meio
-        st = float(cta["momento"]) - m["clique"]
+        st = float(cta["momento"]) - clique
         st = min(st, duration - dur)
     else:
         t = momento_clique(words, duration)
-        st = (t - m["clique"]) if t is not None else (duration - dur)
+        st = (t - clique) if t is not None else (duration - dur)
         # CABER INTEIRO vence cair em cima da palavra: um "segue" no último
         # segundo cortaria o fechamento do cartão no meio, e um CTA que some
         # sem fechar lê como render quebrado. O clique adianta o que faltar.
@@ -446,8 +454,18 @@ def montar(data: dict, proj: Path, duration: float, words: list[dict],
         shutil.copy2(foto, comp / "cta-perfil.png")
         accent = data.get("accent") or "#ff3b30"
         subs = {"{{FOTO}}": FOTO_REL, "{{ARROBA}}": _esc(arroba_txt),
-                "{{ACCENT}}": accent, "{{CLIQUE}}": f"{m['clique']:.3f}",
+                "{{ACCENT}}": accent, "{{CLIQUE}}": f"{clique:.3f}",
                 "{{DURACAO}}": f"{en - st:.3f}"}
+        if mid == "siga-perfil":
+            # posição e tamanho em % do quadro, como nos outros modelos: `top`
+            # é a borda de cima visível da cápsula, `left` o centro, `width` a
+            # largura da cápsula (padrão 700px). Ausentes, o modelo fica no topo.
+            if cta.get("top") is not None:
+                subs["{{PTOP}}"] = f"{float(cta['top']) / 100 * H:.1f}"
+            if cta.get("width") is not None:
+                subs["{{PESC}}"] = f"{float(cta['width']) / 100 * W / 700:.4f}"
+            if cta.get("left") is not None:
+                subs["{{PCX}}"] = f"{float(cta['left']) / 100 * W:.1f}"
         if mid == "instagram-card":
             for k in ("video",):
                 s, d = CTA_DIR / m[k], proj / "cta" / m[k]

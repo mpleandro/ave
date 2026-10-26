@@ -50,6 +50,9 @@
   color: var(--hl-main);
 }
 
+/* `--ct-lat` (posto pelo compositor só no 9:16): o piso do recuo LATERAL do
+   texto, a área segura do Reels. Fundo, faixa e cartão podem sangrar até a
+   borda; a letra não — o celular corta ~55px de cada lado. Sem ele, 0. */
 /* O BLOCO. Nas cartelas de banda ele senta no `top` do layout; nas de tela
    cheia ele É a tela, e quem manda no lugar é a folha. */
 .ave-cartela .ct-bloco {
@@ -65,7 +68,7 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: calc(120px * var(--hl-scale)) calc(90px * var(--hl-scale));
+  padding: calc(120px * var(--hl-scale)) max(calc(90px * var(--hl-scale)), var(--ct-lat, 0px));
 }
 
 .ave-cartela .hl-line {
@@ -118,7 +121,7 @@
 .ave-cartela.ct-jornal .ct-bloco { left: calc(80px * var(--hl-scale)); right: calc(80px * var(--hl-scale)); }
 .ave-cartela.ct-jornal .ct-cartao {
   background: #efe9df;
-  padding: calc(44px * var(--hl-scale)) calc(46px * var(--hl-scale)) calc(50px * var(--hl-scale));
+  padding: calc(44px * var(--hl-scale)) max(calc(46px * var(--hl-scale)), calc(var(--ct-lat, 0px) - 80px * var(--hl-scale))) calc(50px * var(--hl-scale));
   transform: rotate(-1.4deg);
   text-align: left;
   box-shadow: 0 calc(30px * var(--hl-scale)) calc(70px * var(--hl-scale))
@@ -142,7 +145,7 @@
   background: rgba(6, 10, 16, 0.94);
   border: calc(2px * var(--hl-scale)) solid rgb(var(--hl-accent-rgb) / 0.55);
   border-radius: calc(10px * var(--hl-scale));
-  padding: calc(34px * var(--hl-scale)) calc(36px * var(--hl-scale));
+  padding: calc(34px * var(--hl-scale)) max(calc(36px * var(--hl-scale)), calc(var(--ct-lat, 0px) - 80px * var(--hl-scale)));
   text-align: left;
 }
 .ave-cartela.ct-terminal .ct-pontos { display: flex; gap: calc(10px * var(--hl-scale)); margin-bottom: calc(26px * var(--hl-scale)); }
@@ -164,11 +167,11 @@
   background: repeating-linear-gradient(-45deg, var(--hl-accent) 0 calc(24px * var(--hl-scale)),
     #12202c calc(24px * var(--hl-scale)) calc(48px * var(--hl-scale)));
 }
-.ave-cartela.ct-alerta .ct-chapa { background: #0b1520; padding: calc(34px * var(--hl-scale)) calc(60px * var(--hl-scale)); }
+.ave-cartela.ct-alerta .ct-chapa { background: #0b1520; padding: calc(34px * var(--hl-scale)) max(calc(60px * var(--hl-scale)), var(--ct-lat, 0px)); }
 
 /* ==================================================== 5 · PLACAR */
 .ave-cartela.ct-placar .ct-bloco {
-  left: calc(80px * var(--hl-scale)); right: calc(80px * var(--hl-scale));
+  left: max(calc(80px * var(--hl-scale)), var(--ct-lat, 0px)); right: max(calc(80px * var(--hl-scale)), var(--ct-lat, 0px));
   display: flex; align-items: center; gap: calc(38px * var(--hl-scale)); text-align: left;
 }
 .ave-cartela.ct-placar .ct-num { flex: none; }
@@ -266,7 +269,7 @@
 .ave-cartela.ct-meia_tela .ct-bloco {
   bottom: 44%; top: 0; inset: auto 0 44% 0;
   justify-content: flex-end; text-align: left;
-  padding: 0 calc(84px * var(--hl-scale)) calc(70px * var(--hl-scale));
+  padding: 0 max(calc(84px * var(--hl-scale)), var(--ct-lat, 0px)) calc(70px * var(--hl-scale));
 }
 .ave-cartela.ct-meia_tela .ct-olho { font-family: var(--hl-mono); font-weight: 500; }
 
@@ -283,7 +286,7 @@
 }
 .ave-cartela.ct-moldura .ct-bloco {
   inset: auto 0 auto 0; top: calc(var(--hl-top) * var(--hl-scale) * 1px);
-  display: block; padding: 0 calc(80px * var(--hl-scale));
+  display: block; padding: 0 max(calc(80px * var(--hl-scale)), var(--ct-lat, 0px));
 }
 
 /* 16 · CONTAGEM */
@@ -299,7 +302,7 @@
 .ave-cartela.ct-poster .ct-fundo { background: var(--hl-papel); }
 .ave-cartela.ct-poster .ct-bloco {
   justify-content: space-between; text-align: left;
-  padding: calc(150px * var(--hl-scale)) calc(80px * var(--hl-scale));
+  padding: calc(150px * var(--hl-scale)) max(calc(80px * var(--hl-scale)), var(--ct-lat, 0px));
 }
 .ave-cartela.ct-poster .ct-linhas { display: flex; flex-direction: column; gap: calc(10px * var(--hl-scale)); height: 100%; justify-content: space-between; }
 
@@ -322,7 +325,7 @@
 .ave-cartela.ct-ficha .ct-fundo { background: #0a1119; }
 .ave-cartela.ct-ficha .ct-bloco {
   justify-content: flex-end; text-align: left;
-  padding: 0 calc(84px * var(--hl-scale)) calc(200px * var(--hl-scale));
+  padding: 0 max(calc(84px * var(--hl-scale)), var(--ct-lat, 0px)) calc(200px * var(--hl-scale));
 }
 .ave-cartela.ct-ficha .ct-linhas { margin-bottom: calc(60px * var(--hl-scale)); }
 .ave-cartela.ct-ficha .ct-fila {
@@ -374,7 +377,7 @@
   display: flex;
   align-items: center;
   gap: calc(24px * var(--hl-scale));
-  padding: calc(30px * var(--hl-scale)) calc(46px * var(--hl-scale));
+  padding: calc(30px * var(--hl-scale)) max(calc(46px * var(--hl-scale)), calc(var(--ct-lat, 0px) - var(--nt-inset, 0px)));
 }
 .ave-cartela.ct-noticia .ct-olho {
   flex: 1;
@@ -423,7 +426,7 @@
 }
 .ave-cartela.ct-noticia .ct-folha {
   background: #ffffff;
-  padding: calc(54px * var(--hl-scale)) calc(52px * var(--hl-scale)) calc(62px * var(--hl-scale));
+  padding: calc(54px * var(--hl-scale)) max(calc(52px * var(--hl-scale)), calc(var(--ct-lat, 0px) - var(--nt-inset, 0px))) calc(62px * var(--hl-scale));
 }
 /* `.ct-folha` no seletor não é enfeite: os PAPÉIS DE COR (`.hl-line.ct-escuro`,
    no fim desta folha) têm a mesma especificidade que `.ct-noticia .hl-line` e

@@ -74,9 +74,12 @@
       var linhas = M.linhas || { yPercent: 110, stagger: 0.12, dur: 1.0 };
       var ws = el.querySelectorAll('.ave-bo-words .bo-w');
       ws.forEach(function (w, i) {
+        /* `data-at` (tempo ABSOLUTO da fala): a palavra espera ser dita —
+           "NÃO É CORAGEM." entra com a janela, "É MÉTODO." sobe na fala. */
+        var at = parseFloat(w.getAttribute('data-at'));
         tl.fromTo(w, { yPercent: linhas.yPercent },
                   { yPercent: 0, duration: Math.max(IN, linhas.dur * 0.7), ease: ease },
-                  s + IN * 0.25 + i * STAG);
+                  isFinite(at) ? at : s + IN * 0.25 + i * STAG);
       });
 
       /* linha-legenda: cresce depois que o conteúdo assentou; o ponto pisca no fim */

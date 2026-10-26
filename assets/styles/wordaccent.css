@@ -44,3 +44,6 @@
   opacity: 0;
   pointer-events: none;
 }
+
+/* partes que se montam (174, GRA-VI-DA): precisam de caixa própria para subir */
+.ave-wordaccent .wa-part { display: inline-block; }

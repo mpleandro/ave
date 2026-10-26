@@ -260,3 +260,22 @@
   border-left: calc(var(--pal-barra-w, 8) * var(--cap-scale) * 1px) solid var(--cap-accent);
   padding-left: calc(var(--pal-barra-vao, 28) * var(--cap-scale) * 1px);
 }
+
+/* ========================================================== 20 · GRÁFICO
+   Legenda à la Hormozi: 2–3 palavras por vez, GRANDES, no centro do quadro,
+   caixa alta e contorno preto grosso — legível no mudo, sobre qualquer fundo.
+   As palavras-chave (números e termos marcados `pal-hi`) ficam no accent da
+   legenda do começo ao fim (`pal.hi` no variants.json). É a metade TEXTO do
+   estilo; a metade VISUAL são os cartões de `efeitos[]` (conta, versus,
+   gráfico), que calam a legenda enquanto estão no ar. */
+.ave-pal.pal-grafico .pal-cue {
+  bottom: auto;
+  top: calc(var(--pal-centro, 0.55) * 100%);
+  transform: translateY(-50%);
+}
+.ave-pal.pal-grafico .pal-w {
+  transform-origin: 50% 60%;
+  -webkit-text-stroke: calc(9px * var(--cap-scale)) #000;
+  paint-order: stroke fill;
+  text-shadow: 0 calc(6px * var(--cap-scale)) calc(16px * var(--cap-scale)) rgba(0, 0, 0, 0.55);
+}

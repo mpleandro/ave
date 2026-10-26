@@ -28,6 +28,15 @@ Para mandar você mesmo: `start` (segundos do corte), `top`/`left`/`width` (%
 do quadro; `left` é o centro), `verificado: false` (tira o selo do card),
 `som: false`, `volume`.
 
+No `siga-perfil` (desde 2026-10-16) `top` é a borda de cima VISÍVEL da
+cápsula e `width` a largura dela (padrão 700px = 64,8%) — a escala nasce do
+topo, então encolher não a tira do lugar. Sem os três, ela fica no topo como
+sempre. **Na altura da legenda** (vídeo sem fala, pedido do usuário):
+`"top": 77.5, "width": 55.1` — pé em 1590px (330 do fundo) e 595px de largura,
+o que cabe centrado à esquerda da coluna de ícones (área segura). E `clique`
+(segundos dentro do modelo, padrão 5,08) encurta a espera antes do clique:
+num vídeo de 10s, `"clique": 2.6` faz o CTA durar 3,3s em vez de 5,8s.
+
 ## A foto
 
 É do projeto, em `hyperframes/cta/perfil.png`, quadrada e recortada em volta

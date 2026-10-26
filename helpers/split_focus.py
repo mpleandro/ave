@@ -181,7 +181,7 @@ def resolver(edit: Path, margem: float, verbose: bool = True) -> list[dict]:
         lay = variants["split"].get(it.get("layout", "top"))
         if lay is None:
             continue
-        band = lay["band"]
+        band = float(it.get("band", lay["band"]))
         win_h = src_h - band
         t0, t1 = float(it.get("start", 0)), float(it.get("end", 0))
         med = medir_cabeca(corte, t0, t1)

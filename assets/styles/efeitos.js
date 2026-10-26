@@ -79,6 +79,44 @@
     }
   };
 
+  /* CÁLCULO: o cartão entra, cada linha sobe na sua palavra; o resultado
+   * estoura (escala) e fica parado até a saída. */
+  B.conta = function (el, gsap, tl, it, cfg) {
+    var card = el.querySelector('.efx-ct');
+    entraSai(tl, card, it.t0, it.t1, cfg, { y: 40, scale: 0.94 });
+    var ls = el.querySelectorAll('.efx-ct-linha');
+    for (var i = 0; i < ls.length; i++) {
+      var at = parseFloat(ls[i].getAttribute('data-at'));
+      var res = ls[i].classList.contains('res');
+      tl.set(ls[i], { opacity: 0, y: 30, scale: res ? 0.6 : 1, transformOrigin: '0% 50%' }, it.t0);
+      tl.to(ls[i], { opacity: 1, y: 0, scale: 1, duration: res ? 0.34 : 0.26,
+                     ease: res ? 'back.out(2.6)' : 'power3.out' }, at);
+    }
+  };
+
+  /* A × B: lado A com o cartão, lado B na palavra dele, rodapé por último. */
+  B.versus = function (el, gsap, tl, it, cfg) {
+    var lados = el.querySelectorAll('.efx-vs-lado'), x = el.querySelector('.efx-vs-x');
+    var rd = el.querySelector('.efx-vs-rodape');
+    for (var i = 0; i < lados.length; i++) {
+      var at = parseFloat(lados[i].getAttribute('data-at'));
+      tl.set(lados[i], { opacity: 0, x: i ? 80 : -80, scale: 0.92 }, it.t0);
+      tl.to(lados[i], { opacity: 1, x: 0, scale: 1, duration: 0.32, ease: 'back.out(1.6)' }, at);
+      tl.to(lados[i], { opacity: 0, duration: cfg.saida, ease: 'power2.in' }, it.t1 - cfg.saida);
+    }
+    if (x) {
+      tl.set(x, { opacity: 0, scale: 0.4 }, it.t0);
+      tl.to(x, { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(2)' }, it.t0 + 0.15);
+      tl.to(x, { opacity: 0, duration: cfg.saida }, it.t1 - cfg.saida);
+    }
+    if (rd) {
+      var ra = parseFloat(rd.getAttribute('data-at'));
+      tl.set(rd, { opacity: 0, y: 30 }, it.t0);
+      tl.to(rd, { opacity: 1, y: 0, duration: 0.3, ease: 'power3.out' }, ra);
+      tl.to(rd, { opacity: 0, duration: cfg.saida }, it.t1 - cfg.saida);
+    }
+  };
+
   B.phoneMockup = function (el, gsap, tl, it, cfg) {
     var ph = el.querySelector('.efx-phone');
     var dx = it.lado === 'esq' ? -300 : 300, rot = it.lado === 'esq' ? 4 : -4;

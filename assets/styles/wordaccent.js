@@ -11,6 +11,12 @@
       tl.fromTo(el, { opacity: 0, scale: T.FROM },
                 { opacity: 1, scale: 1, duration: T.IN, ease: 'back.out(1.4)' }, s);
       tl.to(el, { opacity: 0, duration: T.OUT, ease: 'none' }, Math.max(s, s + d - T.OUT));
+      /* partes que se montam no ritmo da fala (data-at absoluto) */
+      el.querySelectorAll('.wa-part').forEach(function (p) {
+        var at = parseFloat(p.getAttribute('data-at'));
+        tl.set(p, { opacity: 0, y: 30 }, s);
+        tl.to(p, { opacity: 1, y: 0, duration: 0.18, ease: 'back.out(2)' }, isFinite(at) ? at : s);
+      });
     });
     return tl;
   }

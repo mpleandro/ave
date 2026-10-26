@@ -146,8 +146,12 @@ uninstalls the other extras.
 `ffmpeg` and `ffprobe` are hard requirements for Phase 1. `yt-dlp` is only needed if the user wants to pull sources from URLs — and the `link` resource installs it inside the venv on first use, so the system install below is optional. Phase 2 uses HyperFrames (Node.js) — set up in step 6.
 
 ```bash
-# macOS
-command -v ffmpeg >/dev/null || brew install ffmpeg
+# macOS — ffmpeg-full, não ffmpeg (ver a nota abaixo)
+ffmpeg -hide_banner -filters 2>/dev/null | grep -qE ' zscale ' || {
+  brew install ffmpeg-full
+  brew unlink ffmpeg 2>/dev/null
+  brew link --overwrite --force ffmpeg-full
+}
 command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
 
 # Debian / Ubuntu
@@ -157,6 +161,14 @@ command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
 # Arch
 # sudo pacman -S ffmpeg yt-dlp
 ```
+
+**macOS: `ffmpeg-full`, not `ffmpeg`.** Homebrew's `ffmpeg` formula is now a
+slim build (the 9.0 bottle has 11 deps) without `zscale`/zimg — and `zscale` is
+what `render.py` tone-maps HDR with. iPhone records HLG by default, so with the
+slim build every iPhone clip fails mid-render (`render.py` now stops before
+extracting and says so). `ffmpeg-full` is the complete build but keg-only, hence
+the `unlink`/`link --force` to put it on PATH. Windows (`Gyan.FFmpeg`) and the
+Linux distro packages already include zimg.
 
 ```powershell
 # Windows (PowerShell)
@@ -289,6 +301,7 @@ cd <AVE>
 uv run python helpers/timeline_view.py --help >/dev/null && echo "helpers OK"      # or: python … after pip install -e .
 uv run python -c "import cv2; print('opencv', cv2.__version__)"                    # Phase-2 face tracking
 ffprobe -hide_banner -filters | grep -qE '\bdeesser\b' && echo "ffmpeg has voice-master filters"   # Phase-1 --voice-master
+ffprobe -hide_banner -filters | grep -qE ' zscale ' && echo "ffmpeg has zscale (HDR sources)"      # iPhone/HLG
 ffprobe -version | head -1
 node --version && echo "node OK (Phase 2)"
 ```
@@ -299,6 +312,7 @@ cd <AVE>
 uv run python helpers/timeline_view.py --help > $null; if ($?) { "helpers OK" }
 uv run python -c "import cv2; print('opencv', cv2.__version__)"
 if (ffprobe -hide_banner -filters | Select-String -Pattern '\bdeesser\b' -Quiet) { "ffmpeg has voice-master filters" }
+if (ffprobe -hide_banner -filters | Select-String -Pattern ' zscale ' -Quiet) { "ffmpeg has zscale (HDR sources)" }
 ffprobe -version | Select-Object -First 1
 node --version; if ($?) { "node OK (Phase 2)" }
 ```
@@ -329,6 +343,7 @@ anything. Never paste a changelog, commit list or command output at them.
 - `git -C <AVE> pull --ff-only` pulls the latest code — same command on every OS, and no `cd` needed. The next run picks it up automatically (the clone *is* the skill dir on the user layout; the symlink/junction resolves to it on the contributor layout).
 - `git clone` does **not** update an existing install — it fails on a non-empty directory. Clone once, pull forever.
 - If `pyproject.toml` changed deps, re-run `uv sync --directory <AVE>` (or `pip install -e .`) after pulling.
+- **The skill tells the user when there is something to pull.** `helpers/atualizacoes.py` runs at the start of every round (SKILL.md, Setup): it fetches `origin/main` once a week (`AVE_ATUALIZACOES=rodada` in `.env` fetches every round, `nunca` turns it off) and, while the clone is behind, reminds in one line each round until the user updates. It never pulls by itself. It flags what makes a pull need care: changed deps (`uv sync`), uncommitted local changes, a local branch that diverged from `origin/main`.
 
 ## Cold-start reminders
 
@@ -338,7 +353,7 @@ anything. Never paste a changelog, commit list or command output at them.
 - After any `winget install`, `$PATH` only refreshes in a **new** PowerShell window. A "command not found" right after a successful install is almost always this.
 - Helpers run under `uv run python helpers/<name>.py`. A bare `python` won't see the `.venv` that `uv sync` builds — this is the most common post-install failure.
 - If `.env` exists but the key is empty, treat it the same as missing — don't assume existence means validity.
-- `ffmpeg` from static builds works fine. Any modern (≥ 4.x) build is enough.
+- `ffmpeg` from static builds works fine. Tested on **9.0**; the floor is **5.1** — the helpers use `-fps_mode`, which replaced `-vsync` (removed in 9.0). The build must have `zscale` for HDR sources (on macOS: `ffmpeg-full`, see step 3).
 - `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
 - Node.js 18+ is required for Phase 2 (captions, motion graphics, images). Phase 1 (cut + grade) works without it, so a user who only wants a clean cut can start immediately — but set up step 6 so Phase 2 is ready when the cut is approved.
 - Phase-2 projects are scaffolded per-video by `helpers/phase2.py` into `<videos_dir>/edit/hyperframes/`, and the composition is GENERATED from `edit-data.json` — there is no template to copy and no `node_modules` per project. The engine version is pinned in `phase2.py` so an upstream release can't break a render.

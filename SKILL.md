@@ -162,6 +162,20 @@ rodada do `phase2.py` — move o conteúdo, não sobrescreve nada.
 
 First-time install lives in `install.md`. On cold start just verify:
 
+> **AVISO DE ATUALIZAÇÃO — primeira coisa de toda rodada.** Rode
+> `uv run python helpers/atualizacoes.py` (busca no GitHub uma vez por semana;
+> nas outras rodadas só compara, sem rede). Saída vazia = nada a dizer, siga.
+> Saída com novidade = UMA linha ao usuário, antes de começar a edição, no tom
+> da regra abaixo: o que ele ganha com a versão nova (traduza os títulos dos
+> commits em benefício — nunca cole a lista) e a pergunta "quer que eu atualize
+> agora?". Nunca atualize sem o sim. Com o sim, siga install.md ("Keeping the
+> skill current") — e se o aviso disser que há mudanças locais ou que o ramo
+> divergiu, NÃO force o pull: diga em uma linha que há trabalho local no
+> caminho e pergunte o que fazer. O aviso volta a cada rodada até atualizar;
+> se o usuário disser para não lembrar, `AVE_ATUALIZACOES=nunca` no `.env`.
+> O mesmo helper avisa ffmpeg abaixo do 9 — repasse como recomendação, não
+> como bloqueio.
+
 > **INSTALAR E ATUALIZAR SE EXPLICA EM LINGUAGEM SIMPLES** (regra do usuário,
 > 2026-10-19). Quem instala ou atualiza o Avelin não é programador: nada de
 > nome de pacote, extra, `uv sync`, "compilar", "dependência", "ambiente
@@ -176,7 +190,7 @@ First-time install lives in `install.md`. On cold start just verify:
 - `GROQ_API_KEY` resolves (env or `.env` at the Avelin repo root — this fork has its own). Groq Whisper `whisper-large-v3`; no diarization (every word is `speaker_0`).
 - `ELEVENLABS_API_KEY` (optional) — used for LONG sources (>5 min, e.g. YouTube/course lessons) via ElevenLabs Scribe `scribe_v1`, since Groq's free tier chokes on long uploads. `backend=auto` (default) picks Scribe over 5 min when the key exists, else Groq; short clips stay on Groq. No key → long sources fall back to Groq. Ask for it lazily the first time a >5 min source shows up, write to `.env`.
 - `whispercpp` (optional) — fully local transcription, no key, no upload cap, no network. Opt-in only: `auto` never picks it. Needs whisper.cpp built with a ggml model (auto-detected in `~/whisper.cpp`, or `WHISPERCPP_BIN`/`WHISPERCPP_MODEL` in `.env`). Offer it when the user has no Groq key or hits quota. **Text matches Groq; word TIMES don't** (measured: 66% of words inside a real speech region vs Groq's 97%, median drift 240ms). Phase 1 is unaffected — cut edges come from `speech_regions.py`. For Phase-2 karaoke captions, prefer Groq and say why.
-- `ffmpeg` + `ffprobe` on PATH; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources — `ingest_url.py` installs it inside the venv on first use (recurso `link`, see below); a system `yt-dlp` on PATH is used when present.
+- `ffmpeg` + `ffprobe` on PATH — tested on 9.0, floor 5.1 (`-fps_mode`; `-vsync` was removed in 9.0, never use it). The build needs `zscale` for HDR (iPhone HLG): Homebrew's slim `ffmpeg` lacks it, so macOS uses `ffmpeg-full` (install.md step 3); `render.py` stops before extracting when an HDR source meets an ffmpeg without it; Python deps (`uv sync`); Node 18+ for Phase 2. `yt-dlp` only for URL sources — `ingest_url.py` installs it inside the venv on first use (recurso `link`, see below); a system `yt-dlp` on PATH is used when present.
 - Fase 2: nada a instalar. `npx hyperframes@0.7.109` resolve do cache compartilhado (~365MB em `~/.cache/hyperframes`, uma vez para todos os projetos) e o projeto da sessão fica SEM `node_modules`. **Nunca carregue `remotion-best-practices`** — não é o motor desta skill.
 - **INSTALAÇÃO GRADUAL — efeito pesado instala o que precisa quando é pedido.**
   `helpers/instalar.py` tem o registro: `recorte` (torch + RVM, ~2 GB — cabeça
@@ -197,6 +211,9 @@ First-time install lives in `install.md`. On cold start just verify:
 Helpers live in `helpers/`, resolved relative to this SKILL.md (usually `~/.claude/skills/ave/`, or a symlink/junction pointing there). Run them as `uv run python helpers/<name>.py` — a bare `python` misses the `.venv` that `uv sync` builds.
 
 ## Helpers
+
+Toda rodada:
+- **`atualizacoes.py [--agora] [--json]`** — o aviso de versão nova no GitHub (ver Setup). Busca `origin/main` uma vez por semana (`AVE_ATUALIZACOES` = `semanal`|`rodada`|`nunca`), compara sempre, imprime só quando há o que dizer; acusa deps mudadas, mudança local e ramo divergente, e ffmpeg abaixo do 9. Nunca faz pull.
 
 Phase 1:
 - **`ingest_url.py <url> --dest <videos_dir> [--section 12:00-25:30] [--max-height 1080]`** — edit from a link: yt-dlp → MP4 (≤1080p, ascii-safe filename) straight into the videos dir; from there it's a source like any other. `--section` downloads ONLY a time range of a longform source (keyframe-accurate) — the cheap way to clip minutes 12–25 of a 1h video. `--simulate` prints title/duration/resolution without downloading (confirm before big fetches; run those in the background).
@@ -1175,6 +1192,52 @@ Entrada de exemplo:
  "itens": [{"texto": "Cansou da internet", "palavra": "internet"}]}
 ```
 
+### Estilo de legenda "Gráfico" — texto E visual acompanhando a fala (2026-10-21)
+
+Legenda à la Hormozi (`captions.style: "grafico"`, motor `palavra`): 2–3
+palavras por bloco, grandes, no centro (`pal.centro` 0,55), caixa alta NO DADO
+(`upper`), contorno preto, o bloco inteiro estoura junto. **Palavras-chave no
+accent da legenda do começo ao fim** (`pal.hi`): todo número dito (e o
+"reais/horas" colado nele) entra sozinho; os termos vêm de
+`captions.destaques` (lista de frases, casadas como sequência). O padrão do
+usuário é `captions.accent` amarelo neon (#F2FF00), headline com `hook.accent`
+igual e CTA na cor da marca.
+
+A metade VISUAL: a legenda LIBERA os cartões de conteúdo em qualquer formato
+(`efeitos.legendas.grafico` → `conta`, `versus`, `chartGrow`, `checklist`), e
+eles herdam o accent da legenda. Escreva-os em `efeitos[]` onde a fala tem
+número ou comparação:
+
+```json
+{"tipo": "conta", "de": "equivaleriam", "ate": "600 reais", "titulo": "a conta",
+ "itens": [{"texto": "8h × R$100 = *R$800*", "palavra": "800", "som": "caching"},
+           {"texto": "Você pagaria R$200", "palavra": "200", "som": ""},
+           {"texto": "Prejuízo: −R$600", "palavra": "600", "resultado": true, "som": ""}]}
+{"tipo": "versus", "de": "cada um", "ate": "25% a mais", "vence": "b",
+ "a": {"rotulo": "Pessoa A", "valor": "R$100/h", "detalhe": "200h"},
+ "b": {"rotulo": "Pessoa B", "valor": "R$100/h", "detalhe": "200h", "palavra": "pessoa B"},
+ "rodape": {"texto": "B produz *25% a mais*", "palavra": "25%"}}
+```
+
+`conta`: fundo preto 80%, o `resultado` segura 1,5s parado (o fim se estende
+sozinho). `som` por item: tipo do variants (`caching` = caixa registradora) ou
+arquivo; `""` = mudo. Câmera do estilo: corte seco alternando 100%/108% a cada
+frase (~1,2–1,5s), 110% no gancho — escrita em `segments`, sem `zoomPunch`.
+
+### Legendas privadas — estilos de legenda que não estão no repositório (2026-10-21)
+
+Um estilo de legenda pode ser de UMA pessoa e não ser distribuído. Ele mora em
+`~/.avelin/legendas/<id>/` (`legenda.json` + folha + script + motor Python) e
+o repositório só tem o mecanismo (`helpers/legendas_privadas.py`): o editor o
+mostra PRIMEIRO na galeria de legendas, com a borda laranja dos estilos
+pessoais e a prévia do próprio script; a Fase 2 o aceita como portado; o
+compositor copia folha e script para `styles/legpriv-<id>.*` e chama
+`montar()` do motor. O servidor serve só a folha e o script declarados — o
+motor nunca sai da máquina. **Antes de usar uma legenda privada, leia a
+RECEITA.md da pasta dela**: o conteúdo costuma ser um roteiro escrito por
+vídeo (o motor recusa pelo nome enquanto ele não existe). Nunca copie nada
+dessa pasta para dentro do clone.
+
 ### CTA — entra onde a CHAMADA está (2026-10-15)
 
 O CTA não é sempre o último segundo. A chamada pode estar no meio ("comenta
@@ -1198,13 +1261,13 @@ Nas outras camadas o player volta ao vídeo editado; apertar play também.
 | | |
 |---|---|
 | Legendas | `karaoke` `simples` `serifada` `classica` `disperso` `empilhado` `pop` `popLinha` `popBloco` `revelar` `editorial` `dinamico` |
-| Legendas · motor `palavra` | `marcador` `marcadorDuplo` `marcaTexto` `sublinhado` `progressivo` · `foco` `focoBlur` `contorno` `neon` · `chapa` `chips` `vidro` · `onda` `rotativo` `maquina` `rolagem` · `cinema` `manchete` `barra` |
-| Headlines | `outline` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` `tarjas` `vidro` |
+| Legendas · motor `palavra` | `marcador` `marcadorDuplo` `marcaTexto` `sublinhado` `progressivo` · `foco` `focoBlur` `contorno` `neon` · `chapa` `chips` `vidro` · `onda` `rotativo` `maquina` `rolagem` · `cinema` `manchete` `barra` · **`grafico`** |
+| Headlines | `outline` `texto` `card` `realce` `misto` `bloco` `etiqueta` `manuscrito` `gigante` `relevo` `grifo` `contorno_duplo` `tarjas` `vidro` |
 | Headlines · motor `cartela` (banda) | `fita` `jornal` `terminal` `alerta` `placar` `sombra_longa` `neon` `balao` `filete` `adesivo` `noticia` |
 | Headlines · motor `cartela` (TELA CHEIA) | `capa` `capa_blur` `cortina` `meia_tela` `moldura` `contagem` `knockout` `poster` `aspas` `ficha` |
 | Edição | `limpa` `split` `split2` · formatos com efeitos: `ilustrado` `fundoTrocado` `caderno` |
 | Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash · `zoomPunch` `zoomThrough` |
-| Efeitos (`efeitos[]`) | `checklist` `chartGrow` `phoneMockup` `uiWorld` |
+| Efeitos (`efeitos[]`) | `checklist` `chartGrow` `conta` `versus` `phoneMockup` `uiWorld` |
 | Efeito do gancho (`ganchoEfeito`) | `frameBreak` `coverStory` `headlineWall` `couchWall` `orbit` `vertigo` |
 | CTA | `siga-perfil` `instagram-card` `instagram-simples` `revelarApp` |
 | Curta | inserts, palavras em destaque, gráficos sob medida |
