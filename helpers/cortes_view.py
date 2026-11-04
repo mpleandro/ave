@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import re
 import shutil
@@ -35,7 +36,7 @@ import unicodedata
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cortes import fonte as F  # noqa: E402
@@ -140,15 +141,76 @@ def descartar(c: dict, versao: str) -> None:
     """REPROCESSAR: apaga o que já foi gerado desta versão — vídeo, vídeo
     legendado e .srt — para a próxima chamada refazer do zero."""
     base = nome_versao(c, versao)
-    for nome in (f"{base}.mp4", f"{base}_legendado.mp4", f"{base}.srt"):
+    nomes = [f"{base}.mp4", f"{base}.srt", *(p.name for p in TRAB.glob(f"{base}_legendado*.mp4"))]
+    for nome in nomes:
         with _trava(nome):
             (TRAB / nome).unlink(missing_ok=True)
 
 
-def exportar(c: dict, versao: str = "original", legendado: bool = False) -> Path:
+# a última escolha do popup "Com legenda" é do PERFIL, não do vídeo: vale para
+# todo corte, de toda rodada, até a pessoa trocar. Mora em ~/.avelin, ao lado
+# do brand.json — gosto de quem usa nunca entra no clone.
+ESTILO_SALVO = Path.home() / ".avelin" / "cortes_legenda.json"
+_PREVIAS: dict[str, bytes] = {}
+
+
+def previa_titulo(estilo: dict, texto: str) -> bytes:
+    """A headline do popup como PNG TRANSPARENTE de 540×960, desenhada pelo
+    MESMO .ass do vídeo — a prévia não reimplementa layout nenhum em CSS. O
+    filtro `ass` do ffmpeg pinta a cor mas não grava alfa, então a headline é
+    renderizada sobre preto e sobre branco e o alfa sai da diferença:
+    a = 1 - (branco - preto), cor = preto / a."""
+    import numpy as np  # noqa: PLC0415
+    from PIL import Image  # noqa: PLC0415
+    chave = hashlib.sha1(json.dumps([estilo, texto], sort_keys=True).encode()).hexdigest()
+    if chave in _PREVIAS:
+        return _PREVIAS[chave]
+    cfg = L.com_estilo(F.config(TRAB), estilo)
+    with tempfile.TemporaryDirectory() as d:
+        ass = Path(d) / "t.ass"
+        ass.write_text(L.ass([], 6.0, cfg, texto or " "), encoding="utf-8")
+        quadros = []
+        for fundo in ("black", "white"):
+            png = Path(d) / f"{fundo}.png"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c={fundo}:s=540x960:d=2",
+                            "-vf", f"ass={ass}", "-ss", "1.2", "-frames:v", "1", str(png)], check=True)
+            quadros.append(np.asarray(Image.open(png).convert("RGB"), dtype=np.float32))
+    preto, branco = quadros
+    alfa = np.clip(1 - (branco - preto).mean(axis=2) / 255, 0, 1)
+    cor = np.where(alfa[..., None] > 0.004, preto / np.maximum(alfa[..., None], 0.004), 0)
+    img = np.dstack([np.clip(cor, 0, 255), alfa * 255]).astype(np.uint8)
+    buf = io.BytesIO()
+    Image.fromarray(img, "RGBA").save(buf, "PNG", optimize=False)
+    if len(_PREVIAS) > 64:
+        _PREVIAS.clear()
+    _PREVIAS[chave] = buf.getvalue()
+    return _PREVIAS[chave]
+
+
+def estilo_salvo() -> dict:
+    """O último estilo escolhido no popup — ele reabre nele."""
+    try:
+        return L.normalizar_estilo(json.loads(ESTILO_SALVO.read_text()))
+    except (OSError, json.JSONDecodeError):
+        return L.normalizar_estilo(None)
+
+
+def salvar_estilo(estilo: dict) -> None:
+    ESTILO_SALVO.parent.mkdir(parents=True, exist_ok=True)
+    ESTILO_SALVO.write_text(json.dumps(estilo, ensure_ascii=False, indent=1))
+
+
+def exportar(c: dict, versao: str = "original", legendado: bool = False,
+             estilo: dict | None = None) -> Path:
     """O corte na versão pedida. Sem legenda é o padrão; `legendado` gera um
-    SEGUNDO arquivo com o karaokê queimado — o limpo continua existindo."""
-    destino = TRAB / f"{nome_versao(c, versao)}{'_legendado' if legendado else ''}.mp4"
+    SEGUNDO arquivo com o karaokê queimado — o limpo continua existindo. Com
+    `estilo` (o popup "Com legenda"), cada combinação é um arquivo próprio."""
+    sufixo = ""
+    if legendado:
+        sufixo = "_legendado"
+        if estilo:
+            sufixo += "_" + hashlib.sha1(json.dumps(estilo, sort_keys=True).encode()).hexdigest()[:8]
+    destino = TRAB / f"{nome_versao(c, versao)}{sufixo}.mp4"
     with _trava(destino.name):
         if destino.exists():
             return destino
@@ -158,7 +220,9 @@ def exportar(c: dict, versao: str = "original", legendado: bool = False) -> Path
             if legendado:
                 ws, dur = palavras_da_versao(c, versao)
                 ass = Path(d) / "legenda.ass"
-                ass.write_text(L.ass(ws, dur, F.config(TRAB), c.get("titulo_sugerido")), encoding="utf-8")
+                cfg = L.com_estilo(F.config(TRAB), estilo) if estilo else F.config(TRAB)
+                texto = (estilo or {}).get("texto") or c.get("titulo_sugerido")
+                ass.write_text(L.ass(ws, dur, cfg, texto), encoding="utf-8")
             # fonte horizontal sai em pé, seguindo quem fala (enquadramento.py)
             quadro = None if EQ.vertical(VIDEO) else EQ.plano(VIDEO, *VR.janela(c))
             VR.render(VIDEO, segs, destino, ass, FPS, F.config(TRAB).get("zoom_cortes"), quadro)
@@ -356,6 +420,23 @@ class Handler(BaseHTTPRequestHandler):
             return self._arquivo(ICONE, "image/png")
         if path == "/media":
             return self._arquivo(VIDEO, "video/mp4")
+        if path == "/api/titulo-previa.png":
+            q = parse_qs(urlparse(self.path).query)
+            try:
+                estilo = json.loads(q.get("e", ["{}"])[0])
+            except json.JSONDecodeError:
+                estilo = {}
+            b = previa_titulo(estilo if isinstance(estilo, dict) else {}, q.get("t", [""])[0][:400])
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(b)))
+            self.send_header("Cache-Control", "max-age=3600")
+            self.end_headers()
+            self.wfile.write(b)
+            return
+        if path == "/api/legenda-modelos":
+            return self._json({"modelos": L.MODELOS, "salvo": estilo_salvo(),
+                               "forca": L.FORCA.pattern})
         if path == "/api/processando":
             with _TRAVA:
                 return self._json({k: v[-1] for k, v in _TRABALHOS.items() if v})
@@ -363,7 +444,13 @@ class Handler(BaseHTTPRequestHandler):
             d = cortes()
             por_id = {c["id"]: c for c in d["cortes"]}
             ap = {k: normalizar(por_id[k], v) for k, v in aplicadas().items() if k in por_id}
-            d.update({"video": VIDEO.name, "duracao": duracao(VIDEO), "pasta": str(TRAB),
+            horiz = not EQ.vertical(VIDEO)
+            # ?v=mtime: o arquivo refeito tem o MESMO nome, e sem o carimbo o
+            # navegador seguia tocando o enquadramento antigo do cache
+            exp = {c["id"]: f"/arquivo/{base_nome(c)}.mp4?v={int((TRAB / f'{base_nome(c)}.mp4').stat().st_mtime)}"
+                   for c in d["cortes"] if horiz and (TRAB / f"{base_nome(c)}.mp4").exists()}
+            d.update({"horizontal": horiz, "exportados": exp,
+                      "video": VIDEO.name, "duracao": duracao(VIDEO), "pasta": str(TRAB),
                       "aplicadas": {k: v for k, v in ap.items() if v != "original"}})
             return self._json(d)
         if path.startswith("/thumb/"):
@@ -395,6 +482,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/avelin":
                 return self._json(importar_avelin(c, versao, bool(corpo.get("forcar"))))
+            if path == "/api/legenda-estilo":
+                salvar_estilo({k: v for k, v in (corpo.get("estilo") or {}).items() if k != "texto"})
+                return self._json({"ok": True})
             if path == "/api/aplicar":
                 aplicar(c, versao)
                 return self._json({"ok": True, "score": score_versao(c, versao)})
@@ -404,7 +494,11 @@ class Handler(BaseHTTPRequestHandler):
                 if corpo.get("formato") == "srt":
                     p = legenda_srt(c, versao)
                 else:
-                    p = exportar(c, versao, legendado=corpo.get("formato") == "legendado")
+                    legendado = corpo.get("formato") == "legendado"
+                    estilo = corpo.get("estilo") if legendado and isinstance(corpo.get("estilo"), dict) else None
+                    if estilo:
+                        salvar_estilo({k: v for k, v in estilo.items() if k != "texto"})
+                    p = exportar(c, versao, legendado=legendado, estilo=estilo)
                     # quem pediu para APLICAR não depende de a página continuar
                     # aberta até o fim: o servidor registra ao terminar
                     if corpo.get("aplicar"):

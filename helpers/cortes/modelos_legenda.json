@@ -1,0 +1,433 @@
+{
+  "_readme": "Modelos do popup 'Com legenda' da tela de cortes. Fonte ÚNICA: o .ass queimado (legenda.py) e a prévia do popup (assets/cortes/index.html) leem estes números. DOIS EIXOS, que se combinam livremente: o TIPO diz como a fala aparece (comportamento, agrupamento, quantas linhas) e o VISUAL diz a cara (fonte, caixa alta, caixa atrás, contorno). Os tipos são os estilos do editor (assets/styles/variants.json) que o libass consegue desenhar — blur de fundo, vidro, tarja que desliza e entradas por palavra ficam no editor. `tamanho` é o do libass (altura da linha); a prévia divide por `css_k` para chegar ao em do CSS. A HEADLINE é um eixo só (o layout, agrupado), mais a ENTRADA, que vale para qualquer uma que não seja de tela cheia; as com desenho moram em headline.py. O tipo de legenda multiplica o tamanho do visual por `escala` e a largura da linha por `largura` do visual.",
+  "padrao": {
+    "legenda": "karaoke",
+    "legenda_visual": "bold",
+    "titulo": "faixa",
+    "entrada": "fade",
+    "cor_principal": "#FF522D",
+    "cor_fundo": "#0B1F3A",
+    "base_px": 430,
+    "topo_px": 270,
+    "titulo_inteiro": false
+  },
+  "css_k": 1.37,
+  "_antigos": "Ids de versões anteriores do popup, para o estilo salvo no perfil continuar abrindo. A headline de antes era (tipo = entrada, visual = layout): `titulo_entrada` desfaz isso.",
+  "antigos": {
+    "legenda": {
+      "impacto": [
+        "karaoke",
+        "impacto"
+      ],
+      "caixa": [
+        "karaoke",
+        "caixa"
+      ],
+      "serifada": [
+        "simples",
+        "serifada"
+      ],
+      "classica": [
+        "cinema",
+        "classica"
+      ]
+    },
+    "titulo_entrada": {
+      "sobre": "fade",
+      "desliza": "desliza",
+      "pop": "pop"
+    }
+  },
+  "legendas": {
+    "palavra": {
+      "grupo": "Palavra por palavra",
+      "nome": "Palavra",
+      "descricao": "Uma palavra por vez, estourando na fala",
+      "modo": "estatico",
+      "pop": true,
+      "max_palavras": 1,
+      "max_chars": 14,
+      "linhas": 1,
+      "escala": 1.35
+    },
+    "simples": {
+      "grupo": "1 linha",
+      "nome": "Simples",
+      "descricao": "O bloco inteiro, palavras de força na principal",
+      "modo": "estatico",
+      "max_palavras": 4,
+      "max_chars": 18,
+      "linhas": 1,
+      "escala": 1
+    },
+    "maquina": {
+      "grupo": "1 linha",
+      "nome": "Máquina de escrever",
+      "descricao": "Cada palavra só aparece quando é dita",
+      "modo": "maquina",
+      "max_palavras": 4,
+      "max_chars": 18,
+      "linhas": 1,
+      "escala": 1
+    },
+    "karaoke": {
+      "grupo": "Karaokê",
+      "nome": "Karaokê",
+      "descricao": "A palavra dita acende na cor principal",
+      "modo": "karaoke",
+      "max_palavras": 3,
+      "max_chars": 16,
+      "linhas": 1,
+      "escala": 1
+    },
+    "marca": {
+      "grupo": "Karaokê",
+      "nome": "Marca-texto",
+      "descricao": "Uma tarja na principal atrás da palavra dita",
+      "modo": "marca",
+      "max_palavras": 3,
+      "max_chars": 16,
+      "linhas": 1,
+      "escala": 1
+    },
+    "foco": {
+      "grupo": "Karaokê",
+      "nome": "Foco",
+      "descricao": "Tudo apagado, só a palavra dita em branco pleno",
+      "modo": "foco",
+      "max_palavras": 4,
+      "max_chars": 18,
+      "linhas": 1,
+      "escala": 1
+    },
+    "progressivo": {
+      "grupo": "Karaokê",
+      "nome": "Progressivo",
+      "descricao": "O que já foi dito fica na cor principal",
+      "modo": "progressivo",
+      "max_palavras": 4,
+      "max_chars": 18,
+      "linhas": 1,
+      "escala": 1
+    },
+    "vazado": {
+      "grupo": "Karaokê",
+      "nome": "Contorno → cheio",
+      "descricao": "Palavras vazadas; a dita é preenchida",
+      "modo": "vazado",
+      "max_palavras": 3,
+      "max_chars": 16,
+      "linhas": 1,
+      "escala": 1
+    },
+    "neon": {
+      "grupo": "Karaokê",
+      "nome": "Neon",
+      "descricao": "A palavra dita acende com halo",
+      "modo": "neon",
+      "max_palavras": 3,
+      "max_chars": 16,
+      "linhas": 1,
+      "escala": 1
+    },
+    "cinema": {
+      "grupo": "2 linhas",
+      "nome": "Cinema",
+      "descricao": "A frase em até duas linhas, sem karaokê",
+      "modo": "estatico",
+      "forca": false,
+      "max_palavras": 9,
+      "max_chars": 34,
+      "linhas": 2,
+      "escala": 0.7
+    },
+    "karaoke2": {
+      "grupo": "2 linhas",
+      "nome": "Karaokê em 2 linhas",
+      "descricao": "Bloco maior, a palavra dita acende",
+      "modo": "karaoke",
+      "max_palavras": 7,
+      "max_chars": 30,
+      "linhas": 2,
+      "escala": 0.8
+    },
+    "marca2": {
+      "grupo": "2 linhas",
+      "nome": "Marcador duplo",
+      "descricao": "A tarja da palavra dita em duas linhas",
+      "modo": "marca",
+      "max_palavras": 7,
+      "max_chars": 30,
+      "linhas": 2,
+      "escala": 0.8
+    }
+  },
+  "visuais_legenda": {
+    "bold": {
+      "nome": "Bold",
+      "fonte": "Poppins Black",
+      "css": "'Poppins', sans-serif",
+      "peso": 900,
+      "tamanho": 104,
+      "largura": 1,
+      "maiusculas": false,
+      "caixa": false,
+      "contorno": 3,
+      "sombra": 4
+    },
+    "impacto": {
+      "nome": "Impacto",
+      "fonte": "Anton",
+      "css": "'Anton', sans-serif",
+      "peso": 400,
+      "tamanho": 120,
+      "largura": 1.15,
+      "maiusculas": true,
+      "caixa": false,
+      "contorno": 5,
+      "sombra": 0
+    },
+    "caixa": {
+      "nome": "Caixa",
+      "fonte": "Poppins Black",
+      "css": "'Poppins', sans-serif",
+      "peso": 900,
+      "tamanho": 88,
+      "largura": 1.15,
+      "maiusculas": false,
+      "caixa": true,
+      "contorno": 16,
+      "sombra": 0
+    },
+    "serifada": {
+      "nome": "Serifada",
+      "fonte": "Libre Baskerville",
+      "css": "'Libre Baskerville', serif",
+      "peso": 700,
+      "negrito": true,
+      "tamanho": 84,
+      "largura": 1.2,
+      "maiusculas": false,
+      "caixa": false,
+      "contorno": 2,
+      "sombra": 3
+    },
+    "classica": {
+      "nome": "Clássica",
+      "fonte": "Inter SemiBold",
+      "css": "'Inter', sans-serif",
+      "peso": 600,
+      "tamanho": 80,
+      "largura": 1.35,
+      "maiusculas": false,
+      "caixa": false,
+      "contorno": 3,
+      "sombra": 2
+    }
+  },
+  "titulos": {
+    "faixa": {
+      "grupo": "Texto",
+      "nome": "Faixa",
+      "descricao": "Texto branco numa faixa na cor de fundo",
+      "fonte": "Poppins Black",
+      "css": "'Poppins', sans-serif",
+      "peso": 900,
+      "tamanho": 72,
+      "caixa": "fundo",
+      "texto": "branco",
+      "forca": true,
+      "contorno": 18,
+      "sombra": 0
+    },
+    "etiqueta": {
+      "grupo": "Texto",
+      "nome": "Etiqueta",
+      "descricao": "Faixa na principal, texto na cor de fundo",
+      "fonte": "Poppins Black",
+      "css": "'Poppins', sans-serif",
+      "peso": 900,
+      "tamanho": 72,
+      "caixa": "principal",
+      "texto": "fundo",
+      "forca": false,
+      "contorno": 18,
+      "sombra": 0
+    },
+    "contorno": {
+      "grupo": "Texto",
+      "nome": "Contorno",
+      "descricao": "Letra grande com traço preto",
+      "fonte": "Anton",
+      "css": "'Anton', sans-serif",
+      "peso": 400,
+      "tamanho": 104,
+      "maiusculas": true,
+      "caixa": null,
+      "texto": "branco",
+      "forca": true,
+      "contorno": 7,
+      "sombra": 3
+    },
+    "texto": {
+      "grupo": "Texto",
+      "nome": "Texto simples",
+      "descricao": "Só a letra, com sombra",
+      "fonte": "Poppins Black",
+      "css": "'Poppins', sans-serif",
+      "peso": 900,
+      "tamanho": 80,
+      "caixa": null,
+      "texto": "branco",
+      "forca": true,
+      "contorno": 0,
+      "sombra": 5
+    },
+    "serifada": {
+      "grupo": "Texto",
+      "nome": "Serifada",
+      "descricao": "Editorial, palavras de força na principal",
+      "fonte": "Libre Baskerville",
+      "css": "'Libre Baskerville', serif",
+      "peso": 700,
+      "negrito": true,
+      "tamanho": 74,
+      "caixa": null,
+      "texto": "branco",
+      "forca": true,
+      "contorno": 2,
+      "sombra": 4
+    },
+    "gigante": {
+      "grupo": "Texto",
+      "nome": "Gigante",
+      "descricao": "A última palavra enorme, na principal",
+      "layout": "gigante",
+      "css": "'Poppins', sans-serif",
+      "peso": 900
+    },
+    "contorno_duplo": {
+      "grupo": "Texto",
+      "nome": "Contorno duplo",
+      "descricao": "1ª linha vazada, 2ª cheia na principal",
+      "layout": "contorno_duplo",
+      "css": "'Anton', sans-serif",
+      "peso": 400,
+      "maiusculas": true
+    },
+    "sombra_longa": {
+      "grupo": "Texto",
+      "nome": "Sombra longa",
+      "descricao": "Caixa alta com extrusão na principal",
+      "layout": "sombra_longa",
+      "css": "'Poppins', sans-serif",
+      "peso": 900,
+      "maiusculas": true
+    },
+    "tarjas": {
+      "grupo": "Texto",
+      "nome": "Tarjas",
+      "descricao": "Uma tarja por linha; a do meio maior",
+      "layout": "tarjas",
+      "css": "'Poppins', sans-serif",
+      "peso": 900
+    },
+    "grifo": {
+      "grupo": "Texto",
+      "nome": "Grifo",
+      "descricao": "Cada palavra com a sua tarja",
+      "layout": "grifo",
+      "css": "'Poppins', sans-serif",
+      "peso": 900,
+      "maiusculas": true
+    },
+    "caixinha": {
+      "grupo": "Elementos",
+      "nome": "Caixinha de pergunta",
+      "descricao": "O adesivo de perguntas do Instagram",
+      "layout": "caixinha",
+      "css": "'Inter', sans-serif",
+      "peso": 600,
+      "dica": "A 1ª linha vai na faixa escura (a chamada). Sem quebra de linha, a chamada é “Me faça uma pergunta”."
+    },
+    "noticia": {
+      "grupo": "Elementos",
+      "nome": "Notícia",
+      "descricao": "Captura de app de notícia, barra na principal",
+      "layout": "noticia",
+      "css": "'Poppins', sans-serif",
+      "peso": 800,
+      "dica": "A 1ª linha vai na barra (o olho). Sem quebra de linha, o olho é “ÚLTIMAS NOTÍCIAS”."
+    },
+    "balao": {
+      "grupo": "Elementos",
+      "nome": "Balão de fala",
+      "descricao": "Balão claro com rabicho",
+      "layout": "balao",
+      "css": "'Poppins', sans-serif",
+      "peso": 900
+    },
+    "filete": {
+      "grupo": "Elementos",
+      "nome": "Filete duplo",
+      "descricao": "Entre dois filetes na principal",
+      "layout": "filete",
+      "css": "'Poppins', sans-serif",
+      "peso": 900
+    },
+    "fita": {
+      "grupo": "Elementos",
+      "nome": "Fita",
+      "descricao": "Fita inclinada na principal, de lado a lado",
+      "layout": "fita",
+      "css": "'Anton', sans-serif",
+      "peso": 400,
+      "maiusculas": true
+    },
+    "capa": {
+      "grupo": "Tela cheia",
+      "nome": "Capa sólida",
+      "descricao": "Abre o vídeo numa tela na cor de fundo",
+      "layout": "capa",
+      "ate_s": 2.6,
+      "fonte": "Poppins Black",
+      "css": "'Poppins', sans-serif",
+      "peso": 900,
+      "tamanho": 90,
+      "max_chars": 15,
+      "caixa": null,
+      "texto": "branco",
+      "forca": true,
+      "contorno": 0,
+      "sombra": 0
+    },
+    "moldura": {
+      "grupo": "Tela cheia",
+      "nome": "Moldura",
+      "descricao": "Borda na cor de fundo, o vídeo numa janela",
+      "layout": "moldura",
+      "css": "'Poppins', sans-serif",
+      "peso": 900,
+      "maiusculas": true
+    },
+    "aspas": {
+      "grupo": "Tela cheia",
+      "nome": "Aspas",
+      "descricao": "Citação em tela cheia, aspas na principal",
+      "layout": "aspas",
+      "ate_s": 3.2,
+      "css": "'Libre Baskerville', serif",
+      "peso": 700
+    },
+    "nenhum": {
+      "grupo": "Sem headline",
+      "nome": "Sem headline",
+      "descricao": "Só a legenda"
+    }
+  },
+  "entradas": {
+    "fade": "Aparece",
+    "desliza": "Desliza",
+    "pop": "Pop"
+  }
+}

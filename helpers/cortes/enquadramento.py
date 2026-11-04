@@ -137,22 +137,44 @@ def _medir(video: Path, a: float, b: float) -> dict:
 
 
 def _pessoas(rostos: list, t0: float, t1: float, n_amostras: int) -> list[dict]:
-    """Rostos de uma cena agrupados por posição; só o que é gente (ver topo)."""
+    """Rostos de uma cena viram PESSOAS por rastreio quadro a quadro: dois rostos no
+    mesmo quadro nunca são a mesma pessoa, e cada rosto segue o rastro mais
+    próximo dentro de ~1 largura de rosto. Fica de fora o que não é gente: rosto
+    pequeno ou que aparece pouco (boneco da estante, propaganda no telão).
+
+    Medido no "Dinheiro não é sujo": agrupar por posição na cena inteira, com
+    tolerância de 2,5 rostos, fundia a apresentadora de branco (x≈800) com o
+    homem ao lado (x≈1050), e a presença mínima de 40% da cena descartava quem
+    fala só no começo e sai — ela abria o corte falando e a faixa ia para outra
+    pessoa."""
+    por_t: dict = {}
+    for r in rostos:
+        if t0 <= r[0] < t1:
+            por_t.setdefault(r[0], []).append(r)
     tr: list[dict] = []
-    for t, cx, cy, w, ab, sorriso in rostos:
-        if not t0 <= t < t1:
-            continue
-        p = min(tr, key=lambda q: abs(q["x"] - cx), default=None)
-        if p is None or abs(p["x"] - cx) > max(120.0, 2.5 * w):
-            p = {"x": cx, "y": cy, "amostras": []}
-            tr.append(p)
-        p["x"] = 0.8 * p["x"] + 0.2 * cx
-        p["amostras"].append((t, cx, w, ab, sorriso))
+    for t in sorted(por_t):
+        fs = por_t[t]
+        vivos = [k for k, p in enumerate(tr) if t - p["ult"] <= 2.0]
+        pares = sorted((abs(tr[k]["x"] - f[1]), k, n) for k in vivos for n, f in enumerate(fs))
+        usados_t, usados_f = set(), set()
+        for d, k, n in pares:
+            if k in usados_t or n in usados_f or d > max(40.0, 0.6 * fs[n][3]):
+                continue
+            usados_t.add(k)
+            usados_f.add(n)
+            p, f = tr[k], fs[n]
+            p["x"] = f[1]
+            p["ult"] = t
+            p["amostras"].append((f[0], f[1], f[3], f[4], f[5]))
+        for n, f in enumerate(fs):
+            if n not in usados_f:
+                tr.append({"x": f[1], "y": f[2], "ult": t, "amostras": [(f[0], f[1], f[3], f[4], f[5])]})
     if not tr:
         return []
     tam = {id(p): float(np.median([s[2] for s in p["amostras"]])) for p in tr}
     maior = max(tam.values())
-    reais = [p for p in tr if len(p["amostras"]) > 0.4 * n_amostras and tam[id(p)] >= 0.6 * maior]
+    minimo = min(max(15, int(0.4 * n_amostras)), 15)    # 1,5s em quadro já é gente
+    reais = [p for p in tr if len(p["amostras"]) >= minimo and tam[id(p)] >= 0.6 * maior]
     for p in reais:
         p["x"] = float(np.median([s[1] for s in p["amostras"]]))
         p["tam"] = tam[id(p)]
@@ -168,7 +190,7 @@ def _nota_boca(pessoas: list[dict], envelope, grade, a: float) -> np.ndarray:
         tt = np.array([x[0] for x in am]) if am else np.zeros(0)
         aa = np.array([x[1] for x in am]) if am else np.zeros(0)
         ss = np.array([x[2] for x in am]) if am else np.zeros(0)
-        en = np.array([envelope(a + t - 0.05, a + t + 0.05) for t in tt]) if len(tt) else np.zeros(0)
+        en = np.array([envelope(t - 0.05, t + 0.05) for t in tt]) if len(tt) else np.zeros(0)
         col = []
         for s in grade:
             m = (tt >= s - 1.0) & (tt < s + 1.0)
@@ -184,7 +206,7 @@ def _nota_boca(pessoas: list[dict], envelope, grade, a: float) -> np.ndarray:
 
 
 def _falante(pessoas: list[dict], envelope, c0: float, c1: float, a: float,
-             diar: list[tuple[float, int]]) -> list[tuple[float, int]]:
+             diar: list[tuple[float, int]], mudos=None, idx_fora: int = -1) -> list[tuple[float, int]]:
     """[(t, pessoa)] a cada PASSO. QUANDO cada um fala vem da voz (`voz.diarizar`);
     a boca só decide QUAL rosto é qual voz — somada em todos os turnos de cada
     voz, onde o sinal fraco quadro a quadro vira uma decisão firme."""
@@ -231,12 +253,220 @@ def _falante(pessoas: list[dict], envelope, c0: float, c1: float, a: float,
         runs.append([cheio[k], k, j])
         k = j
     for r in range(len(runs)):
-        if runs[r][2] - runs[r][1] < precisa and len(runs) > 1:
+        # quem fala de FORA do quadro costuma dar uma frase curta ("Dinheiro não é sujo."):
+        # absorver o turno dele é exatamente o erro que o usuário apontou
+        if runs[r][2] - runs[r][1] < precisa and len(runs) > 1 \
+                and not pessoas[runs[r][0]].get("fora"):
             runs[r][0] = runs[r - 1][0] if r > 0 else runs[r + 1][0]
     out = [0] * len(cheio)
     for pessoa, i0, i1 in runs:
         out[i0:i1] = [pessoa] * (i1 - i0)
+    if mudos:
+        for k, s_ in enumerate(grade):
+            if round(float(s_), 2) in mudos:
+                out[k] = idx_fora
     return [(float(s), int(x)) for s, x in zip(grade, out)]
+
+
+def _x_local(p: dict, t: float) -> float:
+    """Onde a pessoa está em t (mediana dos rostos em ±1s): quem anda ou gesticula
+    é seguido, em vez de ficar na posição média da cena inteira."""
+    xs = [cx for tt, cx, *_ in p["amostras"] if abs(tt - t) <= 1.0]
+    return float(np.median(xs)) if len(xs) >= 3 else float(p["x"])
+
+
+def _passos_fora(pes: list[dict], envelope, c0: float, c1: float, a: float) -> set:
+    """Passos (em s, arredondados) em que HÁ voz e nenhuma boca visível se mexe:
+    quem fala está fora do quadro. A boca parada é relativa à própria pessoa
+    (desvio na janela de ±0,5s contra o desvio dela na cena inteira)."""
+    grade = np.arange(c0, c1, PASSO)
+    base = []
+    for p in pes:
+        ab = np.array([s_[3] for s_ in p["amostras"] if s_[3] is not None])
+        base.append(float(ab.std()) if len(ab) > 10 else None)
+    if any(b_ is None for b_ in base):
+        return set()
+    en = np.array([envelope(s_ - 0.25, s_ + 0.25) for s_ in grade])
+    if not len(en):
+        return set()
+    limiar_voz = float(np.percentile(en, 40))
+    out = set()
+    for k, s_ in enumerate(grade):
+        if en[k] < limiar_voz:
+            continue
+        parado = True
+        for p, b_ in zip(pes, base):
+            ab = [x[3] for x in p["amostras"] if x[3] is not None and abs(x[0] - s_) <= 0.5]
+            if len(ab) < 4 or float(np.std(ab)) >= 0.35 * b_:
+                parado = False
+                break
+        if parado:
+            out.add(round(float(s_), 2))
+    return out
+
+
+def _falante_boca(pes: list[dict], envelope, c0: float, c1: float, a: float) -> list[tuple[float, int]]:
+    """[(t, pessoa)] a cada PASSO, pela boca; `len(pes)` = alguém fora do quadro."""
+    grade = np.arange(c0, c1, PASSO)
+    if len(grade) == 0:
+        return []
+    base = []
+    for p in pes:
+        ab = np.array([x[3] for x in p["amostras"] if x[3] is not None])
+        base.append(float(ab.std()) if len(ab) > 10 else 0.0)
+    ok = [i for i, b_ in enumerate(base) if b_ > 0.005]        # jawOpen travado ~0 = landmarker sem lábios
+    quebrados = [i for i, b_ in enumerate(base) if b_ <= 0.005]
+    en = np.array([envelope(s_ - 0.25, s_ + 0.25) for s_ in grade])
+    lim = 0.12 * float(np.percentile(en, 75))
+    cur, bruto = ok[0] if ok else 0, []
+    for k, s_ in enumerate(grade):
+        if en[k] >= lim:
+            z = {}
+            for i in ok:
+                ab = [x[3] for x in pes[i]["amostras"] if x[3] is not None and abs(x[0] - s_) <= 0.4]
+                if len(ab) >= 3:
+                    z[i] = float(np.std(ab)) / base[i]
+            melhor = max(z, key=z.get) if z else None
+            if melhor is not None and z[melhor] >= 0.4:
+                cur = melhor
+            elif z or k < 3:
+                cur = -1          # voz e ninguém mexendo a boca: decide pela duração
+        bruto.append(cur)
+    # incerto: turno longo é de quem tem o rosto sem lábios medidos; curto, de fora do quadro
+    k = 0
+    while k < len(bruto):
+        j = k
+        while j < len(bruto) and bruto[j] == bruto[k]:
+            j += 1
+        if bruto[k] == -1:
+            # quem fala FORA do quadro não pode ser centrado (não está na imagem):
+            # o corte fica na pessoa mais próxima em vez de mostrar parede vazia
+            if quebrados and j - k >= 8:
+                dono = quebrados[0]
+            else:
+                dono = bruto[k - 1] if k > 0 else -2   # pausa do falante: ele fica; no início, o próximo
+            bruto[k:j] = [dono] * (j - k)
+        k = j
+    if bruto and bruto[0] == -2:
+        prox = next((x for x in bruto if x >= 0), ok[0] if ok else 0)
+        bruto = [prox if x == -2 else x for x in bruto]
+    # turno curto é absorvido (pisca-pisca), menos o de quem está fora do quadro
+    precisa = int(round(TROCA_S / PASSO))
+    runs, k = [], 0
+    while k < len(bruto):
+        j = k
+        while j < len(bruto) and bruto[j] == bruto[k]:
+            j += 1
+        runs.append([bruto[k], k, j])
+        k = j
+    for r in range(len(runs)):
+        curto = runs[r][2] - runs[r][1] < precisa
+        if runs[r][0] == len(pes):
+            curto = runs[r][2] - runs[r][1] < 2     # fora do quadro: 1s já vale
+        if curto and len(runs) > 1:
+            runs[r][0] = runs[r - 1][0] if r > 0 else runs[r + 1][0]
+    out = [0] * len(bruto)
+    for pessoa, i0, i1 in runs:
+        out[i0:i1] = [pessoa] * (i1 - i0)
+    return [(float(s_), int(x)) for s_, x in zip(grade, out)]
+
+
+def _layout_tela(video: Path, t: float, cx: float, cy: float, W: int, H: int) -> dict | None:
+    """Os dois retângulos de um compartilhamento de tela: a JANELA DA CÂMERA (o
+    menor contorno que contém os rostos pequenos) e a TELA (o maior retângulo
+    que não a cobre). Medido na live "Enriqueça": slide 1220×686 à esquerda,
+    câmera 581×448 à direita, com borda verde nos dois."""
+    import cv2  # noqa: PLC0415
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", str(video), "-frames:v", "1",
+                          "-f", "rawvideo", "-pix_fmt", "bgr24", "-"], capture_output=True).stdout
+    if len(raw) < W * H * 3:
+        return None
+    fr = np.frombuffer(raw[:W * H * 3], np.uint8).reshape(H, W, 3)
+    e = cv2.dilate(cv2.Canny(cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY), 40, 120), np.ones((3, 3), np.uint8))
+    cs, _ = cv2.findContours(e, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    cams, telas = [], []
+    for c in cs:
+        x, y, w, h = cv2.boundingRect(c)
+        if w * h < 0.01 * W * H or w > 0.9 * W:
+            continue
+        if x < cx < x + w and y < cy < y + h:
+            cams.append((x, y, w, h))
+        ap = cv2.approxPolyDP(c, 0.02 * cv2.arcLength(c, True), True)
+        if len(ap) == 4 and cv2.contourArea(c) / (w * h) > 0.85 and w * h >= 0.1 * W * H:
+            telas.append((x, y, w, h))
+    if not cams:
+        return None
+    cam = min(cams, key=lambda r: r[2] * r[3])
+    telas = [r for r in telas if not (r[0] < cx < r[0] + r[2] and r[1] < cy < r[1] + r[3])]
+    if not telas:
+        return None
+    tela = max(telas, key=lambda r: r[2] * r[3])
+    ins = lambda r, k=6: [r[0] + k, r[1] + k, r[2] - 2 * k, r[3] - 2 * k]  # noqa: E731  sem a borda
+    return {"tela": ins(tela), "cam": ins(cam)}
+
+
+def _vazios_viram_fit(trechos: list[dict], rostos: list, a: float, dur: float,
+                      video: Path | None = None, W: int = 1920, H: int = 1080) -> list[dict]:
+    """Trecho SEM rosto nenhum (≥1,5s) vira "fit" — o quadro inteiro sobre ele
+    mesmo ampliado e desfocado — mesmo DENTRO de uma cena.
+
+    Medido no "Até quando você vai tolerar isso?": o compartilhamento de tela
+    (slide escuro sobre estúdio escuro) não passa no detector de corte de cena,
+    então a faixa de 9:16 continuava na posição da última pessoa e cortava o
+    slide ao meio."""
+    import bisect  # noqa: PLC0415
+    # rosto PEQUENO não conta: no compartilhamento de tela a câmera vira uma
+    # janelinha ao lado do slide, e os rostos dela (~1/4 do tamanho) seguem
+    # sendo detectados o tempo todo
+    if not rostos:
+        return trechos
+    larg = float(np.percentile([r[3] for r in rostos], 75))
+    ts = sorted(r[0] for r in rostos if r[3] >= 0.5 * larg)
+    grade = np.arange(0, dur, PASSO)
+    vaz = []
+    for s_ in grade:
+        i = bisect.bisect_left(ts, s_ - 0.6)
+        vaz.append(not (i < len(ts) and ts[i] <= s_ + 0.6))
+    faixas, k = [], 0
+    while k < len(vaz):
+        j = k
+        while j < len(vaz) and vaz[j] == vaz[k]:
+            j += 1
+        if vaz[k] and (j - k) * PASSO >= 1.5:
+            faixas.append((a + k * PASSO, a + min(j * PASSO, dur)))
+        k = j
+    if not faixas:
+        return trechos
+    out = []
+    for tr in trechos:
+        pedacos = [(tr["de"], tr["ate"])]
+        for f0, f1 in faixas:
+            novos = []
+            for p0, p1 in pedacos:
+                if f1 <= p0 or f0 >= p1:
+                    novos.append((p0, p1))
+                    continue
+                if p0 < f0:
+                    novos.append((p0, f0))
+                if f1 < p1:
+                    novos.append((f1, p1))
+            pedacos = novos
+        out += [{**tr, "de": p0, "ate": p1} for p0, p1 in pedacos if p1 - p0 > 1e-6]
+    for f0, f1 in faixas:
+        # compartilhamento de tela COM a janelinha da câmera ao lado: tela em
+        # cima, apresentadores embaixo (pedido do usuário). Sem janelinha, ou
+        # sem achar os dois retângulos, cai no quadro inteiro desfocado.
+        peq = [r for r in rostos if f0 - a <= r[0] < f1 - a and r[3] < 0.5 * larg]
+        lay = None
+        if video is not None and len(peq) >= 5:
+            cx = float(np.median([r[1] for r in peq]))
+            cy = float(np.median([r[2] for r in peq]))
+            lay = _layout_tela(video, (f0 + f1) / 2, cx, cy, W, H)
+        if lay:
+            out.append({"de": f0, "ate": f1, "modo": "dividida", **lay})
+        else:
+            out.append({"de": f0, "ate": f1, "modo": "fit"})
+    return sorted(out, key=lambda t: t["de"])
 
 
 def plano(video: Path, a: float, b: float) -> dict:
@@ -262,25 +492,40 @@ def plano(video: Path, a: float, b: float) -> dict:
             faixa = lambda cx: int(min(max(0, cx - cw / 2), W - cw))  # noqa: E731
             if not pes:
                 trechos.append({"de": a + c0, "ate": a + c1, "modo": "fit"})
-            elif len(pes) == 1 or pes[-1]["x"] - pes[0]["x"] + pes[-1]["tam"] < cw * 0.9:
-                meio = (pes[0]["x"] + pes[-1]["x"]) / 2
-                trechos.append({"de": a + c0, "ate": a + c1, "modo": "crop", "x": faixa(meio)})
+            elif len(pes) == 1:
+                trechos.append({"de": a + c0, "ate": a + c1, "modo": "crop", "x": faixa(pes[0]["x"])})
             else:
-                if diar is None:
-                    diar = VZ.diarizar(VZ.audio(video, a, b), max(2, len(pes)))
-                for t, i in _falante(pes, env, c0, c1, a, diar):
-                    x = faixa(pes[i]["x"])
+                # REGRA DO USUÁRIO: o sujeito que fala fica SEMPRE no centro — mesmo
+                # quando duas pessoas cabem juntas na faixa (centrar no meio delas
+                # deixava as duas fora do centro).
+                # quem fala = quem MEXE A BOCA no ritmo da voz (jawOpen); rosto cujo
+                # landmarker não funciona (jawOpen travado em 0) só é escolhido quando
+                # há voz e ninguém mais mexe a boca; voz sem boca nenhuma = fora do quadro
+                lado = 0 if np.mean([p["x"] for p in pes]) > W / 2 else W
+                fora = {"x": float(lado), "amostras": [], "tam": 0.0, "fora": True}
+                pes_f = pes + [fora]
+                serie = _falante_boca(pes, env, c0, c1, a)
+                prev_x = {}
+                for t, i in serie:
+                    p = pes_f[i]
+                    alvo = p["x"] if p.get("fora") else _x_local(p, t)
+                    x = faixa(alvo)
+                    ant = prev_x.get(i)
+                    if ant is not None and abs(ant - x) < 70:   # histerese: não balança com o gesto
+                        x = ant
+                    prev_x[i] = x
                     if trechos and trechos[-1]["modo"] == "crop" and trechos[-1]["x"] == x \
                             and abs(trechos[-1]["ate"] - (a + t)) < 1e-6:
                         trechos[-1]["ate"] = a + min(t + PASSO, c1)
                     else:
                         trechos.append({"de": a + t, "ate": a + min(t + PASSO, c1), "modo": "crop",
                                         "x": x, "pessoa": i})
+        trechos = _vazios_viram_fit(trechos, med["rostos"], a, med["dur"], video, W, H)
         if trechos:
             trechos[0]["de"], trechos[-1]["ate"] = a, b
         return {"vertical": False, "W": W, "H": H, "cw": cw, "trechos": trechos}
 
-    return derivado("enquadramento", [video], {"a": round(a, 3), "b": round(b, 3), "versao": 3},
+    return derivado("enquadramento", [video], {"a": round(a, 3), "b": round(b, 3), "versao": 20},
                     "1", calcular)
 
 
@@ -290,6 +535,21 @@ def filtro(trecho: dict, W: int, H: int, saida=(1080, 1920), rot: str = "0") -> 
     ow, oh = saida
     if trecho["modo"] == "inteiro":
         return f"scale={ow}:{oh}:force_original_aspect_ratio=decrease,pad={ow}:{oh}:(ow-iw)/2:(oh-ih)/2"
+    if trecho["modo"] == "dividida":
+        # tela em cima, câmera embaixo, as duas na largura toda, sobre o quadro desfocado
+        tx, ty, tw, th = trecho["tela"]
+        cx, cy, cw_, ch = trecho["cam"]
+        h1 = int(round(ow * th / tw / 2)) * 2
+        h2 = int(round(ow * ch / cw_ / 2)) * 2
+        gap = 24
+        y1 = max(0, (oh - h1 - h2 - gap) // 2)
+        y2 = y1 + h1 + gap
+        r = rot
+        return (f"split=3[f{r}][t{r}][c{r}];[f{r}]scale={ow}:{oh}:force_original_aspect_ratio=increase,"
+                f"crop={ow}:{oh},gblur=sigma=30,eq=brightness=-0.12[bb{r}];"
+                f"[t{r}]crop={tw}:{th}:{tx}:{ty},scale={ow}:{h1}:flags=lanczos[tt{r}];"
+                f"[c{r}]crop={cw_}:{ch}:{cx}:{cy},scale={ow}:{h2}:flags=lanczos[cc{r}];"
+                f"[bb{r}][tt{r}]overlay=0:{y1}[x{r}];[x{r}][cc{r}]overlay=0:{y2}")
     if trecho["modo"] == "crop":
         cw = int(H * 9 / 16) // 2 * 2
         return f"crop={cw}:{H}:{trecho['x']}:0,scale={ow}:{oh}:flags=lanczos"

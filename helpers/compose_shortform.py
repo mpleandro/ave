@@ -1001,7 +1001,8 @@ def video_duration(path: Path) -> float:
          "default=noprint_wrappers=1:nokey=1", str(path)],
         capture_output=True, text=True, check=True,
     )
-    return float(out.stdout.strip())
+    # o ffmpeg 9 repete o stream quando o arquivo traz um stream_group
+    return float(out.stdout.split()[0])
 
 
 def width_of(texts: list[str], st: dict) -> float:

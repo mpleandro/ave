@@ -243,8 +243,13 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     if not pick:
         return data, False
     caps = data.setdefault("captions", {})
-    if pick.get("captions"):
+    if pick.get("captions") == "nenhuma":
+        # "sem legenda" é desligar, não um estilo — gravado como style a
+        # Fase 2 recusava o envio por "estilo não portado"
+        caps["enabled"] = False
+    elif pick.get("captions"):
         caps["style"] = pick["captions"]
+        caps["enabled"] = True
     if pick.get("accent"):
         data["accent"] = pick["accent"]
     # DUAS cores, dois papeis: `color` e o corpo do texto, `accent` e o
