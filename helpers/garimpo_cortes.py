@@ -298,6 +298,16 @@ def etapa_avaliar(f: Fonte) -> None:
         r, nota = contexto[c["id"]]
         versoes(f, c, r, nota, pop, (times, levels), pre["floor_db"])
     top = [c for c in RK.aplicar(rk, top) if c["score_final"] >= f.cfg["selecao"]["nota_min"]]
+    # pedidos pelo assunto (`prefiltro.incluir`) entram na galeria com a nota do
+    # lote, mesmo abaixo da régua: quem pediu já decidiu que o trecho vale
+    incl = set(f.cfg["prefiltro"].get("incluir") or [])
+    ja = {c["id"] for c in top}
+    for c in avaliados:
+        if c["id"] in incl and c["id"] not in ja and not c["ruido"]:
+            r, nota = contexto[c["id"]]
+            versoes(f, c, r, nota, pop, (times, levels), pre["floor_db"])
+            c["pedido"] = True
+            top.append(c)
     TH.gerar(f.video, top, f.trab / "analise" / "thumbs")
     for k, c in enumerate(top, 1):
         c["rank"] = k

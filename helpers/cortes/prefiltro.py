@@ -75,4 +75,12 @@ def pontuar(cands: list[dict], audio: list[dict], auto: list[dict], ws: list[dic
 def finalistas(pontuados: list[dict], cfg: dict) -> list[dict]:
     p = cfg["prefiltro"]
     vivos = [c for c in pontuados if c["autocontencao"]["nota"] >= p["autocontencao_min"]]
-    return selecao.podar(vivos, "previa", p["finalistas"], p["sobreposicao_max"])
+    fin = selecao.podar(vivos, "previa", p["finalistas"], p["sobreposicao_max"])
+    # `incluir`: trechos que a pessoa PEDIU pelo assunto ("o trecho da Vertuz") entram
+    # mesmo sem nota prévia alta — o garimpo ordena, quem pediu decide
+    pedidos = [c for c in pontuados if c["id"] in set(p.get("incluir") or [])]
+    if pedidos:
+        def sobrepoe(x, y):
+            return min(x["end"], y["end"]) - max(x["start"], y["start"]) > 0
+        fin = [c for c in fin if not any(sobrepoe(c, q) for q in pedidos)] + pedidos
+    return fin

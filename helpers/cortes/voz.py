@@ -78,7 +78,7 @@ def impressao(sig: np.ndarray) -> np.ndarray:
     return e / (np.linalg.norm(e) + 1e-9)
 
 
-def diarizar(x: np.ndarray, n: int) -> list[tuple[float, int]]:
+def diarizar(x: np.ndarray, n: int, janela: float = JANELA, passo: float = PASSO_J) -> list[tuple[float, int]]:
     """[(centro da janela em s, voz 0..n-1)] nas janelas com voz."""
     q = np.array([np.sqrt((x[i:i + 1600] ** 2).mean() + 1e-9) for i in range(0, max(0, len(x) - 1600), 1600)])
     if not len(q):
@@ -87,12 +87,12 @@ def diarizar(x: np.ndarray, n: int) -> list[tuple[float, int]]:
     voz = db > np.percentile(db, 30)
     T, E = [], []
     dur = len(x) / 16000
-    for s in np.arange(0, max(0.0, dur - JANELA), PASSO_J):
-        i0, i1 = int(s * 10), int((s + JANELA) * 10)
+    for s in np.arange(0, max(0.0, dur - janela), passo):
+        i0, i1 = int(s * 10), int((s + janela) * 10)
         if voz[i0:i1].mean() < 0.6:
             continue
-        T.append(s + JANELA / 2)
-        E.append(impressao(x[int(s * 16000):int((s + JANELA) * 16000)]))
+        T.append(s + janela / 2)
+        E.append(impressao(x[int(s * 16000):int((s + janela) * 16000)]))
     if len(E) < n:
         return [(t, 0) for t in T]
     E = np.array(E)
