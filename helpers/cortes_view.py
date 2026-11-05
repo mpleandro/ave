@@ -617,51 +617,73 @@ def ctas_projeto() -> dict | None:
     return {**d, "ctas": itens, "_pasta": p.parent}
 
 
-def _com_cta(c: dict, base: Path, cta_id: str, nome: str) -> str:
-    """Corte + o CTA escolhido no fim, publicado como `<nome>_cta-<id>.mp4` —
-    um arquivo à parte: o corte limpo continua o mesmo."""
-    cfg = ctas_projeto()
-    item = next((x for x in (cfg or {}).get("ctas", []) if x["id"] == cta_id), None)
-    if not item:
-        raise RuntimeError(f"CTA {cta_id!r} não existe neste projeto")
+def _fecho_pronto(cfg: dict, item: dict) -> Path:
+    """O CTA com o botão JÁ MONTADO, uma vez por CTA (`_ctas/prontos/<id>.mp4`).
+    Ele é igual em todo corte, então refazer a montagem (HyperFrames, ~1 min) a
+    cada pedido era tempo jogado fora — pergunta do usuário, 2026-11-05. Refaz
+    só quando o clipe, o ctas.json ou o kit mudam."""
     pasta = cfg["_pasta"]
     kit = (pasta / (cfg.get("kit") or "../_kit/montar.py")).resolve()
     if not kit.is_file():
         raise RuntimeError(f"não achei o kit de montagem ({kit})")
-    work = pasta / "render" / f"{c['id']}_{cta_id}"
-    # do zero a cada pedido: o kit reaproveita a pasta hf/, e uma base nova com
-    # uma composição velha (outra duração) sairia cortada
-    if work.exists():
-        shutil.rmtree(work)
-    work.mkdir(parents=True)
-    # o kit emenda com `-c copy`: o corte tem de sair com os MESMOS parâmetros
-    # dos clipes de CTA (1080×1920, 30 fps, H.264 yuv420p, AAC 44,1 kHz
-    # estéreo), senão o concat sai com o áudio dessincronizado ou quebra
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(base),
-                    "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,"
-                           "pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1",
-                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2",
-                    "-movflags", "+faststart", str(work / "seg0.mp4")], check=True)
-    (work / "seg1.mp4").symlink_to(pasta / item["arquivo"])
-    botao = cfg.get("botao") or {}
-    (work / "spec.json").write_text(json.dumps({
-        "titulo": c.get("titulo_sugerido") or c["id"], "segs": ["seg0.mp4", "seg1.mp4"],
-        "cta": {"seg": 1, "texto": botao.get("texto", "Acesse agora"),
-                "sub": botao.get("sub", "CLIQUE NO LINK"),
-                "entra": item.get("entra", 0.25), "clique": item["clique"]}},
-        ensure_ascii=False, indent=1))
-    log = work / "montar.log"
-    with open(log, "w") as fo:
-        r = subprocess.run([sys.executable, str(kit), str(work)], stdout=fo,
-                           stderr=subprocess.STDOUT, cwd=str(work))
-    pronto = work / f"{work.name}.mp4"
-    if r.returncode or not pronto.exists():
-        cauda = [l for l in log.read_text(errors="ignore").splitlines() if l.strip()][-6:]
-        raise RuntimeError(" / ".join(cauda)[-600:] or f"montagem do CTA saiu com código {r.returncode}")
+    clipe = pasta / item["arquivo"]
+    destino = pasta / "prontos" / f"{item['id']}.mp4"
+    fontes = [clipe, pasta / "ctas.json", kit]
+    if destino.exists() and destino.stat().st_mtime >= max(f.stat().st_mtime for f in fontes):
+        return destino
+    with _trava(f"fecho-{item['id']}"):
+        if destino.exists() and destino.stat().st_mtime >= max(f.stat().st_mtime for f in fontes):
+            return destino
+        work = pasta / "render" / f"_fecho_{item['id']}"
+        if work.exists():
+            shutil.rmtree(work)
+        work.mkdir(parents=True)
+        (work / "seg0.mp4").symlink_to(clipe)
+        botao = cfg.get("botao") or {}
+        (work / "spec.json").write_text(json.dumps({
+            "titulo": f"CTA {item.get('nome', item['id'])}", "segs": ["seg0.mp4"],
+            "cta": {"seg": 0, "texto": botao.get("texto", "Acesse agora"),
+                    "sub": botao.get("sub", "CLIQUE NO LINK"),
+                    "entra": item.get("entra", 0.25), "clique": item["clique"]}},
+            ensure_ascii=False, indent=1))
+        log = work / "montar.log"
+        with open(log, "w") as fo:
+            r = subprocess.run([sys.executable, str(kit), str(work)], stdout=fo,
+                               stderr=subprocess.STDOUT, cwd=str(work))
+        pronto = work / f"{work.name}.mp4"
+        if r.returncode or not pronto.exists():
+            cauda = [l for l in log.read_text(errors="ignore").splitlines() if l.strip()][-6:]
+            raise RuntimeError(" / ".join(cauda)[-600:] or f"montagem do CTA saiu com código {r.returncode}")
+        destino.parent.mkdir(exist_ok=True)
+        shutil.copy2(pronto, destino)
+        shutil.rmtree(work, ignore_errors=True)
+    return destino
+
+
+def _com_cta(c: dict, base: Path, cta_id: str, nome: str) -> str:
+    """Corte + o CTA escolhido no fim, publicado como `<nome>_cta-<id>.mp4` —
+    um arquivo à parte: o corte limpo continua o mesmo. A emenda é uma passada
+    só de ffmpeg (segundos): o fecho já vem montado (`_fecho_pronto`)."""
+    cfg = ctas_projeto()
+    item = next((x for x in (cfg or {}).get("ctas", []) if x["id"] == cta_id), None)
+    if not item:
+        raise RuntimeError(f"CTA {cta_id!r} não existe neste projeto")
+    fecho = _fecho_pronto(cfg, item)
     destino = TRAB / f"{nome}_cta-{cta_id}.mp4"
     tmp = destino.with_suffix(".tmp.mp4")
-    shutil.copy2(pronto, tmp)
+    # o corte pode vir em outro fps/tamanho (60 fps da fonte): normaliza os dois
+    # lados e emenda com o filtro concat; volume medido no vídeo INTEIRO
+    norm = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1,format=yuv420p"
+    fc = (f"[0:v]{norm}[v0];[1:v]{norm}[v1];"
+          "[0:a]aresample=44100,aformat=channel_layouts=stereo[a0];"
+          "[1:a]aresample=44100,aformat=channel_layouts=stereo[a1];"
+          "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a];"
+          "[a]loudnorm=I=-14:TP=-1:LRA=11,aresample=44100[ao]")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(base), "-i", str(fecho),
+                    "-filter_complex", fc, "-map", "[v]", "-map", "[ao]",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-movflags", "+faststart", str(tmp)],
+                   check=True)
     tmp.replace(destino)
     return destino.name
 
