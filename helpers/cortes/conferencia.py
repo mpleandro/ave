@@ -68,11 +68,26 @@ def conferir(video: Path, a: float, b: float, plano: dict | None = None) -> dict
         centro = x + cw / 2
         perto = min(fs, key=lambda r: abs(r[1] - centro))
         desvio = abs(perto[1] - centro) / cw
+        # o rosto de quem está na faixa às vezes não é detectado neste quadro
+        # (perfil, microfone na frente): vale onde ele esteve há pouco
+        quem = tr.get("pessoa")
+        if desvio > 0.28 and el and isinstance(quem, str):
+            chave = (c0, c1)
+            if chave not in cache:
+                cache[chave] = EQ._pessoas_elenco(med["rostos"], c0, c1, el)
+            am = [q[1] for q in cache[chave].get(quem, {}).get("amostras", []) if abs(q[0] - s) <= 1.5]
+            if am and min(abs(v - centro) for v in am) / cw <= 0.28:
+                desvio = 0.0
         if desvio > 0.28:
             erros["fora"] += passo
             marcas.append((round(s, 1), f"rosto fora do centro ({desvio:.0%})"))
         n = nomes[k] if k < len(nomes) else None
-        if el and n:
+        # meio segundo em volta de uma TROCA de enquadramento é a própria
+        # virada (a voz nova começa um instante antes do corte de imagem) —
+        # não é falante errado
+        perto_troca = any(abs(t - x["de"]) <= 0.5 for x in pl["trechos"]) and \
+            any(abs(t - x["ate"]) <= 0.5 for x in pl["trechos"])
+        if el and n and not perto_troca:
             chave = (c0, c1)
             if chave not in cache:
                 cache[chave] = EQ._pessoas_elenco(med["rostos"], c0, c1, el)

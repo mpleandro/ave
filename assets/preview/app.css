@@ -2412,3 +2412,20 @@ button.tl-chip:disabled { cursor: default; }
    (largura máxima em vw, raio) cortavam a tela virtual pela metade */
 .player-frame .demo-stage video.dm-video { position: absolute; inset: 0; width: 100%; height: 100%;
   max-width: none; max-height: none; border-radius: 0; object-fit: cover; }
+
+/* ---------- MODO CORTE (editor dentro da galeria de cortes) ----------
+   Sem linha do tempo, sem trocar de projeto: só o player e as camadas do
+   render, que ocupam a largura que a coluna de trabalho deixou. */
+.modo-corte #workCol,
+.modo-corte #homeBtn,
+.modo-corte #approveBar,
+.modo-corte #gateNote,
+.modo-corte .viewseg { display: none !important; }
+.modo-corte .layers { flex: 1 1 auto; max-width: none; }
+.modo-corte #layersToggle { pointer-events: none; }
+.modo-corte .mc-texto { display: grid; gap: 8px; margin-top: 8px; }
+.modo-corte .mc-campo { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 10px; font-size: 13px; }
+.modo-corte .mc-input { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+  color: inherit; padding: 8px 10px; font: inherit; min-width: 0; }
+.modo-corte .mc-input[type=color] { padding: 2px; height: 34px; width: 64px; }
+.modo-corte .mc-dica { font-size: 12px; opacity: .7; line-height: 1.5; }

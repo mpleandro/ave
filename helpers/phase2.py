@@ -159,8 +159,17 @@ def balance_two_lines(text: str) -> list[str]:
     # um" tem duas linhas parelhas e parte a locução no lugar errado. Quem sabe
     # onde a frase respira é quem a escreveu.
     if "/" in text:
-        partes = [t.strip() for t in text.split("/") if t.strip()]
-        return (partes + ["", ""])[:2]
+        # "/ /" (parte vazia) = MAIS ESPAÇO antes da linha seguinte: vira o
+        # prefixo "§" que o compositor lê (`hl_marcas`), junto com os `+`/`-`
+        # do começo da linha (±10% de corpo cada). Pedido do usuário, 2026-11.
+        partes, gap = [], False
+        for t in (x.strip() for x in text.split("/")):
+            if not t:
+                gap = bool(partes)
+                continue
+            partes.append(("§" if gap else "") + t)
+            gap = False
+        return (partes + ["", ""])[:max(2, min(len(partes), 4))]
     w = text.split()
     if len(w) < 2:
         return [text, ""]
@@ -320,15 +329,21 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     # também valem. O envio comum não as aplica — a aba manda as de fábrica e
     # quem muda fonte e cor é o chat —, mas escolher "Reels da Marca" é pedir
     # o pacote inteiro, letra e cor inclusas.
-    if pick.get("estiloSalvo"):
+    # MODO CORTE (editor dentro da galeria de cortes): não há chat no circuito,
+    # então fonte e cor escolhidas na própria aba VALEM — é o único canal.
+    modo_corte = bool(load(edit / "state.json", {}).get("modoCorte"))
+    if pick.get("estiloSalvo") or modo_corte:
         hook = data.setdefault("hook", {})
         for de, para in (("fontMain", "fontMain"), ("fontAccent", "fontAccent"),
                          ("textColor", "color")):
             if pick.get(de):
                 hook[para] = pick[de]
-        if pick.get("capFont"):
+        if pick.get("capFont") and not modo_corte:
             data.setdefault("captions", {})["fontMain"] = pick["capFont"]
-        data["estiloSalvo"] = pick["estiloSalvo"]
+        if pick.get("estiloSalvo"):
+            data["estiloSalvo"] = pick["estiloSalvo"]
+        else:
+            data.pop("estiloSalvo", None)
     else:
         # escolha feita à mão depois de um salvo: o vídeo já não é mais ele
         data.pop("estiloSalvo", None)

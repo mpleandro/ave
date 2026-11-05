@@ -960,11 +960,33 @@ defeito real que ela evita — leia antes de mudar.
 3. **Abra a galeria:** `cortes_view.py "<video>"` (porta 4830) e dê a URL. Na
    tela: versões (gancho puxado, sem respiros, erros de fala corrigidos — cada
    uma aplica, reprocessa e desfaz sozinha, com o score novo), legenda
-   separada (.srt) ou queimada, download e **Editar no Avelin** (um projeto
-   por vídeo longo, sem cópia de vídeo, reaproveitado a cada corte).
+   separada (.srt) ou queimada, download (seta vermelha = não baixado, verde =
+   baixado) e **Editar estilo** — o editor do Avelin num iframe, em **modo
+   corte** (`?modo=corte`: sem linha do tempo, direto nas camadas do render).
+   Cada corte vira um projeto `<stem>_cortes/editor/<id>/edit/` com o corte
+   PRONTO como `preview.mp4` (nada se refaz da fonte) e o texto da galeria
+   como `cut_mapped.json`; salvar dispara a Fase 2 e o `final.mp4` passa a ser
+   a versão do corte (`edicao/edicoes.json`). No modo corte a camada Headline
+   tem campo de texto, cor e fonte (sem chat no circuito, a aba manda).
 4. **Fonte horizontal:** o download sai em 9:16 seguindo quem fala
    (`enquadramento.py` + `voz.py`); o recurso `enquadramento` instala na
-   primeira vez.
+   primeira vez. A câmera DESLIZA atrás do rosto (`_trajeto`), tela
+   compartilhada vira dividida (slide e janela inteiros), plano aberto e rosto
+   de perfil não viram tela cheia.
+5. **Pessoas fixas (live, podcast): crie o ELENCO antes de exportar.**
+   `python -m cortes.elenco criar <video> elenco_ref.json` com trechos em que
+   você CONFIRMOU quem fala (voz) e um quadro de cada um (cor da roupa). Com
+   `<stem>_cortes/elenco.json`, quem fala sai da voz e o rosto certo sai da
+   roupa — microfone de mão esconde a boca, e a decisão pela boca põe a faixa
+   em quem só reage (medido em quatro cortes da Mentoria Mil Milionários).
+6. **Confira ANTES de mostrar — todos, em lote.** `cortes/conferencia.py`
+   (`conferir(video, a, b)`) aponta, por meio segundo, falante fora da faixa,
+   tela cheia com gente e rosto fora do centro. Reprovado se corrige antes de
+   chegar ao usuário; ele não revisa enquadramento um a um.
+
+**Headline — marcas no texto** (editor e chat): `/` quebra a linha, `/ /`
+dá mais espaço, `+`/`-` no começo da linha = ±10% de corpo por sinal
+(`compose_shortform.hl_marcas`).
 
 Parâmetros e pesos em `helpers/cortes/config.json` (sobrescreva por projeto em
 `<stem>_cortes/cortes_config.json`). Na galeria entram só cortes com nota

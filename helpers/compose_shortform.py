@@ -1318,6 +1318,23 @@ def hl_hero_index(lines: list[str], h: dict) -> int:
     return len(lines) // 2
 
 
+def hl_marcas(lines: list[str]) -> tuple[list[str], list[float], list[bool]]:
+    """As marcas de controle do texto da headline (pedido do usuário, 2026-11):
+    `+`/`-` no começo da linha = ±10% de corpo por sinal; prefixo `§` (vem do
+    "/ /") = mais espaço antes da linha. Devolve o texto LIMPO — é ele que se
+    mede —, o multiplicador e a folga de cada linha."""
+    limpas, mult, folga = [], [], []
+    for l in lines:
+        g = l.startswith("§")
+        l = l[1:] if g else l
+        n = len(l) - len(l.lstrip("+-"))
+        sinal = l[:n]
+        limpas.append(l[n:].strip())
+        mult.append(1.1 ** (sinal.count("+") - sinal.count("-")))
+        folga.append(g)
+    return limpas, mult, folga
+
+
 def hl_ks(lines: list[str], h: dict) -> list[float]:
     """Multiplicador de corpo por linha; a última entrada vale para as extras."""
     # A herói pelo ÍNDICE e não por posição fixa em `sizes`: com o meio como
@@ -1710,12 +1727,14 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
     raw = [l for l in raw if l]
     if not raw:
         return "", ""
+    raw, hl_mult, hl_folga = hl_marcas(raw)
     raw = [l.upper() if hl_is_upper(i, len(raw), h) else l for i, l in enumerate(raw)]
 
     size = hl_fit(raw, h, fonts)
     ks = hl_ks(raw, h)
     if h.get("heroLast"):
         ks[-1] = hl_hero_size(raw, h, fonts) / size
+    ks = [k * m for k, m in zip(ks, hl_mult)] + ks[len(hl_mult):]
     end = float(hook.get("endSec", 4.0))
 
     # O gancho NÃO transfere de graça para a tela dividida: a altura padrão o
@@ -1759,7 +1778,10 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
     # elas têm SLOTS e MOVIMENTO, e forçá-las no bloco de linhas antigo seria
     # perder as duas coisas. Os layouts antigos não têm `motor` e seguem aqui.
     if h.get("motor") == "cartela":
-        bloco, css = cartela_markup(data, hook, h, style_id, fonts, main_color,
+        # a cartela tem slots próprios: as marcas `+`/`-`/"/ /" só saem do texto
+        hook_c = {**hook, "lines": hl_marcas([l for l in (hook.get("lines") or []) if l])[0]} \
+            if hook.get("lines") else hook
+        bloco, css = cartela_markup(data, hook_c, h, style_id, fonts, main_color,
                                     accent, end, top)
         return posicionar(bloco), css
 
@@ -1780,9 +1802,10 @@ def hook_markup(data: dict, accent: str, splits: list[dict] | None = None) -> tu
             inner = "".join(f'<span class="hl-word">{esc(w)}</span>' for w in l.split())
         else:
             inner = esc(l)
+        folga = "; margin-top:0.45em" if i < len(hl_folga) and hl_folga[i] else ""
         out.append(
             f'<div class="{" ".join(cls)}" data-text="{esc(l)}" '
-            f'style="--hl-k:{ks[i]:.4f}; font-weight:{wgt}">{inner}</div>')
+            f'style="--hl-k:{ks[i]:.4f}; font-weight:{wgt}{folga}">{inner}</div>')
 
     grad = h.get("gradient")
     extra = ""

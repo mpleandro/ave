@@ -341,6 +341,102 @@ def avelin_url() -> str | None:
         return None
 
 
+# ------------------------------------------------------------- modo corte
+
+def _editor(garantir: bool = True) -> str:
+    """URL do editor do Avelin — sobe um se nenhum estiver no ar."""
+    url = avelin_url()
+    if url or not garantir:
+        return url
+    import socket  # noqa: PLC0415
+    import time  # noqa: PLC0415
+    sk = socket.socket()
+    sk.bind(("127.0.0.1", 0))
+    porta = sk.getsockname()[1]
+    sk.close()
+    log = TRAB / "editor" / "servidor.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.Popen([sys.executable, str(SKILL / "helpers" / "preview_server.py"), "--port", str(porta)],
+                     stdout=open(log, "ab"), stderr=subprocess.STDOUT, start_new_session=True)
+    for _ in range(60):
+        time.sleep(0.25)
+        url = avelin_url()
+        if url:
+            return url
+    raise Recusa("não consegui abrir o editor do Avelin", 503)
+
+
+def projeto_corte(c: dict) -> Path:
+    return TRAB / "editor" / c["id"] / "edit"
+
+
+def preparar_edicao(c: dict) -> dict:
+    """O corte vira um projeto do Avelin JÁ APROVADO: `preview.mp4` é o corte
+    pronto (em pé, enquadrado — não se refaz nada a partir da fonte), o texto
+    da legenda é o MESMO da galeria (`cut_mapped.json`) e a aba Estilo abre
+    sozinha. O vídeo base é congelado na primeira abertura: renderizar de novo
+    parte dele, e não do resultado anterior (senão headline e legenda se
+    empilhariam a cada rodada)."""
+    edit = projeto_corte(c)
+    (edit / "transcripts").mkdir(parents=True, exist_ok=True)
+    base = edit / "preview.mp4"
+    if not base.exists():
+        src = exportar(c, "original")
+        shutil.copy2(src, base)
+        ws, _ = palavras_da_versao(c, "original")
+        palavras = [{"type": "word", "text": w["w"], "start": float(w["s"]), "end": float(w["e"]),
+                     "speaker_id": "speaker_0"} for w in ws]
+        (edit / "transcripts" / "cut_mapped.json").write_text(json.dumps(
+            {"words": palavras, "language_code": "por",
+             "_source": "galeria de cortes — o mesmo texto do corte"}, ensure_ascii=False))
+        r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                            "stream=r_frame_rate", "-of", "csv=p=0", str(base)], capture_output=True, text=True)
+        try:
+            n, d = r.stdout.strip().split("/")
+            fps = round(float(n) / float(d))
+        except ValueError:
+            fps = 30
+        (edit / "state.json").write_text(json.dumps({
+            "project": c.get("titulo_sugerido") or c["id"], "phase": 2, "video": "preview.mp4",
+            "editData": "hyperframes/edit-data.json", "captions": "hyperframes/captions.json",
+            "finalVideo": "final.mp4", "fps": fps, "awaitingStyle": True, "modoCorte": True,
+            "message": "Corte da galeria — escolha o estilo e renderize",
+            "origem": {"galeria": str(TRAB), "id": c["id"]}}, ensure_ascii=False, indent=2))
+    url = _editor()
+    req = urllib.request.Request(f"{url}/api/open", method="POST",
+                                 data=json.dumps({"path": str(edit)}).encode(),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=10).read()
+    except OSError as e:
+        raise Recusa(f"o editor não abriu o corte: {e}", 502)
+    return {"url": f"{url}/?modo=corte", "pasta": str(edit)}
+
+
+def estado_edicao(c: dict) -> dict:
+    """Pronto quando o `final.mp4` do projeto é mais novo que o vídeo base: aí
+    ele vira a versão editada do corte na galeria (todo download sai dele)."""
+    edit = projeto_corte(c)
+    final, base = edit / "final.mp4", edit / "preview.mp4"
+    prog = {}
+    try:
+        prog = json.loads((edit / "progress.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        pass
+    pronto = final.exists() and base.exists() and final.stat().st_mtime > base.stat().st_mtime
+    if pronto:
+        mapa = TRAB / "edicao" / "edicoes.json"
+        mapa.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            d = json.loads(mapa.read_text())
+        except (OSError, json.JSONDecodeError):
+            d = {}
+        if d.get(c["id"]) != str(final):
+            d[c["id"]] = str(final)
+            mapa.write_text(json.dumps(d, ensure_ascii=False))
+    return {"pronto": pronto, "progresso": prog.get("tasks") or prog}
+
+
 def importar_avelin(c: dict, versao: str, forcar: bool = False) -> dict:
     """UM projeto do Avelin por vídeo longo — `<stem>_cortes/avelin/` —,
     reaproveitado a cada corte, sem cópia de vídeo nenhuma: o EDL aponta para
@@ -511,6 +607,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/legenda-modelos":
             return self._json({"modelos": L.MODELOS, "salvo": estilo_salvo(),
                                "forca": L.FORCA.pattern})
+        if path == "/api/editar/estado":
+            q = parse_qs(urlparse(self.path).query)
+            c = next((x for x in cortes()["cortes"] if x["id"] == (q.get("id") or [""])[0]), None)
+            if not c:
+                return self._json({"erro": "corte não encontrado"}, 404)
+            return self._json(estado_edicao(c))
         if path == "/api/processando":
             with _TRAVA:
                 return self._json({k: v[-1] for k, v in _TRABALHOS.items() if v})
@@ -560,7 +662,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         corpo = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         c = next((x for x in cortes()["cortes"] if x["id"] == corpo.get("id")), None)
-        if path in ("/api/exportar", "/api/avelin", "/api/aplicar") and not c:
+        if path in ("/api/exportar", "/api/avelin", "/api/aplicar", "/api/editar") and not c:
             return self._json({"erro": "corte não encontrado"}, 404)
         versao = normalizar(c, corpo.get("versao") or "original") if c else "original"
         rotulo = str(corpo.get("rotulo") or "Processando…")[:60]
@@ -568,6 +670,8 @@ class Handler(BaseHTTPRequestHandler):
             with _TRAVA:
                 _TRABALHOS.setdefault(c["id"], []).append(rotulo)
         try:
+            if path == "/api/editar":
+                return self._json(preparar_edicao(c))
             if path == "/api/avelin":
                 return self._json(importar_avelin(c, versao, bool(corpo.get("forcar"))))
             if path == "/api/legenda-estilo":

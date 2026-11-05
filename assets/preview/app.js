@@ -35,6 +35,18 @@
 
 // ---------- dom ----------
 const $ = (id) => document.getElementById(id);
+/* MODO CORTE (`?modo=corte`): o editor aberto DENTRO da galeria de cortes, num
+ * iframe, para estilizar um corte já pronto (headline, legenda, efeitos,
+ * trilha, CTA) sem linha do tempo — pedido do usuário, 2026-11. A coluna de
+ * trabalho some pelo CSS (`body.modo-corte`); o corte chega aprovado, então o
+ * portão da Fase 1 não aparece. Quem cria o projeto é `cortes_view.py`. */
+const MODO_CORTE = new URLSearchParams(location.search).get('modo') === 'corte';
+if (MODO_CORTE) document.documentElement.classList.add('modo-corte');
+/* As marcas de controle do texto da headline — `+`/`-` no começo da linha
+ * (±10% de corpo) e "/ /" (mais espaço) — são lidas no RENDER
+ * (compose_shortform.hl_marcas). A prévia ao vivo mostra o texto sem elas. */
+const semMarcas = (t) => String(t || '').replace(/\/\s*\//g, '/')
+  .split('/').map((l) => l.replace(/^\s*[+-]+/, '')).join('/');
 
 /* As telas (régua, waveform) pintam em canvas, e canvas não enxerga `var(--x)`.
  * Antes disso as cores viviam duas vezes: uma no CSS e outra em hexa cru aqui —
@@ -1282,7 +1294,7 @@ function buildCartelaDemo(host, styleId) {
   ensureFonts([fonts.main, fonts.accent]);
   const sc = host.clientWidth / projW();
 
-  const partes = C.fatiar(S.style.headlineText || HEADLINE_TEXT, h);
+  const partes = C.fatiar(semMarcas(S.style.headlineText) || HEADLINE_TEXT, h);
   let linhas = (h.linhaUnica && partes.titulo.indexOf('/') < 0)
     ? [partes.titulo] : hlLines(partes.titulo, h);
   linhas = linhas.filter(Boolean).map((l, i) => (hlUpper(i, linhas.length, h) ? l.toUpperCase() : l));
@@ -2016,6 +2028,8 @@ function styleState() {
   const ok = same('edit', def.edit) && same('headline', def.headline)
     && same('captions', def.captions) && same('accent', def.accent)
     && same('capColor', def.capColor)
+    && (!MODO_CORTE || (same('headlineText', '') && same('fontMain', FONT_MAIN_DEF)
+                        && same('textColor', '#FFFFFF')))
     && same('capDy', 0)
     && same('hookDx', 0) && same('hookDy', 0) && same('hookScale', 1)
     && same('cta', def.cta)
@@ -3578,6 +3592,37 @@ function buildLayerRows() {
    * dos dois estiver ligado, pule a pergunta de texto de headline. */
 
   if (L.elements) el('div', 'check-row', body).id = `optEl-${L.id}`;
+  if (MODO_CORTE && L.id === 'headline') buildModoCorteTexto(body);
+}
+
+/* MODO CORTE: dentro da galeria não há chat para combinar o texto da
+ * headline, então ele ganha campo aqui — com as marcas de controle — junto
+ * com a cor de destaque e a fonte. Fora do modo corte nada muda. */
+function buildModoCorteTexto(body) {
+  const g = el('div', 'dep-group mc-texto', body);
+  el('span', 'group-title', el('div', 'group-head', g)).textContent = 'Texto, cor e fonte';
+  const campo = (rotulo, tipo, valor, dica, aoMudar) => {
+    const lab = el('label', 'mc-campo', g);
+    el('span', 'mc-rotulo', lab).textContent = rotulo;
+    const inp = el('input', 'mc-input', lab);
+    inp.type = tipo; inp.value = valor || '';
+    if (dica) inp.placeholder = dica;
+    inp.addEventListener('input', () => { aoMudar(inp.value); LIVE.hookKey = null; refreshDirtyLater(); });
+    return inp;
+  };
+  campo('Headline', 'text', S.style.headlineText,
+        'Ex.: Ganha 100 mil e continua / ++POBRE', (v) => { S.style.headlineText = v; });
+  el('div', 'mc-dica', g).innerHTML =
+    '<b>/</b> quebra a linha · <b>/ /</b> mais espaço · <b>+</b> ou <b>−</b> no começo da linha: 10% maior ou menor (repita para mais)';
+  campo('Cor de destaque', 'color', S.style.accent || '#f6b40e', '', (v) => { S.style.accent = v; });
+  campo('Cor do texto', 'color', S.style.textColor || '#FFFFFF', '', (v) => { S.style.textColor = v; });
+  campo('Fonte', 'text', S.style.fontMain || FONT_MAIN_DEF, 'Ex.: Inter, Poppins, Montserrat',
+        (v) => { S.style.fontMain = v.trim() || FONT_MAIN_DEF; S.style.fontAccent = S.style.fontMain; });
+}
+let _dirtyT = null;
+function refreshDirtyLater() {
+  clearTimeout(_dirtyT);
+  _dirtyT = setTimeout(() => { if (typeof refreshActionBar === 'function') refreshActionBar(); }, 250);
 }
 
 /* O resumo no chip. Sem ele a faixa vira seis botões iguais e o usuário precisa
@@ -4204,7 +4249,7 @@ function renderLiveHook() {
   if (!w) return;
 
   const h = hlStyle(id);
-  const texto = (S.style.headlineText || '').trim() || HEADLINE_TEXT;
+  const texto = semMarcas((S.style.headlineText || '').trim()) || HEADLINE_TEXT;
   const dentro = renderedToDraft(video.currentTime || 0) <= GANCHO_SEC;
   const key = [id, texto, Math.round(w), dentro, S.style.accent, S.style.textColor,
                S.style.fontMain, S.style.fontAccent,

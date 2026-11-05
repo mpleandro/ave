@@ -433,6 +433,65 @@ def _pessoas_elenco(rostos: list, c0: float, c1: float, el: dict) -> dict[str, d
             for n, v in am.items() if len(v) >= 3}
 
 
+def _trechos_elenco(nomeados: dict[str, dict], video: Path, a: float, c0: float, c1: float,
+                    el: dict, faixa) -> list[dict]:
+    """Os trechos de uma cena guiados pelo elenco: a cada passo, quem fala pela
+    voz; pausa e voz incerta seguem com quem falava; o começo da cena antes da
+    primeira voz fica com quem fala primeiro; troca de menos de 1s é absorvida."""
+    from . import elenco as EL  # noqa: PLC0415
+    grade = list(np.arange(c0, c1, PASSO))
+    if not grade:
+        return []
+    nomes = EL.quem_fala(video, a, c0, c1, el, PASSO)
+    tempos = {n: np.array([q[0] for q in p["amostras"]]) for n, p in nomeados.items()}
+
+    def visivel(n, t, folga=0.9):
+        tt = tempos.get(n)
+        return tt is not None and len(tt) and float(np.min(np.abs(tt - t))) <= folga
+
+    def quem_aparece(t):
+        vis = [n for n in nomeados if visivel(n, t)]
+        return max(vis, key=lambda n: len(nomeados[n]["amostras"])) if vis else None
+
+    primeiro = next((n for n in nomes if n in nomeados), None) \
+        or max(nomeados, key=lambda n: len(nomeados[n]["amostras"]))
+    cur, serie = primeiro, []
+    for k, t in enumerate(grade):
+        n = nomes[k] if k < len(nomes) else None
+        if n in nomeados and visivel(n, t):
+            cur = n
+        elif not visivel(cur, t, 2.0):
+            # quem fala NÃO aparece nesta cena (a câmera da live está em outra
+            # pessoa): a faixa fica em quem está visível, nunca num lugar vazio.
+            # Medido no "Rico ama fazer": Paulo falando fora do quadro e a
+            # faixa num ponto onde não havia ninguém.
+            cur = quem_aparece(t) or cur
+        serie.append(cur)
+    # troca curta (< 1s) volta para o vizinho: pisca-pisca não é corte
+    runs, k = [], 0
+    while k < len(serie):
+        j = k
+        while j < len(serie) and serie[j] == serie[k]:
+            j += 1
+        runs.append([serie[k], k, j])
+        k = j
+    for r in range(len(runs)):
+        if runs[r][2] - runs[r][1] < 2 and len(runs) > 1:
+            runs[r][0] = runs[r - 1][0] if r > 0 else runs[r + 1][0]
+    out = []
+    for nome, i0, i1 in runs:
+        t0, t1 = grade[i0], min(grade[i1 - 1] + PASSO, c1)
+        if out and out[-1]["pessoa"] == nome and abs(out[-1]["ate"] - (a + t0)) < 1e-6:
+            xs = _trajeto(nomeados[nome], out[-1]["de"] - a, t1, faixa, a)
+            out[-1].update(ate=a + t1, xs=xs, x=xs[0][1])
+            continue
+        xs = _trajeto(nomeados[nome], t0, t1, faixa, a)
+        out.append({"de": a + t0, "ate": a + t1, "modo": "crop", "x": xs[0][1], "xs": xs, "pessoa": nome})
+    if out:
+        out[0]["de"], out[-1]["ate"] = a + c0, a + c1
+    return out
+
+
 def _falante_elenco(pes: list[dict], serie: list, video: Path, a: float, c0: float, c1: float,
                     el: dict, nomeados: dict[str, dict], base: int) -> list[tuple[float, int]]:
     """A série de quem fala refeita pela VOZ do elenco, apontando para o rastro
@@ -773,6 +832,15 @@ def plano(video: Path, a: float, b: float) -> dict:
             n = max(1, int((c1 - c0) * FPS))
             pes = _pessoas(med["rostos"], c0, c1, n)
             faixa = lambda cx: int(min(max(0, cx - cw / 2), W - cw))  # noqa: E731
+            # COM ELENCO, toda cena com gente segue QUEM FALA pela voz, no rastro
+            # da pessoa montado pela cor da roupa — inclusive cena de uma pessoa
+            # só: o rastreio por posição partia o Paulo andando/de perfil em
+            # pedaços curtos, o piso de amostras os descartava e a faixa ficava
+            # num rosto que passou pelo quadro (medido no "19%": 112% fora).
+            nomeados = _pessoas_elenco(med["rostos"], c0, c1, el) if el else {}
+            if nomeados:
+                trechos += _trechos_elenco(nomeados, video, a, c0, c1, el, faixa)
+                continue
             if not pes:
                 trechos.append({"de": a + c0, "ate": a + c1, "modo": "fit"})
             elif len(pes) == 1:
@@ -823,7 +891,7 @@ def plano(video: Path, a: float, b: float) -> dict:
 
     import hashlib  # noqa: PLC0415
     chave_el = hashlib.sha1(EL.caminho(video).read_bytes()).hexdigest()[:10] if el else ""
-    return derivado("enquadramento", [video], {"a": round(a, 3), "b": round(b, 3), "versao": 33,
+    return derivado("enquadramento", [video], {"a": round(a, 3), "b": round(b, 3), "versao": 35,
                                                "elenco": chave_el},
                     "1", calcular)
 
