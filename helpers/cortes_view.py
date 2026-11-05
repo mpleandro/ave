@@ -287,7 +287,7 @@ def exportar(c: dict, versao: str = "original", legendado: bool = False,
                                check=True)
                 tmp.rename(destino)
             return destino
-        if destino.exists():
+        if destino.exists() and destino.stat().st_mtime >= valido_desde():
             return destino
         segs = _plano(c, versao)
         with tempfile.TemporaryDirectory() as d:
@@ -390,11 +390,27 @@ def preparar_edicao(c: dict) -> dict:
     return {"url": f"{url}/?modo=corte", "pasta": str(edit)}
 
 
+def valido_desde() -> float:
+    """Exportado mais velho que isto é de um enquadramento ultrapassado e é
+    refeito (`analise/valido_desde`, epoch). Medido em 2026-11-05: o anúncio
+    "Trabalho, trabalho…" saiu com o Paulo enquanto a Júlia falava porque a
+    geração partiu de um arquivo feito antes da correção."""
+    try:
+        return float((TRAB / "analise" / "valido_desde").read_text().strip())
+    except (OSError, ValueError):
+        return 0.0
+
+
 def preparar_projeto(c: dict) -> Path:
     """O projeto Avelin do corte (ver `preparar_edicao`), sem abrir editor."""
     edit = projeto_corte(c)
     (edit / "transcripts").mkdir(parents=True, exist_ok=True)
     base = edit / "preview.mp4"
+    if base.exists() and base.stat().st_mtime < valido_desde():
+        # base congelada ANTES da última correção do enquadramento: refaz o
+        # projeto do corte em vez de gerar em cima de um quadro errado
+        shutil.rmtree(edit)
+        (edit / "transcripts").mkdir(parents=True, exist_ok=True)
     if not base.exists():
         src = exportar(c, "original")
         shutil.copy2(src, base)
