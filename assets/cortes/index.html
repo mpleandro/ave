@@ -1120,10 +1120,21 @@ function recursos() {
 
 // as escolhas valem para o PERFIL (como no editor, que as guarda em ~/.avelin):
 // a próxima abertura parte delas. Texto e pergunta são do CORTE e não entram.
+// MARCA DO PROJETO (/api/marca ← marca.json do trabalho): cores e fontes de
+// partida. Vence o que estava guardado UMA vez (marca nova ou mudada); depois
+// disso, o que a pessoa muda no popup é lembrado normalmente.
+let MARCA = {};
+const marcaP = fetch('/api/marca').then(r => r.json()).then(m => { MARCA = m || {}; }).catch(() => {});
+const chaveMarca = () => JSON.stringify(Object.keys(MARCA).filter(k => !k.startsWith('_')).sort().map(k => [k, MARCA[k]]));
+function comMarca(s) {
+  for (const [k, v] of Object.entries(MARCA)) if (!k.startsWith('_')) s[k] = v;
+  return s;
+}
 function estiloInicial() {
-  const base = ESTILOS.defaultStyle();
+  const base = comMarca(ESTILOS.defaultStyle());
   let salvo = {};
   try { salvo = JSON.parse(localStorage.getItem(PREFS_EST) || '{}') || {}; } catch (e) { salvo = {}; }
+  if (salvo._marca !== chaveMarca()) { comMarca(salvo); salvo._marca = chaveMarca(); }
   const s = { ...base, ...salvo, elements: { ...base.elements, ...(salvo.elements || {}) },
               cta: { ...base.cta, ...(salvo.cta || {}) } };
   // um id que saiu do catálogo volta ao padrão, em vez de virar um "—"
@@ -1156,6 +1167,7 @@ async function abrirEstilo(c) {
   carregarPalavras(c);
   try { await recursos(); } catch (e) { avisar('Não consegui carregar os estilos.'); return fecharEstilo(); }
   if (estCorte !== c || !$('#estilo').classList.contains('aberto')) return;
+  await marcaP;
   if (!est) est = estiloInicial();
   est.headlineText = textoDe[c.id] ?? (c.titulo_sugerido || '');
   est.caixaPergunta = '';
@@ -1339,7 +1351,8 @@ $('#pv-hook').addEventListener('dblclick', e => {
 
 $('#est-padrao').onclick = () => {
   const texto = est.headlineText, caixa = est.caixaPergunta;
-  est = ESTILOS.defaultStyle();
+  est = comMarca(ESTILOS.defaultStyle());
+  est._marca = chaveMarca();
   for (const id of Object.keys(INDISPONIVEL)) est.elements[id] = false;
   est.headlineText = texto; est.caixaPergunta = caixa;
   guardarPrefs();

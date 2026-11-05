@@ -280,6 +280,13 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         data.setdefault("hook", {})["style"] = "noticia"
     elif pick.get("headline"):
         data.setdefault("hook", {})["style"] = pick["headline"]
+    elif "headline" in pick:
+        # "Sem headline" escolhido: DESLIGA. O popup da galeria manda o texto
+        # pré-preenchido com o título do corte mesmo assim, e sem esta saída o
+        # bloco abaixo ligava o hook com style None — a Fase 2 recusava
+        # ("estilo de headline 'None' ainda não foi portado"), medido ao gerar
+        # só legenda + CTA no "Trabalho, trabalho e o dinheiro nunca é meu".
+        data["hook"] = {**data.get("hook", {}), "enabled": False}
     # O TEXTO da headline não tem mais campo na interface — o texto não é
     # estilo, é conteúdo, e chega depois por uma conversa (AskUserQuestion),
     # o MESMO protocolo da Caixinha/Notícia. `headlineText` só sobrevive aqui
@@ -290,7 +297,8 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     # a Fase 2 e pedir a pergunta, em vez de renderizar em silêncio sem
     # headline nenhuma.
     txt = (pick.get("headlineText") or "").strip()
-    if txt:
+    sem_headline = "headline" in pick and not pick.get("headline") and not elements.get("noticia")
+    if txt and not sem_headline:
         hook = data.setdefault("hook", {})
         hook["lines"] = balance_two_lines(txt)
         hook["enabled"] = True
@@ -338,7 +346,7 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
                          ("textColor", "color")):
             if pick.get(de):
                 hook[para] = pick[de]
-        if pick.get("capFont") and not modo_corte:
+        if pick.get("capFont"):
             data.setdefault("captions", {})["fontMain"] = pick["capFont"]
         if pick.get("estiloSalvo"):
             data["estiloSalvo"] = pick["estiloSalvo"]

@@ -964,6 +964,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ctas": []})
             return self._json({"ctas": [{k: x.get(k) for k in ("id", "nome", "fala")} for x in d["ctas"]],
                                "botao": d.get("botao")})
+        if path == "/api/marca":
+            # cores e fontes do PROJETO (marca.json no trabalho): o popup parte delas
+            try:
+                return self._json(json.loads((TRAB / "marca.json").read_text()))
+            except (OSError, json.JSONDecodeError):
+                return self._json({})
         if path == "/api/fila":
             itens = fila()
             for j in itens:
