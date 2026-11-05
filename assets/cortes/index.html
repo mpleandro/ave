@@ -423,6 +423,13 @@ details summary { cursor: pointer; color: var(--dim); font-size: 12px; text-tran
 </div>
 <div class="avisos" id="avisos" aria-live="polite"></div>
 
+<div class="editor-ov" id="editor" role="dialog" aria-label="Editar o corte">
+  <div class="editor-top">
+    <b id="ed-titulo"></b><span class="estado" id="ed-estado"></span>
+    <button class="btn" id="ed-fechar">Fechar</button>
+  </div>
+  <iframe id="ed-frame" title="Editor do Avelin" allow="autoplay; clipboard-read; clipboard-write"></iframe>
+</div>
 <script>
 const $ = s => document.querySelector(s);
 const IC_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
@@ -1280,12 +1287,5 @@ document.addEventListener('keydown', e => {
 });
 carregar();
 </script>
-<div class="editor-ov" id="editor" role="dialog" aria-label="Editar o corte">
-  <div class="editor-top">
-    <b id="ed-titulo"></b><span class="estado" id="ed-estado"></span>
-    <button class="btn" id="ed-fechar">Fechar</button>
-  </div>
-  <iframe id="ed-frame" title="Editor do Avelin" allow="autoplay; clipboard-read; clipboard-write"></iframe>
-</div>
 </body>
 </html>
