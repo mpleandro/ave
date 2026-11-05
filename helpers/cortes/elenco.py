@@ -35,7 +35,8 @@ from . import voz as VZ
 
 VOZ_MARGEM = 0.04     # vantagem mínima da melhor voz sobre a segunda
 VOZ_MIN = 0.30        # similaridade mínima para acreditar na voz
-COR_MAX = 70.0        # distância Lab acima disto: o rosto não é dessa pessoa
+COR_MAX = 45.0        # distância (`distancia`) acima disto: o rosto não é dessa pessoa
+COR_PESO_L = 0.35     # peso da LUMINOSIDADE na distância de cor (a e b valem 1)
 
 
 def caminho(video: Path) -> Path:
@@ -64,6 +65,21 @@ def cor_tronco(fr: np.ndarray, cx: float, cy: float, w: float, h: float) -> list
         return None
     m = fr[y0:y1, x0:x1].reshape(-1, 3).mean(0).astype(np.uint8)
     return [float(v) for v in cv2.cvtColor(m[None, None, :], cv2.COLOR_BGR2LAB)[0, 0]]
+
+
+def distancia(cor, ref) -> float:
+    """Distância entre duas cores Lab do tronco, com a LUMINOSIDADE valendo
+    COR_PESO_L e o croma (a, b) valendo inteiro.
+
+    O L é a luz, não a roupa: na live da Mentoria Mil Milionários (2026-11) o L
+    do vestido oliva da Camila vai de 50 (sentada na sombra) a 133 (de pé sob o
+    refletor), e no Lab puro ela ficava mais perto do creme da Júlia ou do
+    azul-marinho do Paulo que da própria cor de referência. O croma é o pano:
+    oliva a≈136–142, creme a≈130–133, marinho b≈114–128 em todas as cenas.
+    Medido em 438 rastros conferidos a olho (37.932 rostos): o nome certo em
+    93,1% dos rostos com o Lab puro e 98,2% com L × 0,35 (0,25 dá 98,1%)."""
+    d = np.asarray(cor, dtype=np.float32) - np.asarray(ref, dtype=np.float32)
+    return float(np.sqrt((COR_PESO_L * d[0]) ** 2 + d[1] ** 2 + d[2] ** 2))
 
 
 def _embeddings(video: Path, a: float, b: float, janela: float = 1.5, passo: float = 0.75):
@@ -107,7 +123,7 @@ def atribuir(pes: list[dict], el: dict) -> dict[str, int]:
     k = min(len(idx), len(gente))
     for faces in itertools.permutations(idx, k):
         for quem in itertools.permutations(range(len(gente)), k):
-            d = [float(np.linalg.norm(np.array(cores[f]) - gente[q]["_cor"])) for f, q in zip(faces, quem)]
+            d = [distancia(cores[f], gente[q]["_cor"]) for f, q in zip(faces, quem)]
             if max(d) > COR_MAX:
                 continue
             if sum(d) < custo:

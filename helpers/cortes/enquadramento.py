@@ -58,6 +58,9 @@ FPS = 10
 PASSO = 0.5            # resolução das decisões de quem fala
 TROCA_S = 1.2          # turno mais curto que isso não troca a faixa (vira pisca-pisca)
 CENA_DIF = 28.0        # diferença média (0–255) entre quadros reduzidos = corte de câmera
+FUSAO_DIF = 30.0       # diferença RMS (0–255, 64×36) mínima entre as pontas de uma fusão
+FUSAO_RES = 0.15       # resíduo máximo do modelo "fusão" (fração da diferença entre as pontas)
+FUNDO_DIF = 12.0       # fundo do compartilhamento de tela a menos que isto da referência = tela ainda no ar
 FALA_MIN = 0.004       # correlação maxilar×voz × amplitude abaixo disto = ninguém fala em quadro
 SUAVE_TAU = 0.35       # s — constante do filtro que faz a câmera DESLIZAR atrás do rosto
 SUAVE_ZONA = 16        # px — o rosto anda menos que isto e a câmera não se mexe
@@ -145,6 +148,111 @@ def _medir_agora(video: Path, a: float, b: float) -> dict:
                            None if sorriso is None else round(sorriso, 4),
                            EL.cor_tronco(fr, cx, cy, w, h)])
     return {"W": W, "H": H, "dur": b - a, "rostos": rostos, "cenas": cenas}
+
+
+def _miniaturas(video: Path, a: float, b: float, fps: int = 60) -> np.ndarray:
+    """O trecho inteiro em 64×36 a `fps` quadros/s — 1s de decodificação para 25s
+    de fonte 1080p60 (medido), barato o bastante para olhar cada quadro."""
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", str(video),
+                          "-vf", f"fps={fps},scale=64:36", "-f", "rawvideo", "-pix_fmt", "bgr24", "-"],
+                         capture_output=True).stdout
+    n = len(raw) // (64 * 36 * 3)
+    return np.frombuffer(raw[:n * 64 * 36 * 3], np.uint8).reshape(n, 36, 64, 3)
+
+
+def _fusoes(X: np.ndarray, fps: float) -> list[tuple[float, float]]:
+    """[(t do MEIO da fusão, resíduo)] — fusões (dissolves) entre dois planos.
+
+    Por que não basta a diferença entre quadros vizinhos: numa fusão de 0,5s
+    cada quadro muda 1/15 do total e nenhum passa de CENA_DIF. Medido nos 73
+    trechos da live da Mentoria Mil Milionários (2026-11): 41 fusões conferidas
+    a olho — câmera↔compartilhamento de tela e câmera↔câmera — que o detector
+    de corte seco não via. Sem o corte, a faixa deslizava do lugar do falante
+    no plano velho até o lugar dele no plano novo e cada cena misturava gente
+    dos dois. Este teste acha 37 das 41, sem nenhuma troca falsa.
+
+    O teste é o próprio modelo da fusão: no meio dela, cada quadro é uma MISTURA
+    das duas pontas, F = (1−α)·A + α·B. Para cada meia-duração L (0,1 a 0,6s) e
+    cada instante, mede-se quanto da imagem a melhor mistura NÃO explica. Uma
+    panorâmica ou alguém andando também mudam muito a imagem, mas o quadro do
+    meio é a imagem DESLOCADA, não a mistura — o resíduo fica alto. Nos 73
+    trechos: fusões e cortes com resíduo < 0,15 (a maioria < 0,10); a panorâmica
+    seguindo a Camila no "100 mil" (0–6s) dá 0,33–0,40. Ficam de fora 4 das 41:
+    três fusões feitas COM a câmera em movimento (o quadro do meio é mistura E
+    deslocamento) e uma entrada de tela em que a imagem da câmera ENCOLHE até a
+    janelinha — essa a `_estender_telas` acerta pelo fundo."""
+    n = len(X)
+    cand = []
+    for L in (3, 6, 9, 12, 18):
+        if n <= 2 * L + 1:
+            continue
+        D = X[2 * L:] - X[:-2 * L]                       # D[i−L] = X[i+L] − X[i−L]
+        nD = np.sqrt((D * D).mean(1))
+        for k in np.where(nD >= FUSAO_DIF)[0]:
+            d = D[k]
+            # a troca tem de cobrir o quadro: um selo/QR code que some num canto
+            # ou o corte DENTRO da janelinha da câmera de um compartilhamento
+            # mexem só ali (medido: 4 dos 7 falsos nos 73 trechos)
+            if (np.abs(d).reshape(-1, 3).max(1) > 25).mean() < 0.3:
+                continue
+            i = int(k) + L
+            M = X[i - L + 1:i + L] - X[i - L]
+            al = (M @ d) / float(d @ d)
+            res = float(np.sqrt(((M - al[:, None] * d[None]) ** 2).mean(1)).mean() / nD[k])
+            # a mistura tem de ATRAVESSAR a janela: com o corte seco caindo
+            # exatamente na ponta, todo o miolo é o plano velho parado (α≈0) e
+            # o resíduo sai baixo sem haver troca nenhuma ali dentro
+            if res < FUSAO_RES and al.min() < 0.3 and al.max() > 0.7:
+                # o instante da troca é onde a mistura passa da metade: o meio
+                # da fusão — ou o quadro do corte seco que caiu dentro da janela
+                # longa (sem isso, um corte seco visto com L=0,6s saía 0,57s
+                # antes do lugar, medido no "Se você não faz dinheiro")
+                meio = int(np.argmax(al >= 0.5)) if (al >= 0.5).any() else len(al) // 2
+                cand.append((res, (i - L + 1 + meio) / fps, L))
+    out: list[tuple[float, float]] = []
+    for res, t, _ in sorted(cand):                       # melhor primeiro; um por evento
+        if all(abs(t - u) > 0.6 for u, _ in out):
+            # uma janela CURTA no miolo da fusão também é mistura perfeita e
+            # põe o meio onde ela estiver; a mais longa quase tão boa cobre a
+            # fusão inteira e acha o meio dela (sintético de 0,5s: 0,12s de erro
+            # pela melhor, 0 pela mais longa)
+            viz = [c for c in cand if abs(c[1] - t) <= 0.6 and c[0] <= res + 0.03]
+            Lmax = max(c[2] for c in viz)
+            t = float(np.median([c[1] for c in viz if c[2] == Lmax]))
+            out.append((round(t, 3), round(res, 3)))
+    return sorted(out)
+
+
+def _cenas(video: Path, a: float, b: float, cortes: list[float]) -> list[float]:
+    """Início de cada cena (s, relativo a `a`): os cortes secos do `_medir` (a 10
+    quadros/s) acertados para o quadro exato, mais as fusões.
+
+    O acerto existe porque a 10 quadros/s o corte cai até 0,1s DEPOIS do
+    primeiro quadro do plano novo — 6 quadros de 60p mostrando o plano novo
+    com a faixa do velho, um tranco a cada troca de câmera."""
+    return derivado("enquadramento_cenas", [video],
+                    {"a": round(a, 3), "b": round(b, 3), "cortes": [round(c, 2) for c in cortes], "versao": 2},
+                    "1", lambda: _cenas_agora(video, a, b, cortes))
+
+
+def _cenas_agora(video: Path, a: float, b: float, cortes: list[float]) -> list[float]:
+    Q = _miniaturas(video, a, b, 60)
+    if len(Q) < 8:
+        return [0.0]
+    X = Q.reshape(len(Q), -1).astype(np.float32)
+    d = np.r_[0.0, np.sqrt(((X[1:] - X[:-1]) ** 2).mean(1))]
+    secos = []
+    for t in cortes[1:]:
+        # o plano novo começou em (t − 0,1s, t]: o quadro de 60p que mais muda ali
+        j0, j1 = max(1, int(round((t - 0.15) * 60))), min(len(X) - 1, int(round((t + 0.05) * 60)))
+        j = j0 + int(np.argmax(d[j0:j1 + 1])) if j1 >= j0 else int(round(t * 60))
+        secos.append(round(j / 60, 3))
+    fus = [t for t, _ in _fusoes(X[::2], 30.0) if all(abs(t - s) > 0.6 for s in secos)]
+    out = [0.0]
+    for t in sorted(set(secos) | set(fus)):
+        if t - out[-1] >= 2 / 60:
+            out.append(t)
+    return out
 
 
 def _pessoas(rostos: list, t0: float, t1: float, n_amostras: int) -> list[dict]:
@@ -412,22 +520,145 @@ def _falante_boca(pes: list[dict], envelope, c0: float, c1: float, a: float) -> 
     return [(float(s_), int(x)) for s_, x in zip(grade, out)]
 
 
+RASTRO_FOLGA = 0.6     # s — rosto que some mais que isto começa rastro novo
+RASTRO_VEL = 300.0     # px/s — quanto um rosto pode andar no buraco entre detecções
+
+
+def _rastros(por_t: dict) -> list[list]:
+    """Rostos ligados quadro a quadro pela POSIÇÃO: cada rosto segue o rastro vivo
+    mais perto (dois rostos do mesmo quadro nunca no mesmo rastro). Um rastro é
+    UM rosto contínuo — a mesma pessoa do começo ao fim, mesmo que a roupa mude
+    de cor com a luz. O limite cresce com o buraco: na panorâmica do "De 0 a
+    10" a Camila anda ~35px por quadro de 0,1s e some por até 0,4s."""
+    tr: list[dict] = []
+    for t in sorted(por_t):
+        fs = por_t[t]
+        vivos = [k for k, p in enumerate(tr) if 0 < t - p["ult"] <= RASTRO_FOLGA]
+        pares = sorted((abs(tr[k]["x"] - f[1]), k, n) for k in vivos for n, f in enumerate(fs))
+        usados_t, usados_f = set(), set()
+        for d, k, n in pares:
+            p, f = tr[k], fs[n]
+            lim = max(40.0, 0.6 * f[3]) + RASTRO_VEL * max(0.0, t - p["ult"] - 0.1)
+            # tamanho muito diferente = outro rosto passando perto (frente/fundo)
+            if k in usados_t or n in usados_f or d > lim or not (0.6 <= f[3] / p["w"] <= 1.65):
+                continue
+            usados_t.add(k)
+            usados_f.add(n)
+            p.update(x=f[1], w=f[3], ult=t)
+            p["fs"].append(f)
+        for n, f in enumerate(fs):
+            if n not in usados_f:
+                tr.append({"x": f[1], "w": f[3], "ult": t, "fs": [f]})
+    return [p["fs"] for p in tr]
+
+
+def _nomes_rastros(rs: list[list], gente: list[dict], cor_max: float) -> dict[int, int]:
+    """Rastro → pessoa do elenco (índice), escolhidos JUNTOS: a combinação de
+    menor custo somado, com custo de cada rastro = distância MEDIANA da cor do
+    tronco (`elenco.distancia`) × √(amostras) e "ninguém" valendo `cor_max`;
+    dois rastros que aparecem juntos (≥3 quadros e ≥40% do menor) nunca ganham
+    o mesmo nome.
+
+    Por que junto e não "o mais parecido primeiro": no anúncio "De 22 mil por
+    12x de R$ 297" (2026-11) a Camila está atrás da Júlia e o tronco abaixo do
+    rosto dela É a blusa creme da Júlia — os dois rostos davam "Júlia" (5 e 4).
+    Um a um, a Camila levava o nome e a Júlia ficava sem ninguém; juntos,
+    Camila+Júlia (19+4) custa menos que Júlia+ninguém (5+45). Por que
+    √(amostras): o close de 14s não pode perder o nome para um rosto de 3
+    quadros mais parecido, mas os 2,4s da Júlia passando ao lado da Camila (4
+    pedaços) têm de pesar contra os 20s em que a Camila, sozinha e clareada
+    pela luz, empata com a Júlia. Rastro de menos de 5 amostras escolhe depois,
+    com o que sobrou."""
+    import itertools  # noqa: PLC0415
+    from . import elenco as EL  # noqa: PLC0415
+    if not rs:
+        return {}
+    custo = []
+    for fs in rs:
+        D = np.array([[EL.distancia(f[6], p["_cor"]) for p in gente] for f in fs])
+        custo.append(np.median(D, 0))
+    ts = [{f[0] for f in fs} for fs in rs]
+    juntos = {(i, j) for i in range(len(rs)) for j in range(len(rs)) if i != j
+              and len(ts[i] & ts[j]) >= max(3, 0.4 * min(len(ts[i]), len(ts[j])))}
+    longos = [i for i, fs in enumerate(rs) if len(fs) >= 5]
+    dono: dict[int, int] = {}
+
+    def opcoes(i):
+        return [q for q in range(len(gente)) if custo[i][q] <= cor_max] + [-1]
+
+    def preco(i, q):
+        return (cor_max if q < 0 else float(custo[i][q])) * np.sqrt(len(rs[i]))
+
+    # componentes de rastros que se cruzam: cada uma resolvida por inteiro
+    vistos: set = set()
+    for i in longos:
+        if i in vistos:
+            continue
+        comp, pilha = [], [i]
+        while pilha:
+            k = pilha.pop()
+            if k in vistos:
+                continue
+            vistos.add(k)
+            comp.append(k)
+            pilha += [j for j in longos if (k, j) in juntos and j not in vistos]
+        if len(comp) <= 8:
+            melhor, escolha = np.inf, None
+            for qs in itertools.product(*[opcoes(k) for k in comp]):
+                if any(qa >= 0 and qa == qb and (ka, kb) in juntos
+                       for (ka, qa), (kb, qb) in itertools.combinations(zip(comp, qs), 2)):
+                    continue
+                tot = sum(preco(k, q) for k, q in zip(comp, qs))
+                if tot < melhor:
+                    melhor, escolha = tot, qs
+            for k, q in zip(comp, escolha):
+                if q >= 0:
+                    dono[k] = q
+        else:
+            # cena com muitos pedaços (raro): o mais parecido primeiro
+            for c_, k, q in sorted((float(custo[k][q]), k, q) for k in comp for q in opcoes(k) if q >= 0):
+                if k not in dono and not any(dono.get(j) == q for j in comp if (k, j) in juntos):
+                    dono[k] = q
+    for i in sorted((i for i in range(len(rs)) if len(rs[i]) < 5), key=lambda i: -len(rs[i])):
+        livres = [q for q in opcoes(i) if q >= 0 and not any(dono.get(j) == q for j in dono if (i, j) in juntos)]
+        if livres:
+            dono[i] = min(livres, key=lambda q: custo[i][q])
+    return dono
+
+
 def _pessoas_elenco(rostos: list, c0: float, c1: float, el: dict) -> dict[str, dict]:
-    """Cada pessoa do elenco como UM rastro, montado quadro a quadro pela cor da
-    roupa — e não pelo rastreio de posição, que parte a pessoa em pedaços quando
-    a câmera da live se move dentro do mesmo plano (medido no "Você é
-    endividado": a Camila virou 3 rastros e a faixa seguia o pedaço errado)."""
+    """Cada pessoa do elenco como UM rastro, pela cor da roupa — decidida por
+    RASTRO de rosto contínuo (`_rastros`), não quadro a quadro.
+
+    Por que não quadro a quadro (a versão anterior, que existia porque o
+    rastreio por posição parte a pessoa em pedaços quando a câmera da live se
+    move — no "Você é endividado" a Camila virou 3 rastros): a cor do tronco
+    muda dentro do mesmo plano e cada quadro decidia sozinho. Medido na live da
+    Mentoria Mil Milionários (2026-11):
+    - "De 0 a 10": a panorâmica leva a Camila (vestido oliva) para a luz, o L
+      do tronco sobe de 95 para 133 e ela fica MAIS PERTO da cor da Júlia
+      (creme) que da própria — sozinha no quadro virava "Júlia", e a faixa
+      seguia a Júlia saindo pela esquerda enquanto a Camila falava;
+    - "Doar é hábito": o Paulo levanta a mão na frente da camisa (L 33 → 64) e,
+      no plano aberto, a Camila sentada na sombra (L 48) fica mais "azul-
+      marinho" que ele — os dois trocavam de nome e a faixa ia para ela.
+    Num rastro a identidade não muda, e os nomes saem juntos (`_nomes_rastros`):
+    a Júlia, inconfundível ao lado, fica com "Júlia" — e a Camila, mesmo clara,
+    só pode ser a Camila. Os pedaços de uma pessoa partida pela câmera em
+    movimento não aparecem juntos, então cada um ganha o nome pela própria
+    cor, como antes. Conferido a olho em 438 rastros da live (37.932 rostos):
+    nome certo em 91,8% dos rostos quadro a quadro, 98,2% por rastro."""
     from . import elenco as EL  # noqa: PLC0415
     por_t: dict = {}
     for r in rostos:
         if c0 <= r[0] < c1 and len(r) > 6 and r[6] is not None:
             por_t.setdefault(r[0], []).append(r)
+    rs = _rastros(por_t)
+    gente = el["pessoas"]
     am: dict[str, list] = {}
-    for t, fs in por_t.items():
-        mapa = EL.atribuir([{"cor": f[6]} for f in fs], el)
-        for nome, i in mapa.items():
-            f = fs[i]
-            am.setdefault(nome, []).append((f[0], f[1], f[3], f[4], f[5], f[6]))
+    for i, q in _nomes_rastros(rs, gente, EL.COR_MAX).items():
+        for f in rs[i]:
+            am.setdefault(gente[q]["nome"], []).append((f[0], f[1], f[3], f[4], f[5], f[6]))
     return {n: {"x": float(np.median([q[1] for q in v])), "tam": float(np.median([q[2] for q in v])),
                 "amostras": sorted(v), "nome": n}
             for n, v in am.items() if len(v) >= 3}
@@ -516,17 +747,20 @@ def _falante_elenco(pes: list[dict], serie: list, video: Path, a: float, c0: flo
             out[k] = (out[k][0], out[k - 1][1])
     return out
 
-def _layout_tela(video: Path, t: float, cx: float, cy: float, W: int, H: int) -> dict | None:
+def _layout_tela(video: Path, t: float, cx: float, cy: float, W: int, H: int,
+                 fr: np.ndarray | None = None) -> dict | None:
     """Os dois retângulos de um compartilhamento de tela: a JANELA DA CÂMERA (o
     menor contorno que contém os rostos pequenos) e a TELA (o maior retângulo
     que não a cobre). Medido na live "Enriqueça": slide 1220×686 à esquerda,
-    câmera 581×448 à direita, com borda verde nos dois."""
+    câmera 581×448 à direita, com borda verde nos dois. `fr` = o quadro já
+    decodificado (senão busca o quadro em `t`)."""
     import cv2  # noqa: PLC0415
-    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", str(video), "-frames:v", "1",
-                          "-f", "rawvideo", "-pix_fmt", "bgr24", "-"], capture_output=True).stdout
-    if len(raw) < W * H * 3:
-        return None
-    fr = np.frombuffer(raw[:W * H * 3], np.uint8).reshape(H, W, 3)
+    if fr is None:
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", str(video), "-frames:v", "1",
+                              "-f", "rawvideo", "-pix_fmt", "bgr24", "-"], capture_output=True).stdout
+        if len(raw) < W * H * 3:
+            return None
+        fr = np.frombuffer(raw[:W * H * 3], np.uint8).reshape(H, W, 3)
     e = cv2.dilate(cv2.Canny(cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY), 40, 120), np.ones((3, 3), np.uint8))
     cs, _ = cv2.findContours(e, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     cams, telas = [], []
@@ -584,8 +818,29 @@ def _janela_camera(video: Path, t: float, cx: float, cy: float, tela: list, W: i
     return [melhor[0] + 6, melhor[1] + 6, melhor[2] - 12, melhor[3] - 12] if melhor else None
 
 
+def _fundo_da_tela(Q: np.ndarray, lay: dict, ref: list[int], W: int, H: int) -> np.ndarray:
+    """Diferença média (0–255) de cada miniatura 64×36 para o FUNDO do
+    compartilhamento de tela — o que fica fora do slide e da janela da câmera.
+
+    O fundo é a arte fixa da transmissão (na live da Mentoria Mil Milionários,
+    o redemoinho laranja e o selo do programa): dentro do compartilhamento ele
+    fica a 0–2 do quadro de referência, por mais que o slide troque e a janela
+    da câmera mude de plano; fora dele, num plano de câmera, a 60–100. Medido
+    em 9 cortes com tela (2026-11): os valores do meio (10–57) são só os
+    quadros da própria fusão de entrada ou saída."""
+    m = np.ones((36, 64), bool)
+    for x, y, w, h in (lay["tela"], lay["cam"]):
+        # a moldura e um pixel de folga ficam fora: a borda verde muda de tom
+        m[max(0, int((y - 12) * 36 / H) - 1):int(np.ceil((y + h + 12) * 36 / H)) + 1,
+          max(0, int((x - 12) * 64 / W) - 1):int(np.ceil((x + w + 12) * 64 / W)) + 1] = False
+    if m.mean() < 0.15:
+        return np.full(len(Q), np.inf)
+    R = np.median(Q[ref], 0)
+    return np.abs(Q - R)[:, m].mean((1, 2))
+
+
 def _telas_divididas(trechos: list[dict], rostos: list, a: float, dur: float,
-                     video: Path, W: int, H: int) -> list[dict]:
+                     video: Path, W: int, H: int, cenas: list[float] | None = None) -> list[dict]:
     """Compartilhamento de tela detectado PELO LAYOUT, segundo a segundo: um
     retângulo grande (o slide) ao lado de uma janela que contém os rostos.
     Esses trechos viram "dividida" — slide inteiro em cima, janela de vídeo
@@ -598,12 +853,22 @@ def _telas_divididas(trechos: list[dict], rostos: list, a: float, dur: float,
     próprio corte, e ali o pequeno era a maioria."""
     if not rostos:
         return trechos
+    # um quadro por segundo (0,5s, 1,5s, …) numa decodificação só: uma busca
+    # por quadro custava 0,28s × 3 rostos × cada segundo — 37 dos 45s do plano
+    # de um corte de 33s (medido, 2026-11). O `fps=1` a partir de `a` entrega o
+    # quadro de a + k + 0,483s (conferido quadro a quadro contra a busca);
+    # começar em a + 0,5 dava a + k + 0,983.
+    p = subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{a:.3f}", "-t", f"{dur:.3f}",
+                          "-i", str(video), "-vf", "fps=1", "-f", "rawvideo", "-pix_fmt", "bgr24", "-"],
+                         stdout=subprocess.PIPE)
     marcas = []
     for s in np.arange(0.5, dur, 1.0):
+        buf = p.stdout.read(W * H * 3)
+        fr = np.frombuffer(buf, np.uint8).reshape(H, W, 3) if len(buf) == W * H * 3 else None
         fs = [r for r in rostos if abs(r[0] - s) < 0.3]
         lay = None
-        for f in fs[:3]:
-            lay = _layout_tela(video, a + s, f[1], f[2], W, H)
+        for f in (fs[:3] if fr is not None else []):
+            lay = _layout_tela(video, a + s, f[1], f[2], W, H, fr)
             if lay:
                 tw, th = lay["tela"][2:]
                 cw_, ch = lay["cam"][2:]
@@ -612,6 +877,8 @@ def _telas_divididas(trechos: list[dict], rostos: list, a: float, dur: float,
                 else:
                     break
         marcas.append((float(s), lay))
+    p.stdout.close()
+    p.wait()
     faixas, k = [], 0
     while k < len(marcas):
         if marcas[k][1] is None:
@@ -641,10 +908,20 @@ def _telas_divididas(trechos: list[dict], rostos: list, a: float, dur: float,
                     cam = jn
             f0 = a + max(0.0, marcas[k][0] - 0.5)
             f1 = a + min(dur, marcas[j - 1][0] + 0.5)
-            faixas.append((f0, f1, {"tela": tela, "cam": cam}))
+            faixas.append((f0, f1, {"tela": tela, "cam": cam}, [m[0] for m in marcas[k:j]]))
         k = j
     if not faixas:
         return trechos
+    faixas = _estender_telas(faixas, video, a, dur, W, H, cenas or [])
+    # sobra de menos de 0,25s entre a tela e o trecho vizinho vira tela: o
+    # corte abaixo descarta pedaço curto, e sem isso ficava um buraco no plano
+    bordas = sorted({t["de"] for t in trechos} | {t["ate"] for t in trechos})
+    ajust = []
+    for f0, f1, lay in faixas:
+        f0 = next((x for x in bordas if f0 - 0.25 < x <= f0), f0)
+        f1 = next((x for x in reversed(bordas) if f1 <= x < f1 + 0.25), f1)
+        ajust.append((f0, f1, lay))
+    faixas = ajust
     out = []
     for tr in trechos:
         pedacos = [(tr["de"], tr["ate"])]
@@ -662,6 +939,60 @@ def _telas_divididas(trechos: list[dict], rostos: list, a: float, dur: float,
         out += [{**tr, "de": p0, "ate": p1} for p0, p1 in pedacos if p1 - p0 > 0.25]
     out += [{"de": f0, "ate": f1, "modo": "dividida", **lay} for f0, f1, lay in faixas]
     return sorted(out, key=lambda t: t["de"])
+
+
+def _estender_telas(faixas: list, video: Path, a: float, dur: float, W: int, H: int,
+                    cenas: list[float]) -> list[tuple[float, float, dict]]:
+    """Cada compartilhamento de tela achado pelo layout (que depende de ACHAR
+    ROSTO na janelinha, a cada segundo) estendido pelo FUNDO (`_fundo_da_tela`)
+    até onde a tela de fato vai, quadro a quadro, com a borda no meio da fusão.
+
+    Medido na live da Mentoria Mil Milionários (2026-11): a janela da câmera
+    mostra o palco aberto, os rostos ficam pequenos demais para o detector e o
+    layout "some" — no "De 0 a 10, você sabe fazer dinheiro?" 0–3s e 9–15s
+    do compartilhamento saíram como faixa 9:16 cortando o slide; no "Ganha
+    mais, gasta mais" a tela entra aos 29,4s e a dividida só começava aos 31s;
+    no "O que é liberdade financeira" um buraco de 3s no meio da tela."""
+    fps = 30
+    Q = _miniaturas(video, a, a + dur, fps).astype(np.float32)
+    if len(Q) < fps:
+        return [(f0, f1, lay) for f0, f1, lay, _ in faixas]
+    dono = np.full(len(Q), -1)
+    for n, (f0, f1, lay, sementes) in sorted(enumerate(faixas), key=lambda e: -(e[1][1] - e[1][0])):
+        ref = [min(len(Q) - 1, int(round(s_ * fps))) for s_ in sementes]
+        dif = _fundo_da_tela(Q, lay, ref, W, H)
+        igual = dif < FUNDO_DIF
+        # o fundo tem de bater nas próprias sementes; senão (fundo animado, outro
+        # tipo de layout) fica a faixa achada pelo layout, como antes
+        if igual[ref].mean() < 0.8:
+            i0, i1 = int((f0 - a) * fps), int(np.ceil((f1 - a) * fps))
+            dono[i0:i1][dono[i0:i1] < 0] = n
+            continue
+        # buraco de menos de 0,5s dentro da tela (o slide anima por cima da
+        # moldura, um clarão) não interrompe a tela
+        ix = np.where(igual)[0]
+        for p_, q_ in zip(ix, ix[1:]):
+            if 1 < q_ - p_ <= fps // 2:
+                igual[p_:q_] = True
+        dono[igual & (dono < 0)] = n
+    out, k = [], 0
+    while k < len(dono):
+        j = k
+        while j < len(dono) and dono[j] == dono[k]:
+            j += 1
+        if dono[k] >= 0 and j - k >= fps:
+            t0 = 0.0 if k == 0 else k / fps
+            t1 = dur if j >= len(dono) else j / fps
+            # a borda cai no meio da fusão (o fundo só passa no limiar a ~1/8
+            # dela) ou no corte seco: a cena mais perto, se houver uma a ≤0,5s
+            t0 = min(cenas, key=lambda c: abs(c - t0)) if t0 > 0 and cenas and \
+                min(abs(c - t0) for c in cenas) <= 0.5 else t0
+            t1 = min(cenas, key=lambda c: abs(c - t1)) if t1 < dur and cenas and \
+                min(abs(c - t1) for c in cenas) <= 0.5 else t1
+            if t1 - t0 >= 0.5:
+                out.append((a + round(t0, 3), a + round(t1, 3), faixas[dono[k]][2]))
+        k = j
+    return out
 
 
 def _vazios_viram_fit(trechos: list[dict], rostos: list, a: float, dur: float,
@@ -693,7 +1024,17 @@ def _vazios_viram_fit(trechos: list[dict], rostos: list, a: float, dur: float,
         while j < len(vaz) and vaz[j] == vaz[k]:
             j += 1
         if vaz[k] and (j - k) * PASSO >= 1.5:
-            faixas.append((a + k * PASSO, a + min(j * PASSO, dur)))
+            f0, f1 = k * PASSO, min(j * PASSO, dur)
+            # com rosto valendo ±0,6s, a grade marca o vazio 0,6–1,1s DEPOIS de
+            # ele começar e 0,1–0,6s ANTES de acabar: havendo troca de plano
+            # nesse intervalo, a borda vai para ela (sem isso, até 1s do slide
+            # numa faixa 9:16)
+            ini = [c for c in (cenas or []) if f0 - 1.2 <= c <= f0 + 0.2]
+            fim = [c for c in (cenas or []) if f1 - 0.2 <= c <= f1 + 0.7]
+            f0 = ini[0] if ini and f0 > 0 else f0
+            f1 = fim[-1] if fim and f1 < dur else f1
+            if f1 - f0 >= 1.0:
+                faixas.append((a + f0, a + f1))
         k = j
     if not faixas:
         return trechos
@@ -825,7 +1166,8 @@ def plano(video: Path, a: float, b: float) -> dict:
         med = _medir(video, a, b)
         cw = int(H * 9 / 16) // 2 * 2
         env = _envelope(video, a, b)
-        cenas = med["cenas"] + [med["dur"]]
+        cortes = _cenas(video, a, b, med["cenas"])
+        cenas = cortes + [med["dur"]]
         diar = None   # só se alguma cena tiver gente que não cabe junta
         trechos = []
         for c0, c1 in zip(cenas, cenas[1:]):
@@ -883,15 +1225,15 @@ def plano(video: Path, a: float, b: float) -> dict:
                         trechos.append({"de": a + t0, "ate": a + t1, "modo": "crop", "x": xs[0][1],
                                         "xs": xs, "pessoa": i})
                     k = j
-        trechos = _vazios_viram_fit(trechos, med["rostos"], a, med["dur"], video, W, H, med["cenas"])
-        trechos = _telas_divididas(trechos, med["rostos"], a, med["dur"], video, W, H)
+        trechos = _vazios_viram_fit(trechos, med["rostos"], a, med["dur"], video, W, H, cortes)
+        trechos = _telas_divididas(trechos, med["rostos"], a, med["dur"], video, W, H, cortes)
         if trechos:
             trechos[0]["de"], trechos[-1]["ate"] = a, b
         return {"vertical": False, "W": W, "H": H, "cw": cw, "trechos": trechos}
 
     import hashlib  # noqa: PLC0415
     chave_el = hashlib.sha1(EL.caminho(video).read_bytes()).hexdigest()[:10] if el else ""
-    return derivado("enquadramento", [video], {"a": round(a, 3), "b": round(b, 3), "versao": 35,
+    return derivado("enquadramento", [video], {"a": round(a, 3), "b": round(b, 3), "versao": 40,
                                                "elenco": chave_el},
                     "1", calcular)
 
