@@ -241,3 +241,98 @@
 .dm-segue .a, .dm-segue .b { grid-area: 1 / 1; }
 .dm-rotulo { position: absolute; left: 10px; top: 10px; padding: 4px 10px; border-radius: 999px; z-index: 2;
              background: rgba(0,0,0,.55); color: #fff; font: 600 11px/1.4 Inter, sans-serif; letter-spacing: .02em; }
+
+/* ---------- O PAINEL "CAMADAS DO RENDER" fora do editor (montarPainel) ----------
+   Tudo aqui é escopado em `.ave-painel`, que o editor NÃO usa: o editor
+   continua com as regras dele (app.css, `#layersPanel`), e nada desta seção
+   casa com o DOM de lá. Os valores são os mesmos do app.css — cartão, marca,
+   chip —, para a galeria mostrar a mesma coluna, e não uma parecida. */
+.ave-painel { display: flex; flex-direction: column; gap: 10px; min-height: 0;
+  --quadro-w: 96px; --quadro-h: 171px; --mock-h: 100px; --mock-w: calc(var(--mock-h) * 66 / 118); }
+.ave-painel-abas { display: flex; flex-wrap: wrap; gap: 6px; }
+.ave-aba { display: flex; align-items: center; gap: 7px; padding: 7px 11px; cursor: pointer;
+  border: 1px solid var(--stroke, rgba(255,255,255,.09)); border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02); color: var(--dim); font: inherit; font-size: 12px;
+  transition: color .15s, border-color .15s, background .15s; }
+.ave-aba:hover { color: var(--text, #f5f2ee); }
+.ave-aba.on { color: var(--text, #f5f2ee); border-color: rgb(var(--orange-rgb) / .5); background: rgb(var(--orange-rgb) / .08); }
+.ave-aba:focus-visible { outline: 2px solid rgb(var(--orange-rgb) / .8); outline-offset: 2px; }
+.ave-aba-ico { flex: none; width: 15px; height: 15px; }
+.ave-aba-ico svg { width: 15px; height: 15px; fill: currentColor; display: block; }
+.ave-aba-nome { font-weight: 600; white-space: nowrap; }
+/* o resumo só na aba aberta, como no editor: sete resumos numa faixa viram ruído */
+.ave-aba-resumo { display: none; font-size: 10.5px; color: var(--orange); white-space: nowrap;
+  max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.ave-aba.on .ave-aba-resumo { display: inline; }
+.ave-painel-corpo { flex: 1 1 auto; min-height: 120px; overflow-y: auto; display: flex; flex-direction: column;
+  gap: 14px; padding: 12px 2px 4px; border-top: 1px solid var(--stroke, rgba(255,255,255,.09));
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.16) transparent; }
+.ave-painel .dep-group { display: flex; flex-direction: column; gap: 8px; }
+.ave-painel .group-head { display: flex; align-items: baseline; gap: 10px; }
+.ave-painel .group-title { font-size: 11px; font-weight: 600; letter-spacing: 1.4px; text-transform: uppercase; color: var(--dim); }
+.ave-painel .opt-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.ave-painel .check-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.ave-painel .layer-soon { font-size: 11.5px; color: var(--dim); font-style: italic; }
+
+.ave-painel .opt { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 7px;
+  border-radius: 12px; background: var(--glass, rgba(255,255,255,.045)); border: 1px solid var(--stroke, rgba(255,255,255,.09));
+  cursor: pointer; transition: border-color .15s, background .15s; }
+.ave-painel .opt:hover { border-color: rgba(255, 255, 255, 0.22); }
+.ave-painel .opt:focus-visible { outline: 2px solid rgb(var(--orange-rgb) / .8); outline-offset: 2px; }
+.ave-painel .opt.on { border-color: var(--orange); background: rgb(var(--orange-rgb) / 0.07); }
+.ave-painel .opt-name { font-size: 10px; font-weight: 500; letter-spacing: .2px; line-height: 1.2; text-align: center;
+  color: rgba(255, 255, 255, 0.74); min-height: 2.4em; display: flex; align-items: center; justify-content: center;
+  max-width: calc(var(--quadro-w) + 4px); }
+.ave-painel .opt.on .opt-name { color: rgba(255, 255, 255, 0.95); }
+.ave-painel .opt-mark { position: absolute; top: 15px; right: 15px; width: 15px; height: 15px; border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.3); background: rgba(0, 0, 0, 0.35); z-index: 3; }
+.ave-painel .opt.on .opt-mark { border-color: var(--orange); background: var(--orange); }
+.ave-painel .opt.on .opt-mark::after { content: ''; position: absolute; left: 4.4px; top: 1.6px; width: 3.4px; height: 7px;
+  border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(43deg); }
+.ave-painel .opt.unavailable { opacity: .34; filter: saturate(.25); cursor: not-allowed; }
+/* o selo vai SOBRE a prévia (no meio dela), não sobre o nome: nos cartões
+   estreitos de Formato ele cobria o título, que é o que explica a opção */
+.ave-painel .opt.unavailable::after { content: 'no editor'; position: absolute; left: 50%; top: 42%;
+  transform: translateX(-50%); font-size: 8.5px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
+  padding: 2px 5px; border-radius: 999px; background: rgba(0, 0, 0, 0.7); color: rgba(255, 255, 255, 0.85); z-index: 3; }
+.ave-painel .ave-cartao { border: 1px solid rgba(255, 255, 255, 0.06); }
+/* os mocks de Formato: o cartão preso à largura do mock (título longo quebra) */
+.ave-painel .opt-grid[data-grupo="edits"] .opt-name { max-width: calc(var(--mock-w) + 4px); }
+/* Caixinha e Notícia no radio da HEADLINE: o mock ocupa o quadro dos vizinhos */
+.ave-painel .opt-grid[data-grupo="headlines"] .ave-cartao.frame { width: var(--quadro-w); height: var(--quadro-h); }
+.ave-painel .cta-grid .opt-name { max-width: calc(var(--mock-w) + 4px); }
+.ave-painel .cta-nota { font-size: 11.5px; color: var(--dim); line-height: 1.45; }
+
+.ave-painel .chk { display: flex; align-items: center; gap: 9px; padding: 7px 13px 7px 10px; border-radius: 11px;
+  background: var(--glass, rgba(255,255,255,.045)); border: 1px solid var(--stroke, rgba(255,255,255,.09)); cursor: pointer;
+  transition: border-color .15s, background .15s; }
+.ave-painel .chk:hover { border-color: rgba(255, 255, 255, 0.22); }
+.ave-painel .chk:focus-visible { outline: 2px solid rgb(var(--orange-rgb) / .8); outline-offset: 2px; }
+.ave-painel .chk.on { border-color: rgb(var(--blue-rgb) / 0.5); background: rgb(var(--blue-rgb) / 0.06); }
+.ave-painel .chk.locked { opacity: .5; }
+.ave-painel .chk-box { position: relative; flex: none; width: 16px; height: 16px; border-radius: 5px;
+  border: 1.5px solid rgba(255, 255, 255, 0.25); }
+.ave-painel .chk.on .chk-box { border-color: rgb(var(--blue-rgb)); background: rgb(var(--blue-rgb)); }
+.ave-painel .chk.on .chk-box::after { content: ''; position: absolute; left: 4.6px; top: 1.4px; width: 3.6px; height: 7.4px;
+  border: solid #071417; border-width: 0 2px 2px 0; transform: rotate(43deg); }
+.ave-painel .chk-ico { flex: none; width: 17px; height: 17px; color: var(--dim); }
+.ave-painel .chk-ico svg { width: 17px; height: 17px; fill: currentColor; display: block; }
+.ave-painel .chk.on .chk-ico { color: rgb(var(--blue-rgb)); }
+.ave-painel .chk-name { font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+
+/* os campos da headline (só com `camposHeadline`: a galeria, sem chat) */
+.ave-painel .ave-campo { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--dim); }
+.ave-painel .ave-campo textarea, .ave-painel .ave-campo input[type=text], .ave-painel .ave-campo select {
+  font: inherit; font-size: 14px; color: var(--text, #f5f2ee); background: var(--glass, rgba(255,255,255,.045));
+  border: 1px solid var(--stroke, rgba(255,255,255,.09)); border-radius: 10px; padding: 8px 10px; }
+.ave-painel .ave-campo textarea { resize: vertical; min-height: 54px; }
+.ave-painel .ave-campo textarea:disabled { opacity: .45; }
+.ave-painel .ave-campo select { padding: 6px 8px; font-size: 13px; }
+.ave-painel .ave-campo :focus-visible { outline: 2px solid rgb(var(--orange-rgb) / .8); outline-offset: 1px; }
+.ave-painel .ave-dica { font-size: 11.5px; color: var(--dim); line-height: 1.45; }
+.ave-painel .ave-dica b { color: var(--text, #f5f2ee); font-weight: 700; }
+.ave-painel .ave-cores { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
+.ave-painel .ave-cor { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+.ave-painel .ave-cor input[type=color] { width: 34px; height: 28px; border: 1px solid var(--stroke, rgba(255,255,255,.09));
+  border-radius: 8px; background: none; padding: 2px; cursor: pointer; }
+.ave-painel .ave-fonte { min-width: 150px; }

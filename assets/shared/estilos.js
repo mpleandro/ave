@@ -2417,6 +2417,427 @@ function parar() {
   lacoId = 0;
 }
 
+/* ---------- O PAINEL "CAMADAS DO RENDER" para quem NÃO é o editor ----------
+ *
+ * POR QUE EXISTE. A galeria de cortes oferece a MESMA escolha da coluna do
+ * editor (Formato, Headline, Legendas, Efeitos, Movimento, Trilha, CTA), com os
+ * mesmos cartões e as mesmas regras de clique. O `renderSetup`/`buildLayerRows`
+ * do editor vivem amarrados ao `S`, ao `<video>` e aos ids do DOM de lá —
+ * trazê-los para cá mudaria o editor. Então o editor fica como está, e esta
+ * função é a versão autocontida: recebe o objeto de escolhas (`o.estilo()`, no
+ * formato do `S.style`) e o MUTA no lugar, exatamente como os handlers do
+ * editor mutam o `S.style`. O pedido sai do mesmo `payloadEstilo`.
+ *
+ * O QUE NÃO VEM DO EDITOR, de propósito:
+ *  - os estilos SALVOS (moram no servidor do editor, em ~/.avelin);
+ *  - o OLHO das demos no player (precisa do demos.js e do palco do editor);
+ *  - a foto do CTA (o upload é rota do editor; a Fase 2 usa a foto salva).
+ * O QUE ENTRA A MAIS com `o.camposHeadline`: sem chat no circuito, a aba
+ * Headline ganha o texto (com as marcas do render), a cor principal, a de
+ * destaque e a família — no editor, quem muda essas coisas é a conversa.
+ *
+ * `o` = { estilo: () => style, aoMudar(oque), avisar(msg), keys, brand, inicial,
+ *         indisponivel: {id: motivo}, camposHeadline, idPrefixo }
+ * Devolve { render(), camada(id), ativa(), destruir() }. */
+const ICONES_CAMADA = {
+  captions: '<svg viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="3.4" y="8.4" width="4.4" height="1.5" rx=".75"/><rect x="8.9" y="8.4" width="3.7" height="1.5" rx=".75"/></svg>',
+  video: '<svg viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 5.9v4.2c0 .4.44.64.79.42l3.3-2.1a.5.5 0 0 0 0-.85l-3.3-2.1a.5.5 0 0 0-.79.43z"/></svg>',
+  inserts: '<svg viewBox="0 0 16 16"><rect x="1.2" y="3.2" width="13.6" height="9.6" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="5.3" cy="6.6" r="1.15"/><path d="M2.6 11.7l3-2.9a1 1 0 0 1 1.34-.05l1.84 1.58 1.5-1.24a1 1 0 0 1 1.29.02l1.72 1.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  music: '<svg viewBox="0 0 16 16"><path d="M13.1 1.9 6.6 3.5a.8.8 0 0 0-.6.78v6.06a2.25 2.25 0 1 0 1.5 2.12V6.6l5-1.22v3.5a2.25 2.25 0 1 0 1.5 2.12V2.68a.8.8 0 0 0-.9-.78z"/></svg>',
+  follow: '<svg viewBox="0 0 16 16"><circle cx="6.2" cy="5" r="2.9"/><path d="M1 13.6c0-2.9 2.3-4.7 5.2-4.7s5.2 1.8 5.2 4.7v.6H1v-.6z"/><path d="M13 4.6v4.6M10.7 6.9h4.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>',
+  text: '<svg viewBox="0 0 16 16"><path d="M2 2.6h12v2.5h-1.5V4.1H8.75v8.1h1.6v1.3H5.65v-1.3h1.6V4.1H3.5v1H2V2.6z"/></svg>',
+  fx: '<svg viewBox="0 0 16 16"><rect x="1.4" y="5" width="9.2" height="9.2" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.8 9.6l1.6 1.6 2.9-3.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.6.9l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>',
+};
+function montarPainel(host, o) {
+  o = o || {};
+  const st = () => (o.estilo ? o.estilo() : amb.estilo()) || {};
+  const pre = o.idPrefixo || 'ave-painel';
+  const indisp = o.indisponivel || {};
+  const mudou = (oque) => { if (o.aoMudar) o.aoMudar(oque); };
+  const avisa = (m) => (o.avisar ? o.avisar(m) : window.alert(m));
+  let ativa = LAYERS.some((L) => L.id === o.inicial) ? o.inicial : LAYERS[0].id;
+  let pararAnim = null;
+  let tTexto = null;
+
+  host.classList.add('ave-painel');
+  host.innerHTML = '';
+  const abas = el('div', 'ave-painel-abas', host);
+  abas.setAttribute('role', 'tablist');
+  const corpo = el('div', 'ave-painel-corpo', host);
+
+  /* O destaque e a cor principal descem por VARIÁVEL no painel, como no
+     editor (`applyAccent`): arrastar a roda de cor atualiza os cartões de
+     headline sem remontar nenhum. */
+  const cores = () => {
+    const s = st();
+    host.style.setProperty('--hl-accent', s.accent || ACCENT_DEFAULT);
+    host.style.setProperty('--hl-main', normHex(s.textColor) || '#FFFFFF');
+  };
+
+  // o resumo de cada aba — a mesma conta do refreshLayerSummaries do editor
+  const resumo = (L) => {
+    const s = st();
+    if (L.soon) return 'em breve';
+    if (L.cta) {
+      const m = CTA_MODELOS.find((x) => x.id === ((s.cta || {}).modelo || ''));
+      return m && m.id ? m.name : 'nenhum';
+    }
+    const bits = [];
+    for (const g of L.groups || []) bits.push(g === 'edits' ? formatoName(s)
+      : g === 'headlines' ? headlineName(s)
+      : g === 'ganchoFx' ? (s.ganchoEfeito ? styleName('ganchoFx', s.ganchoEfeito) : '')
+      : styleName(g, s.captions));
+    if (L.elements) {
+      const on = L.elements.filter((id) => {
+        const cat = STYLE_CATALOG.elements.find((x) => x.id === id);
+        return s.elements[id] && !(cat && cat.efx && elLocked(cat, s, o.keys));
+      });
+      bits.push(on.length ? `${on.length} ativo${on.length === 1 ? '' : 's'}` : 'desligado');
+    }
+    return bits.filter(Boolean).join(' · ');
+  };
+
+  function pintarAbas() {
+    abas.innerHTML = '';
+    for (const L of LAYERS) {
+      const b = el('button', `ave-aba${L.id === ativa ? ' on' : ''}`, abas);
+      b.type = 'button';
+      b.dataset.camada = L.id;
+      b.title = L.sub;
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', L.id === ativa ? 'true' : 'false');
+      el('span', 'ave-aba-ico', b).innerHTML = ICONES_CAMADA[L.ico] || '';
+      el('span', 'ave-aba-nome', b).textContent = L.name.replace(/ &.*$/, '');
+      el('span', 'ave-aba-resumo', b).textContent = resumo(L);
+    }
+  }
+
+  /* O RADIO de um grupo — o `radios()` do editor sem os salvos: as mesmas
+     opções, o mesmo "marcado", o mesmo apagado para o que não foi portado. */
+  function radios(grid, group, steps) {
+    const s = st();
+    const opts = group === 'edits' ? editOptions()
+      : group === 'headlines' ? headlineOptions() : STYLE_CATALOG[group];
+    const chosen = { edits: s.edit, headlines: s.headline, captions: s.captions,
+                     ganchoFx: s.ganchoEfeito || '' }[group];
+    const elAtivo = formatoEl(s);
+    const hlAtivo = headlineEl(s);
+    grid.innerHTML = '';
+    for (const op of opts) {
+      let off = PORTED[group] && !PORTED[group].has(op.id);
+      let offMsg = 'ainda não disponível';
+      if (group === 'edits' && EDIT_ELEMENTS.includes(op.id)) {
+        const trava = elLocked(op, s, o.keys);
+        if (trava) { off = true; offMsg = trava.split('\n')[0]; }
+      }
+      if (!off && indisp[op.id] && (group === 'edits' || group === 'headlines')) {
+        off = true; offMsg = indisp[op.id];
+      }
+      const on = group === 'edits'
+        ? (EDIT_ELEMENTS.includes(op.id) ? op.id === elAtivo : !elAtivo && op.id === chosen)
+        : group === 'headlines'
+          ? (HEADLINE_ELEMENTS.includes(op.id) ? op.id === hlAtivo : !hlAtivo && op.id === chosen)
+          : op.id === chosen;
+      const card = el('div', `opt${op.priv ? ' salvo' : ''}${on ? ' on' : ''}${off ? ' unavailable' : ''}`, grid);
+      card.dataset.group = group;
+      card.dataset.id = op.id;
+      card.tabIndex = off ? -1 : 0;
+      card.setAttribute('role', 'radio');
+      card.setAttribute('aria-checked', on ? 'true' : 'false');
+      card.setAttribute('aria-label', op.name || op.id || 'Nenhum');
+      card.title = off ? offMsg : (op.name || '');
+      const prev = el('div', `ave-cartao ${tipoCartao(op)}`, card);
+      const step = montarCartao(prev, op);
+      if (step) steps.push(step);
+      if (op.mock) el('div', 'opt-name', card).textContent = op.name;
+      else if (op.priv) el('div', 'opt-name salvo-nome', card).textContent = op.name;
+      el('div', 'opt-mark', card);
+    }
+  }
+
+  /* Os liga/desliga de Efeitos, Movimento e Trilha — os chips do editor. */
+  function chips(row, L) {
+    const s = st();
+    for (const id of L.elements) {
+      const e = STYLE_CATALOG.elements.find((x) => x.id === id);
+      if (!e) continue;
+      const trava = elLocked(e, s, o.keys);
+      const on = !!s.elements[e.id] && !trava;
+      const b = el('div', `chk${on ? ' on' : ''}${trava ? ' locked' : ''}`, row);
+      b.dataset.id = e.id;
+      b.tabIndex = 0;
+      b.setAttribute('role', 'checkbox');
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      if (trava) b.title = trava.split('\n')[0];
+      el('div', 'chk-box', b);
+      el('div', 'chk-ico', b).innerHTML = e.icon || '';
+      el('div', 'chk-name', b).textContent = e.name;
+    }
+  }
+
+  function corpoCta(body) {
+    const s = st();
+    if (!s.cta) s.cta = { modelo: '', arroba: '' };
+    const g = el('div', 'dep-group', body);
+    el('span', 'group-title', el('div', 'group-head', g)).textContent = 'CTA — fecho do vídeo';
+    const grid = el('div', 'opt-grid cta-grid', g);
+    const atual = s.cta.modelo || '';
+    for (const m of CTA_MODELOS) {
+      const card = el('div', `opt${m.id === atual ? ' on' : ''}`, grid);
+      card.dataset.cta = m.id;
+      card.tabIndex = 0;
+      card.setAttribute('role', 'radio');
+      card.setAttribute('aria-checked', m.id === atual ? 'true' : 'false');
+      if (m.title) card.title = m.title;
+      ctaMock(m.id, el('div', 'ave-cartao frame cta-prev', card),
+              { arroba: ctaArroba(s, o.brand), accent: s.accent || ACCENT_DEFAULT });
+      el('div', 'opt-name', card).textContent = m.name;
+      el('div', 'opt-mark', card);
+    }
+    const m = CTA_MODELOS.find((x) => x.id === atual);
+    if (!m || !m.id) return;
+    el('div', 'cta-nota', g).textContent = 'Entra no fim do vídeo. Tempo e posição finos, no editor.';
+    const lab = el('label', 'ave-campo', g);
+    el('span', '', lab).textContent = 'Perfil (@)';
+    const inp = el('input', '', lab);
+    inp.type = 'text';
+    inp.id = `${pre}-arroba`;
+    inp.spellcheck = false;
+    inp.placeholder = ((o.brand || {}).instagram || '@seuperfil');
+    inp.value = s.cta.arroba || '';
+    inp.dataset.campo = 'arroba';
+    if (m.foto) {
+      el('div', 'cta-nota', g).textContent = `${m.name} usa a foto do perfil salva no editor do Avelin`
+        + ' (aba CTA). Sem foto salva, a geração recusa este modelo.';
+    }
+  }
+
+  /* SEM CHAT NO CIRCUITO: o texto, as cores e a família da headline são
+     escolhidos aqui (no editor, pela conversa). As marcas são as do render
+     (compose_shortform.hl_marcas): "/" quebra, "/ /" dá mais espaço, "+"/"-"
+     no começo da linha = ±10% de corpo por sinal. */
+  function camposHeadline(body) {
+    const s = st();
+    const g = el('div', 'dep-group ave-hl-campos', body);
+    el('span', 'group-title', el('div', 'group-head', g)).textContent = 'Texto e cores da headline';
+    const caixinha = !!s.elements.caixinha;
+    const lab = el('label', 'ave-campo ave-campo-texto', g);
+    el('span', '', lab).textContent = s.elements.noticia ? 'Texto da manchete' : 'Texto da headline';
+    const ta = el('textarea', '', lab);
+    ta.id = `${pre}-hl-texto`;
+    ta.rows = 2;
+    ta.dataset.campo = 'headlineText';
+    ta.value = s.headlineText || '';
+    ta.placeholder = 'Ex.: Falta de dinheiro? / / ++AMBIÇÃO';
+    ta.disabled = caixinha || (!s.headline && !s.elements.noticia);
+    el('div', 'ave-dica', g).innerHTML = '<b>/</b> quebra a linha · <b>/ /</b> dá mais espaço · '
+      + '<b>+</b> ou <b>-</b> no começo da linha: ±10% no tamanho (cada sinal)';
+    if (caixinha) {
+      const lp = el('label', 'ave-campo ave-campo-texto', g);
+      el('span', '', lp).textContent = 'Pergunta da caixinha';
+      const tp = el('textarea', '', lp);
+      tp.id = `${pre}-caixa`;
+      tp.rows = 2;
+      tp.dataset.campo = 'caixaPergunta';
+      tp.value = s.caixaPergunta || '';
+      tp.placeholder = 'Ex.: Qual é a sua maior dúvida sobre dinheiro?';
+    }
+    const linha = el('div', 'ave-cores', g);
+    const cor = (rot, campo, val) => {
+      const l = el('label', 'ave-cor', linha);
+      const i = el('input', '', l);
+      i.type = 'color';
+      i.id = `${pre}-${campo}`;
+      i.dataset.campo = campo;
+      i.value = (normHex(val) || '#FFFFFF').toLowerCase();
+      el('span', '', l).textContent = rot;
+    };
+    cor('Cor principal', 'textColor', s.textColor);
+    cor('Cor de destaque', 'accent', s.accent || ACCENT_DEFAULT);
+    const fonte = (rot, campo, val) => {
+      const l = el('label', 'ave-campo ave-fonte', linha);
+      el('span', '', l).textContent = rot;
+      const sel = el('select', '', l);
+      sel.id = `${pre}-${campo}`;
+      sel.dataset.campo = campo;
+      const grupos = {};
+      for (const f of allFonts()) (grupos[f.k || 'outras'] ||= []).push(f.n);
+      const ROT = { display: 'Sem serifa', serif: 'Serifa', manuscrita: 'Manuscrita',
+                    local: 'Suas fontes', outras: 'Outras' };
+      for (const [k, nomes] of Object.entries(grupos)) {
+        const og = el('optgroup', '', sel);
+        og.label = ROT[k] || k;
+        for (const n of nomes) {
+          const op = el('option', '', og);
+          op.value = n;
+          op.textContent = n;
+        }
+      }
+      sel.value = val;
+    };
+    fonte('Fonte', 'fontMain', s.fontMain || FONT_MAIN_DEF);
+    // a segunda família só existe nos layouts que a usam — fora deles seria
+    // um controle que não muda nada no vídeo
+    if ((hlStyle(s.headline) || {}).fontRole) fonte('Fonte de destaque', 'fontAccent', s.fontAccent || FONT_ACCENT_DEF);
+  }
+
+  function render() {
+    const topo = corpo.scrollTop;
+    if (pararAnim) { pararAnim(); pararAnim = null; }
+    cores();
+    pintarAbas();
+    corpo.innerHTML = '';
+    corpo.dataset.camada = ativa;
+    const L = LAYERS.find((x) => x.id === ativa) || LAYERS[0];
+    const steps = [];
+    if (L.soon) el('div', 'layer-soon', corpo).textContent = L.soon;
+    else if (L.cta) corpoCta(corpo);
+    else {
+      if (L.id === 'headline' && o.camposHeadline) camposHeadline(corpo);
+      for (const gid of L.groups || []) {
+        const g = el('div', 'dep-group', corpo);
+        el('span', 'group-title', el('div', 'group-head', g)).textContent = GROUP_TITLE[gid] || gid;
+        const grid = el('div', 'opt-grid', g);
+        grid.dataset.grupo = gid;
+        grid.setAttribute('role', 'radiogroup');
+        radios(grid, gid, steps);
+      }
+      if (L.elements) chips(el('div', 'check-row', corpo), L);
+    }
+    pararAnim = animar(steps);
+    requestAnimationFrame(() => { corpo.scrollTop = topo; });
+  }
+
+  // só os cartões de headline: o texto digitado aparece neles sem remontar o
+  // campo onde se está digitando (o cursor não pode sumir no meio da frase)
+  function redesenharHeadlines() {
+    const grid = corpo.querySelector('.opt-grid[data-grupo="headlines"]');
+    if (!grid) return;
+    if (pararAnim) { pararAnim(); pararAnim = null; }
+    const steps = [];
+    radios(grid, 'headlines', steps);
+    // os outros grupos da aba (efeito do gancho) continuam animando
+    corpo.querySelectorAll('.opt-grid:not([data-grupo="headlines"])').forEach((g) => {
+      radios(g, g.dataset.grupo, steps);
+    });
+    pararAnim = animar(steps);
+  }
+
+  function clique(e) {
+    const s = st();
+    const aba = e.target.closest('.ave-aba');
+    if (aba) {
+      ativa = aba.dataset.camada;
+      corpo.scrollTop = 0;
+      render();
+      mudou('camada');
+      return;
+    }
+    const ctaCard = e.target.closest('[data-cta]');
+    if (ctaCard) {
+      if (!s.cta) s.cta = { modelo: '', arroba: '' };
+      s.cta.modelo = ctaCard.dataset.cta;
+      render();
+      mudou('cta');
+      return;
+    }
+    const opt = e.target.closest('.opt:not(.ghost):not(.unavailable)');
+    if (opt && opt.dataset.group) {
+      delete s.estiloSalvo;
+      const id = opt.dataset.id;
+      if (opt.dataset.group === 'edits') {
+        // FORMATO: um só — zera os de `elements` antes de ligar o escolhido
+        for (const k of EDIT_ELEMENTS) s.elements[k] = (k === id);
+        s.edit = EDIT_ELEMENTS.includes(id) ? 'limpa' : id;
+        limpaConflitoZonaAlta(s, 'formato');
+        render();
+        mudou('formato');
+        return;
+      }
+      if (opt.dataset.group === 'headlines') {
+        // Caixinha/Notícia são opções do MESMO radio: uma escolha na zona alta
+        for (const k of HEADLINE_ELEMENTS) s.elements[k] = (k === id);
+        s.headline = HEADLINE_ELEMENTS.includes(id) ? '' : id;
+        render();
+        mudou('headline');
+        return;
+      }
+      const key = { captions: 'captions', ganchoFx: 'ganchoEfeito' }[opt.dataset.group];
+      if (key) s[key] = id;
+      render();
+      mudou(opt.dataset.group === 'captions' ? 'legenda' : 'gancho');
+      return;
+    }
+    const chk = e.target.closest('.chk');
+    if (chk) {
+      const cat = STYLE_CATALOG.elements.find((x) => x.id === chk.dataset.id);
+      const trava = cat && elLocked(cat, s, o.keys);
+      if (trava) {
+        // efeito travado pelo FORMATO guarda a escolha: trocar de formato a devolve
+        if (!cat.efx) s.elements[chk.dataset.id] = false;
+        avisa(trava);
+        return;
+      }
+      s.elements[chk.dataset.id] = !s.elements[chk.dataset.id];
+      render();
+      mudou('elemento');
+    }
+  }
+  function tecla(e) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.opt, .chk')) {
+      e.preventDefault();
+      e.target.click();
+    }
+  }
+  function entrada(e) {
+    const campo = e.target.dataset && e.target.dataset.campo;
+    if (!campo) return;
+    const s = st();
+    const v = e.target.value;
+    if (campo === 'arroba') {
+      if (!s.cta) s.cta = { modelo: '', arroba: '' };
+      s.cta.arroba = v.trim();
+      mudou('cta');
+    } else if (campo === 'headlineText' || campo === 'caixaPergunta') {
+      s[campo] = v;
+      mudou('texto');
+      if (campo === 'headlineText') {
+        clearTimeout(tTexto);
+        tTexto = setTimeout(redesenharHeadlines, 260);
+      }
+    } else if (campo === 'textColor' || campo === 'accent') {
+      s[campo] = (normHex(v) || v).toUpperCase();
+      cores();
+      mudou('cor');
+    } else if (campo === 'fontMain' || campo === 'fontAccent') {
+      s[campo] = v;
+      ensureFonts([v]);
+      if (e.type === 'change') redesenharHeadlines();
+      mudou('fonte');
+    }
+  }
+  host.addEventListener('click', clique);
+  host.addEventListener('keydown', tecla);
+  host.addEventListener('input', entrada);
+  host.addEventListener('change', entrada);
+  render();
+  return {
+    render,
+    camada(id) { if (LAYERS.some((L) => L.id === id)) { ativa = id; corpo.scrollTop = 0; render(); } },
+    ativa: () => ativa,
+    destruir() {
+      if (pararAnim) pararAnim();
+      clearTimeout(tTexto);
+      host.removeEventListener('click', clique);
+      host.removeEventListener('keydown', tecla);
+      host.removeEventListener('input', entrada);
+      host.removeEventListener('change', entrada);
+      host.innerHTML = '';
+      host.classList.remove('ave-painel');
+    },
+  };
+}
+
 /* ---------- a camada local (styles.local.js) ----------
  * No EDITOR quem instala é a linha AVELIN-OVERLAY do app.js — o gancho que o
  * overlay.py põe e tira —, e este módulo carrega ANTES do styles.local.js, então
@@ -2457,6 +2878,8 @@ window.AVE_ESTILOS = {
   // regras e pedido
   defaultStyle, limpaConflitoZonaAlta, elLocked, styleName, editOptions, headlineOptions,
   formatoEl, formatoName, headlineEl, headlineName, accentUsed, payloadEstilo,
+  // o painel inteiro, para quem não é o editor (a galeria de cortes)
+  montarPainel, ICONES_CAMADA,
   // laço
   animar, parar,
 };

@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@900&family=Anton&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet">
+<!-- As prévias de estilo do editor (cartões, legenda e headline ao vivo), da
+     peça compartilhada — o popup "Com legenda" oferece a MESMA escolha. -->
+<link rel="stylesheet" href="/shared/estilos.css">
 <style>
 /* Os tokens do editor (assets/preview/app.css), sem literal espalhado. */
 :root {
@@ -241,72 +244,60 @@ details summary { cursor: pointer; color: var(--dim); font-size: 12px; text-tran
 .aplicada .selo { color: var(--ok); font-weight: 600; font-size: 13px; margin-right: 4px; }
 .aplicada .btn { padding: 6px 10px; font-size: 12px; }
 
-/* popup "Com legenda": prévia 9:16 arrastável + modelos e cores */
-.dialogo .janela.estudio { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto;
-  flex-direction: row; gap: 24px; align-items: flex-start; }
-.previa-col { flex: none; width: 280px; display: flex; flex-direction: column; gap: 8px; }
+/* popup "Com legenda": à esquerda o VÍDEO do corte com a legenda e a headline
+   AO VIVO (as mesmas do editor, montadas pelo /shared/estilos.js); à direita a
+   coluna "Camadas do render" do editor (montarPainel). Altura fixa: trocar de
+   aba não pode redimensionar a janela — quem rola é a coluna. */
+.dialogo .janela.estudio { width: min(1180px, calc(100vw - 32px)); height: min(880px, calc(100vh - 32px));
+  flex-direction: row; gap: 24px; align-items: stretch; }
+.previa-col { flex: none; width: min(340px, calc((min(880px, 100vh - 32px) - 150px) * 9 / 16));
+  display: flex; flex-direction: column; gap: 8px; }
 .previa { position: relative; aspect-ratio: 9 / 16; width: 100%; border-radius: 14px; overflow: hidden;
-  background: #000; user-select: none; touch-action: none; container-type: inline-size; }
-.previa canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.previa .zona { position: absolute; left: 0; right: 0; border: 0 dashed rgba(255,255,255,.28); pointer-events: none; }
+  background: #000; user-select: none; touch-action: none; }
+.previa video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.previa .pv-camada { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+/* só a caixa da legenda aceita ponteiro, e só para ser ARRASTADA (como no editor) */
+/* o Estouro e a Revelação (.ave-pop/.ave-rev) também: no editor eles ficam de
+   fora desta lista e não se deixam arrastar — aqui a pega é a LINHA da deixa */
+.pv-camada .ave-cap, .pv-camada .ave-cap-static, .pv-camada .ave-stacked, .pv-camada .ave-scatter,
+.pv-camada .ave-pal .pal-cue, .pv-camada .ave-pop .ave-cap-line, .pv-camada .ave-rev .ave-cap-line {
+  pointer-events: auto; cursor: grab; touch-action: none; }
+.pv-camada .ave-cap:active, .pv-camada .ave-cap-static:active, .pv-camada .ave-stacked:active,
+.pv-camada .ave-scatter:active { cursor: grabbing; }
+.previa .zona { position: absolute; left: 0; right: 0; border: 0 dashed rgba(255,255,255,.28); pointer-events: none; z-index: 3; }
 .previa .zona.cima { top: 0; border-bottom-width: 1px; }
 .previa .zona.baixo { bottom: 0; border-top-width: 1px; }
-.pv-arrasta { position: absolute; left: 0; right: 0; display: flex; justify-content: center; cursor: ns-resize; }
-.pv-arrasta:hover > span, .pv-arrasta.pegando > span { outline: 1px dashed rgb(var(--orange-rgb) / .9); outline-offset: 4px; }
-.pv-arrasta > span { text-align: center; white-space: pre-line; text-wrap: balance; line-height: 1.12; }
-.pv-arrasta .caixa-on { -webkit-box-decoration-break: clone; box-decoration-break: clone; }
-.controles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.controles h5 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); font-weight: 600; margin-top: 4px; }
-.modelos { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
-.modelo { text-align: left; background: var(--glass); border: 1px solid var(--stroke); border-radius: 10px;
-  padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
-.modelo b { font-size: 16px; line-height: 1.2; }
-.modelo small { color: var(--dim); font-size: 11px; line-height: 1.3; }
-.modelo.on { border-color: rgb(var(--orange-rgb) / .7); background: rgb(var(--orange-rgb) / .12); }
-/* acordeão: os GRUPOS em pílulas; o grupo aberto mostra os tipos logo abaixo */
-.grupos { display: flex; flex-wrap: wrap; gap: 6px; }
-.grupo-btn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
-  background: var(--glass); border: 1px solid var(--stroke); border-radius: 99px; padding: 7px 12px; }
-.grupo-btn small { color: var(--dim); font-weight: 500; }
-.grupo-btn svg { width: 12px; height: 12px; transition: transform .2s var(--ease); }
-.grupo-btn.on { border-color: rgb(var(--orange-rgb) / .7); }
-.grupo-btn.aberto { background: rgb(var(--orange-rgb) / .14); }
-.grupo-btn.aberto svg { transform: rotate(180deg); }
-.sub { display: none; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px;
-  background: rgba(0,0,0,.16); border: 1px solid var(--stroke); border-radius: 12px; padding: 8px; }
-.sub.aberto { display: grid; animation: entra .2s var(--ease); }
-.entradas { display: flex; align-items: center; gap: 10px; }
-.segmento { display: inline-flex; border: 1px solid var(--stroke); border-radius: 10px; overflow: hidden; }
-.segmento button { border: 0; background: var(--glass); padding: 6px 12px; cursor: pointer; font-size: 13px; }
-.segmento button + button { border-left: 1px solid var(--stroke); }
-.segmento button.on { background: rgb(var(--orange-rgb) / .22); color: #fff; }
-.segmento button:disabled { opacity: .4; cursor: default; }
-.previa .pv-tit { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
-.previa .pv-tit-caixa { position: absolute; left: 0; right: 0; z-index: 1; cursor: ns-resize; display: none; }
-.previa .pv-tit-caixa:hover, .previa .pv-tit-caixa.pegando { outline: 1px dashed rgb(var(--orange-rgb) / .9); outline-offset: 2px; }
-.previa .pv-arrasta { z-index: 2; }
-.modelos.visuais { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
-.modelos.visuais .modelo { align-items: center; padding: 7px 8px; }
-.modelos.visuais .modelo b { font-size: 15px; }
-.eixo { font-size: 11px; color: var(--dim); }
-@keyframes pv-pop { from { transform: scale(.7); } 50% { transform: scale(1.12); } to { transform: scale(1); } }
-@keyframes pv-desliza { from { transform: translateY(-40%); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes pv-fade { from { opacity: 0; } to { opacity: 1; } }
-.pv-anim-pop { animation: pv-pop .26s ease-out; }
-.pv-anim-desliza { animation: pv-desliza .3s ease-out; }
-.pv-anim-fade, .pv-anim-capa { animation: pv-fade .2s ease-out; }
-@media (prefers-reduced-motion: reduce) { .pv-anim-pop, .pv-anim-desliza, .pv-anim-fade, .pv-anim-capa { animation: none; } }
-.controles textarea { font: inherit; color: var(--text); background: var(--glass); border: 1px solid var(--stroke);
-  border-radius: 10px; padding: 8px 10px; resize: vertical; }
-.controles textarea:disabled { opacity: .45; }
-.controles label { font-size: 13px; display: flex; align-items: center; gap: 8px; }
-.cores { display: flex; gap: 16px; flex-wrap: wrap; }
-.cores input[type=color] { width: 34px; height: 28px; border: 1px solid var(--stroke); border-radius: 8px; background: none; padding: 2px; cursor: pointer; }
-@media (max-width: 680px) {
-  .dialogo .janela.estudio { flex-direction: column; align-items: center; }
-  .previa-col { width: min(260px, 100%); }
-  .controles { width: 100%; }
+.pv-dica { position: absolute; left: 8px; top: 8px; z-index: 5; padding: 4px 9px; border-radius: 8px;
+  background: rgba(8,23,38,.85); font-size: 12px; pointer-events: none; display: none; }
+.pv-dica.on { display: block; }
+.pv-espera { position: absolute; inset: 0; z-index: 4; display: none; flex-direction: column; gap: 10px;
+  align-items: center; justify-content: center; text-align: center; padding: 20px;
+  background: rgba(8,23,38,.78); font-size: 13px; }
+.previa.esperando .pv-espera { display: flex; }
+.pv-transporte { display: flex; align-items: center; gap: 8px; }
+.pv-transporte .barra { flex: 1; }
+.pv-transporte .tempo { color: var(--dim); font-size: 12px; }
+.controles { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.controles .cab { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.controles .cab h4 { font-size: 16px; }
+.controles .cab small { color: var(--dim); font-size: 12px; }
+#painel-camadas { flex: 1 1 auto; min-height: 0; }
+.estudio .acoes { display: flex; align-items: center; gap: 8px; }
+.est-erro { color: var(--warn); font-size: 12.5px; min-height: 1em; }
+@media (max-width: 760px) {
+  .dialogo .janela.estudio { flex-direction: column; height: auto; max-height: calc(100vh - 32px); overflow: auto; }
+  .previa-col { width: min(280px, 100%); align-self: center; }
+  #painel-camadas { min-height: 420px; }
 }
+/* "Qual CTA entra no fim?" — os CTAs DESTE projeto (edicao/_ctas/ctas.json) */
+.dialogo .janela.cta-escolha { width: min(520px, calc(100vw - 32px)); }
+.cta-opcoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.cta-opcao { text-align: left; background: var(--glass); border: 1px solid var(--stroke); border-radius: 12px;
+  padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; font: inherit; color: inherit; }
+.cta-opcao:hover, .cta-opcao:focus-visible { border-color: rgb(var(--orange-rgb) / .7); background: rgb(var(--orange-rgb) / .1); outline: none; }
+.cta-opcao b { font-size: 15px; }
+.cta-opcao small { color: var(--dim); font-size: 11.5px; line-height: 1.35; }
+.cta-opcao.sem { border-style: dashed; }
 
 @media (max-width: 860px) {
   .caixa { grid-template-columns: 1fr; justify-items: center; padding: 56px 16px 16px; }
@@ -353,7 +344,7 @@ details summary { cursor: pointer; color: var(--dim); font-size: 12px; text-tran
       <div class="versoes" id="versoes"></div>
       <button class="btn acao" id="baixar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg><span>Baixar corte</span></button>
       <div class="extras">
-        <button class="btn" id="baixar-leg" title="Um segundo arquivo, com o karaokê queimado — o corte limpo continua igual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M13 15h4M7 11h10"/></svg><span>Com legenda</span></button>
+        <button class="btn" id="baixar-leg" title="Legenda, headline e elementos do editor — gera em segundo plano; o corte limpo continua igual"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h4M13 15h4M7 11h10"/></svg><span>Com legenda</span></button>
         <button class="btn" id="baixar-srt" title="Arquivo de legenda separado, para Avelin, CapCut ou Premiere"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>Legenda .srt</span></button>
       </div>
       <button class="btn avelin" id="avelin" title="Abrir este corte no editor do Avelin"><img src="/icone.png" alt="" width="16" height="16"><span>Editar no Avelin</span></button>
@@ -376,45 +367,48 @@ details summary { cursor: pointer; color: var(--dim); font-size: 12px; text-tran
 <div class="dialogo" id="estilo" role="dialog" aria-modal="true" aria-labelledby="est-titulo">
   <div class="janela estudio">
     <div class="previa-col">
-      <div class="previa" id="previa">
-        <canvas id="pv-quadro" width="540" height="960"></canvas>
+      <div class="previa esperando" id="previa">
+        <video id="pv-video" playsinline preload="auto"></video>
+        <div class="pv-camada" id="pv-leg"></div>
+        <div class="pv-camada" id="pv-hook"></div>
         <div class="zona cima" style="height:13%"></div><div class="zona baixo" style="height:16%"></div>
-        <img class="pv-tit" id="pv-tit" alt="" draggable="false">
-        <div class="pv-tit-caixa" id="pv-tit-caixa"></div>
-        <div class="pv-arrasta" id="pv-leg" title="Arraste para cima ou para baixo"><span></span></div>
+        <span class="pv-dica num" id="pv-dica"></span>
+        <div class="pv-espera"><span class="giro"></span><span id="pv-espera">Carregando os estilos…</span></div>
       </div>
-      <p class="nota-mini">Arraste a legenda e a headline. A headline é desenhada pelo mesmo motor do vídeo. O tracejado marca onde a interface do Reels/TikTok cobre.</p>
+      <div class="pv-transporte">
+        <button class="btn" id="pv-play" aria-label="Tocar ou pausar"></button>
+        <div class="barra" id="pv-barra"><i id="pv-prog"></i></div>
+        <span class="tempo num" id="pv-tempo">0:00</span>
+      </div>
+      <p class="nota-mini">Arraste a legenda e a headline sobre o vídeo; o canto da headline muda o tamanho e o duplo clique volta ao padrão. O tracejado marca onde a interface do Reels/TikTok cobre.</p>
     </div>
     <div class="controles">
-      <h4 id="est-titulo">Vídeo com legenda</h4>
-      <h5>Legenda</h5>
-      <div class="grupos" id="grp-leg"></div>
-      <div class="sub" id="mod-leg"></div>
-      <span class="eixo">Visual</span>
-      <div class="modelos visuais" id="vis-leg"></div>
-      <h5>Headline</h5>
-      <div class="grupos" id="grp-tit"></div>
-      <div class="sub" id="mod-tit"></div>
-      <textarea id="tit-texto" rows="2" placeholder="Texto da headline — Enter quebra a linha"></textarea>
-      <p class="nota-mini" id="tit-dica"></p>
-      <div class="entradas"><span class="eixo">Entrada</span><div class="segmento" id="ent-tit"></div></div>
-      <label><input type="checkbox" id="tit-inteiro"> Headline o vídeo todo (senão, só os primeiros 4s)</label>
-      <h5>Cores</h5>
-      <div class="cores">
-        <label><input type="color" id="cor-p"> Principal</label>
-        <label><input type="color" id="cor-f"> Fundo</label>
-      </div>
+      <div class="cab"><h4 id="est-titulo">Legenda e elementos</h4><small id="est-sub"></small></div>
+      <div id="painel-camadas"></div>
+      <p class="est-erro" id="est-erro" role="alert"></p>
       <div class="acoes">
-        <button class="btn" id="est-padrao" title="Volta aos modelos e cores do Avelin">Padrão</button>
+        <button class="btn" id="est-padrao" title="Volta às escolhas de fábrica do Avelin (o texto fica)">Padrão</button>
         <span style="flex:1"></span>
         <button class="btn" id="est-nao">Cancelar</button>
-        <button class="btn acao" id="est-sim">Gerar e baixar</button>
+        <button class="btn acao" id="est-sim" title="Gera em segundo plano — o card mostra o andamento">Gerar</button>
       </div>
     </div>
   </div>
 </div>
+<div class="dialogo" id="cta-dlg" role="dialog" aria-modal="true" aria-labelledby="cta-titulo">
+  <div class="janela cta-escolha">
+    <h4 id="cta-titulo">Qual CTA entra no fim?</h4>
+    <p id="cta-texto">O vídeo com CTA é gerado em segundo plano — o card mostra o andamento.</p>
+    <div class="cta-opcoes" id="cta-opcoes"></div>
+    <div class="acoes"><button class="btn" id="cta-cancelar">Cancelar</button></div>
+  </div>
+</div>
 <div class="avisos" id="avisos" aria-live="polite"></div>
 
+<!-- O catálogo de estilos do editor (window.AVE_ESTILOS). A camada local
+     (styles.local.js) vem ANTES: aqui é o módulo que a instala. -->
+<script src="/assets/styles.local.js"></script>
+<script src="/shared/estilos.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 const IC_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
@@ -513,41 +507,53 @@ async function vigiarFila() {
   let ativos = 0;
   try {
     const f = (await (await fetch('/api/fila')).json()).fila || [];
-    const ult = {};
-    for (const j of f) if (!ult[j.id] || j.pedido >= ult[j.id].pedido) ult[j.id] = j;
+    // UM CORTE PODE TER MAIS DE UM PEDIDO (o corte com o CTA do Paulo e, depois,
+    // com legenda e o da Júlia): o card mostra o que está RODANDO, senão o
+    // que espera; e cada pedido que termina tem o seu aviso
+    const vez = j => j.estado === 'gerando' ? 2 : j.estado === 'na fila' ? 1 : 0;
+    const ativo = {};
+    for (const j of f) if (vez(j) && (!ativo[j.id] || vez(j) > vez(ativo[j.id]))) ativo[j.id] = j;
     const naFila = f.filter(j => j.estado === 'na fila');
-    const ids = new Set([...Object.keys(ult), ...Object.keys(daFila)]);
     const avisados = avisadosFila();
-    for (const id of ids) {
-      const j = ult[id];
+    for (const id of new Set([...Object.keys(ativo), ...Object.keys(daFila)])) {
+      const j = ativo[id];
       const antes = daFila[id];
       let rot = '';
       if (j && j.estado === 'na fila') rot = `Na fila (${naFila.indexOf(j) + 1}º)`;
-      else if (j && j.estado === 'gerando') rot = `Gerando… ${j.pct ? Math.round(j.pct) + '%' : ''}`.trim();
+      else if (j && j.estado === 'gerando') rot = j.fase === 'cta' ? 'Montando o CTA…'
+        : `Gerando… ${j.pct ? Math.round(j.pct) + '%' : ''}`.trim();
       if (rot) { daFila[id] = rot; ativos++; } else delete daFila[id];
       if (antes !== daFila[id]) pintar(id);
-      const chave = j ? `${id}:${j.pedido}:${j.estado}` : '';
-      if (j && (j.estado === 'pronto' || j.estado === 'erro') && !avisados.has(chave) && filaVista !== null) {
-        marcarAvisado(chave);
-        const c = cortes.find(x => x.id === id);
-        const nome = c ? c.titulo_sugerido : id;
-        if (j.estado === 'pronto') {
-          delete exportados[id];
-          avisar(`“${nome}” pronto com legenda e elementos.`, { texto: 'Baixar', fixo: true, fn: () => {
-            const a = document.createElement('a'); a.href = j.url; a.download = j.arquivo; a.click();
-            if (c) { baixadosIds.add(c.id); pintarBaixado(c); }
-          } });
-          if (c) atualizarCard(c);
-        } else {
-          avisar(`Não consegui gerar “${nome}”: ${j.erro || 'erro na Fase 2'}`, { texto: 'Ok', fixo: true, fn: () => {} });
-        }
-      } else if (j && (j.estado === 'pronto' || j.estado === 'erro') && filaVista === null) {
-        marcarAvisado(chave);   // o que terminou antes de abrir a página não vira aviso atrasado
+    }
+    for (const j of f) {
+      if (j.estado !== 'pronto' && j.estado !== 'erro') continue;
+      const id = j.id;
+      const chave = `${id}:${j.pedido}:${j.estado}`;
+      if (avisados.has(chave)) continue;
+      marcarAvisado(chave);
+      if (filaVista === null) continue;   // o que terminou antes de abrir a página não vira aviso atrasado
+      const c = cortes.find(x => x.id === id);
+      const nome = c ? c.titulo_sugerido : id;
+      if (j.estado === 'pronto') {
+        // a Fase 2 troca o arquivo do corte (vira o editado); o CTA é um arquivo à parte
+        if (j.escolhas) delete exportados[id];
+        const quem = j.cta ? (CTAS || []).find(x => x.id === j.cta)?.nome || j.cta : '';
+        const oque = j.escolhas && quem ? `com legenda, elementos e o CTA de ${quem}`
+          : quem ? `com o CTA de ${quem}` : 'com legenda e elementos';
+        avisar(`“${nome}” pronto ${oque}.`, { texto: 'Baixar', fixo: true, fn: () => {
+          const a = document.createElement('a'); a.href = j.url; a.download = j.arquivo; a.click();
+          if (c) { baixadosIds.add(c.id); pintarBaixado(c); }
+        } });
+        if (c) atualizarCard(c);
+      } else {
+        avisar(`Não consegui gerar “${nome}”: ${j.erro || 'erro na Fase 2'}`, { texto: 'Ok', fixo: true, fn: () => {} });
       }
     }
     filaVista = true;
   } catch (e) { /* servidor fora: tenta de novo */ }
-  setTimeout(vigiarFila, ativos ? 2500 : 6000);
+  // um relógio só: `enfileirar` chama esta função na hora, fora do ciclo
+  clearTimeout(vigiarFila.t);
+  vigiarFila.t = setTimeout(vigiarFila, ativos ? 2500 : 6000);
 }
 
 function pintar(id) {
@@ -587,8 +593,15 @@ function avisar(msg, acao) {
   el.className = 'aviso-item';
   el.innerHTML = `<span>${esc(msg)}</span>${acao ? `<button>${esc(acao.texto)}</button>` : ''}`;
   if (acao) el.querySelector('button').onclick = () => { el.remove(); acao.fn(); };
+  if (acao && acao.fixo) el.dataset.fixo = '1';
   $('#avisos').append(el);
-  while ($('#avisos').children.length > 3) $('#avisos').firstElementChild.remove();
+  // no máximo 3 na tela — mas o aviso FIXO (o "Baixar" de um pedido pronto)
+  // nunca é empurrado por um aviso passageiro: ele é a única entrega do arquivo
+  while ($('#avisos').children.length > 3) {
+    const velho = $('#avisos').querySelector('.aviso-item:not([data-fixo])');
+    if (!velho || velho === el) break;
+    velho.remove();
+  }
   if (!acao || !acao.fixo) setTimeout(() => el.remove(), acao ? 9000 : 5000);
 }
 
@@ -637,7 +650,7 @@ async function carregar() {
     el.onkeydown = e => { if (e.key === 'Enter') abrir(+el.dataset.i); };
   });
   document.querySelectorAll('[data-baixar]').forEach(b => b.onclick = e => {
-    e.stopPropagation(); baixar(cortes[+b.dataset.baixar], b, 'limpo', 'original');
+    e.stopPropagation(); baixarComCta(cortes[+b.dataset.baixar], b, 'original');
   });
   const pedido = cortes.findIndex(c => '#' + c.id === location.hash);
   if (pedido >= 0) abrir(pedido);
@@ -961,7 +974,7 @@ $('#fechar').onclick = fechar;
 $('#modal').onclick = e => { if (e.target.id === 'modal') fechar(); };
 $('#ant').onclick = () => abrir((atual - 1 + cortes.length) % cortes.length);
 $('#prox').onclick = () => abrir((atual + 1) % cortes.length);
-$('#baixar').onclick = () => baixar(cortes[atual], $('#baixar'));
+$('#baixar').onclick = () => baixarComCta(cortes[atual], $('#baixar'), versao);
 $('#baixar-leg').onclick = () => abrirEstilo(cortes[atual]);
 $('#baixar-srt').onclick = () => baixar(cortes[atual], $('#baixar-srt'), 'srt');
 $('#avelin').onclick = () => editarNoAvelin(cortes[atual]);
@@ -1017,276 +1030,356 @@ async function editarNoAvelin(c, forcar = false) {
   } catch (e) { aba?.close(); avisar(e.message); }
 }
 
-// ---------------- popup "Com legenda" ----------------
-// Os modelos vêm do servidor (helpers/cortes/modelos_legenda.json), os mesmos
-// números que o .ass queimado usa; a prévia trabalha na referência 1080×1920.
-let MOD = null, FORCA = null, est = null, estCorte = null;
+// ---------------- "Qual CTA entra no fim?" ----------------
+// Só existe quando o PROJETO traz CTAs próprios (edicao/_ctas/ctas.json — o
+// servidor responde lista vazia nos outros). Toda saída de vídeo passa por
+// aqui: a seta do card, "Baixar corte" e o "Gerar" do popup. "Sem CTA" é o
+// comportamento de sempre; um CTA vira pedido na fila (o kit do projeto monta
+// o fecho com HyperFrames, ~1 min) e o aviso fixo entrega o "Baixar".
+let CTAS = null;
+async function ctasDoProjeto() {
+  if (CTAS) return CTAS;
+  try { CTAS = (await (await fetch('/api/ctas')).json()).ctas || []; } catch (e) { return []; }
+  return CTAS;
+}
+// resolve: undefined = cancelou · null = sem CTA · 'id' = o CTA escolhido
+async function escolherCta(c) {
+  const lista = await ctasDoProjeto();
+  if (!lista.length) return null;
+  return new Promise(ok => {
+    const dlg = $('#cta-dlg');
+    $('#cta-texto').textContent = `“${c.titulo_sugerido}” — o vídeo com CTA é gerado em segundo plano; o card mostra o andamento.`;
+    $('#cta-opcoes').innerHTML = lista.map(x => `<button class="cta-opcao" data-cta="${esc(x.id)}"><b>${esc(x.nome)}</b><small>${esc(x.fala || '')}</small></button>`).join('')
+      + '<button class="cta-opcao sem" data-cta=""><b>Sem CTA</b><small>O corte como está</small></button>';
+    const fim = r => { dlg.classList.remove('aberto'); dlg.onclick = null; document.removeEventListener('keydown', tecla, true); ok(r); };
+    const tecla = e => { if (e.key === 'Escape') { e.stopPropagation(); fim(undefined); } };
+    document.addEventListener('keydown', tecla, true);
+    $('#cta-opcoes').querySelectorAll('.cta-opcao').forEach(b => b.onclick = () => fim(b.dataset.cta || null));
+    $('#cta-cancelar').onclick = () => fim(undefined);
+    dlg.onclick = e => { if (e.target === dlg) fim(undefined); };
+    dlg.classList.add('aberto');
+    $('#cta-opcoes .cta-opcao').focus();
+  });
+}
+// põe na fila do servidor e volta na hora: o card passa a mostrar "Na fila"
+async function enfileirar(c, { escolhas = null, cta = null, qual = 'original' } = {}) {
+  daFila[c.id] = 'Na fila';
+  pintar(c.id);
+  try {
+    const r = await fetch('/api/gerar', { method: 'POST', body: JSON.stringify({ id: c.id, versao: qual, escolhas, cta }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || r.statusText);
+    const nome = cta ? (CTAS || []).find(x => x.id === cta)?.nome : '';
+    avisar(`“${c.titulo_sugerido}” entrou na fila${nome ? ` com o CTA de ${nome}` : ''} — pode seguir trabalhando.`);
+    vigiarFila();
+    return true;
+  } catch (e) {
+    delete daFila[c.id]; pintar(c.id);
+    avisar(`Não consegui pôr “${c.titulo_sugerido}” na fila: ${e.message}`);
+    return false;
+  }
+}
+// baixar o corte limpo, perguntando antes qual CTA entra (se o projeto tiver)
+async function baixarComCta(c, botao, qual) {
+  if (!c || botao.disabled) return;
+  const cta = await escolherCta(c);
+  if (cta === undefined) return;
+  if (cta === null) return baixar(c, botao, 'limpo', qual);
+  enfileirar(c, { cta, qual });
+}
+
+// ---------------- popup "Com legenda" (legenda e elementos) ----------------
+// A MESMA escolha da coluna "Camadas do render" do editor, do mesmo módulo
+// (/shared/estilos.js): os mesmos cartões, as mesmas regras e o MESMO pedido
+// (`payloadEstilo`), que o servidor entrega à Fase 2 do Avelin em segundo
+// plano (/api/gerar). À esquerda, o vídeo do corte com a legenda e a headline
+// AO VIVO, arrastáveis como no editor. O catálogo NÃO é copiado aqui.
+const ESTILOS = window.AVE_ESTILOS || null;
+const PREFS_EST = 'ave-galeria-estilo';
+// sem chat neste caminho: formatos cujo conteúdo nasce de uma conversa com a
+// IA (roteiro de cenas, b-roll) recusariam na Fase 2 — ficam apagados com o motivo
+const PRECISA_CHAT = 'Precisa da conversa com a IA — use “Editar no Avelin”';
+const INDISPONIVEL = { animTexto: PRECISA_CHAT, anim3d: PRECISA_CHAT, explicativo: PRECISA_CHAT, brollOverlay: PRECISA_CHAT };
+let est = null, estCorte = null, painel = null;
+const textoDe = {};            // id do corte → texto da headline digitado nele
+const pv = $('#pv-video');
+let pvFonte = null, pvCues = null, pvAmostra = '', pvRaf = 0, pvChaveLeg = '', pvChaveHook = '';
+
+// fontes, folhas e scripts do render + o variants.json — uma vez só
+let recursosP = null;
+function recursos() {
+  if (!recursosP) recursosP = (async () => {
+    ESTILOS.configurar({ quadro: () => ({ w: 1080, h: 1920 }), estilo: () => est });
+    await ESTILOS.garantirRecursos();
+    await ESTILOS.carregar();
+    try { await ESTILOS.carregarFontesLocais('/api/localfonts'); } catch (e) { /* só as do Google */ }
+    try { await document.fonts.ready; } catch (e) { /* segue */ }
+  })();
+  return recursosP;
+}
+
+// as escolhas valem para o PERFIL (como no editor, que as guarda em ~/.avelin):
+// a próxima abertura parte delas. Texto e pergunta são do CORTE e não entram.
+function estiloInicial() {
+  const base = ESTILOS.defaultStyle();
+  let salvo = {};
+  try { salvo = JSON.parse(localStorage.getItem(PREFS_EST) || '{}') || {}; } catch (e) { salvo = {}; }
+  const s = { ...base, ...salvo, elements: { ...base.elements, ...(salvo.elements || {}) },
+              cta: { ...base.cta, ...(salvo.cta || {}) } };
+  // um id que saiu do catálogo volta ao padrão, em vez de virar um "—"
+  const tem = (g, id) => (g === 'edits' ? ESTILOS.editOptions() : ESTILOS.STYLE_CATALOG[g]).some(o => o.id === id);
+  for (const [g, k] of [['edits', 'edit'], ['headlines', 'headline'], ['captions', 'captions']])
+    if (!tem(g, s[k])) s[k] = base[k];
+  for (const id of Object.keys(INDISPONIVEL)) s.elements[id] = false;
+  delete s.estiloSalvo;
+  return s;
+}
+function guardarPrefs() {
+  try {
+    const { headlineText, caixaPergunta, note, estiloSalvo, ...resto } = est;
+    localStorage.setItem(PREFS_EST, JSON.stringify(resto));
+  } catch (e) { /* sem storage: vale só nesta aba */ }
+}
+
 async function abrirEstilo(c) {
   if (!c) return;
-  try {
-    if (!MOD) {
-      const d = await (await fetch('/api/legenda-modelos')).json();
-      MOD = d.modelos; FORCA = new RegExp(d.forca, 'i'); est = { ...d.salvo };
-    }
-  } catch (e) { return avisar('Não consegui carregar os modelos de legenda.'); }
+  if (!ESTILOS) return avisar('O catálogo de estilos não carregou — reinicie a galeria (servidor anterior à atualização).');
+  v.pause();
   estCorte = c;
-  $('#tit-texto').value = c.titulo_sugerido || '';
-  quadroPrevia(c);
-  pvVez = 0;
-  abertos.leg = abertos.tit = undefined;
-  pintarEstilo(false);
+  $('#est-sub').textContent = c.titulo_sugerido || '';
+  $('#est-erro').textContent = '';
+  $('#previa').classList.add('esperando');
+  $('#pv-espera').textContent = 'Carregando os estilos…';
   $('#estilo').classList.add('aberto');
-  animarTitulo();
-  rodarPrevia(true);
+  pvCues = null; pvAmostra = ''; pvChaveLeg = pvChaveHook = '';
+  $('#pv-leg').innerHTML = $('#pv-hook').innerHTML = '';
+  carregarPalavras(c);
+  try { await recursos(); } catch (e) { avisar('Não consegui carregar os estilos.'); return fecharEstilo(); }
+  if (estCorte !== c || !$('#estilo').classList.contains('aberto')) return;
+  if (!est) est = estiloInicial();
+  est.headlineText = textoDe[c.id] ?? (c.titulo_sugerido || '');
+  est.caixaPergunta = '';
+  if (!painel) {
+    painel = ESTILOS.montarPainel($('#painel-camadas'), {
+      estilo: () => est, camposHeadline: true, inicial: 'headline', idPrefixo: 'est',
+      indisponivel: INDISPONIVEL,
+      avisar: m => { $('#est-erro').textContent = m.split('\n')[0]; },
+      aoMudar: oque => {
+        $('#est-erro').textContent = '';
+        if (oque === 'texto' && estCorte) textoDe[estCorte.id] = est.headlineText;
+        else if (oque !== 'camada') guardarPrefs();
+        // escolher um layout tem de MOSTRAR: fora da janela do gancho o vídeo volta ao começo
+        if (oque === 'headline' && pvFonte && pv.currentTime - pvFonte.ini > ESTILOS.GANCHO_SEC) pv.currentTime = pvFonte.ini + 0.6;
+        pvChaveLeg = pvChaveHook = '';
+      },
+    });
+  } else painel.render();
+  $('#pv-espera').textContent = 'Preparando o vídeo…';
+  const f = await fontePrevia(c);
+  if (estCorte !== c || !$('#estilo').classList.contains('aberto')) return;
+  if (!f) { $('#pv-espera').textContent = 'Não consegui carregar o vídeo deste corte.'; return; }
+  pvFonte = f;
+  pv.src = f.src;
+  pv.addEventListener('loadedmetadata', () => {
+    pv.currentTime = f.ini + 0.6;   // dentro da janela do gancho: a headline aparece
+    $('#previa').classList.remove('esperando');
+    pv.play().catch(() => {});
+  }, { once: true });
+  cancelAnimationFrame(pvRaf);
+  pvRaf = requestAnimationFrame(laco);
 }
-function fecharEstilo() { $('#estilo').classList.remove('aberto'); rodarPrevia(false); }
-
-// o quadro de fundo: o que o player mostra agora, em pé e em "cover"
-function quadroPrevia(c) {
-  const cv = $('#pv-quadro'), g = cv.getContext('2d');
-  const pinta = img => {
-    const w = img.videoWidth || img.naturalWidth, h = img.videoHeight || img.naturalHeight;
-    if (!w || !h) return;
-    const k = Math.max(cv.width / w, cv.height / h);
-    g.drawImage(img, (cv.width - w * k) / 2, (cv.height - h * k) / 2, w * k, h * k);
-  };
-  g.fillStyle = '#111'; g.fillRect(0, 0, cv.width, cv.height);
-  if (v.readyState >= 2) return pinta(v);
-  if (c.thumb) { const im = new Image(); im.onload = () => pinta(im); im.src = `/thumb/${encodeURIComponent(c.thumb)}`; }
-}
-
-// a mesma conta do _clarear do legenda.py
-const clarear = (hex, k = 0.45) => '#' + [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
-  .map(x => Math.round(x + (255 - x) * k).toString(16).padStart(2, '0')).join('');
-const forte = w => FORCA.test(w.replace(/[^\p{L}\p{N}%]/gu, ''));
-
-// toda alteração vale para o PERFIL (~/.avelin), até a próxima — salva meio
-// segundo depois do último toque, para o arraste não virar uma rajada de POSTs
-let salvando = null;
-function guardarEstilo() {
-  clearTimeout(salvando);
-  salvando = setTimeout(() => fetch('/api/legenda-estilo', { method: 'POST', body: JSON.stringify({ estilo: est }) }).catch(() => {}), 500);
-}
-function pintarEstilo(mudou = true) {
-  if (mudou) guardarEstilo();
-  $('#cor-p').value = est.cor_principal.toLowerCase(); $('#cor-f').value = est.cor_fundo.toLowerCase();
-  $('#tit-inteiro').checked = !!est.titulo_inteiro;
-  const tt = MOD.titulos[est.titulo];
-  const sem = est.titulo === 'nenhum', cheia = tt.grupo === 'Tela cheia';
-  $('#tit-texto').disabled = sem;
-  $('#tit-dica').textContent = tt.dica || '';
-  $('#tit-inteiro').disabled = sem || ['capa', 'aspas'].includes(est.titulo);
-  $('#tit-inteiro').closest('label').style.opacity = $('#tit-inteiro').disabled ? .45 : 1;
-
-  const fonteDe = m => `font-family:${m.css || 'inherit'};font-weight:${m.peso || 600}${m.maiusculas ? ';text-transform:uppercase' : ''}`;
-  acordeao('leg', MOD.legendas, 'legenda', m => '');
-  acordeao('tit', MOD.titulos, 'titulo', fonteDe);
-  $('#vis-leg').innerHTML = Object.entries(MOD.visuais_legenda).map(([id, m]) =>
-    `<button class="modelo${id === est.legenda_visual ? ' on' : ''}" data-m="${id}"><b style="${fonteDe(m)}">${esc(m.nome)}</b></button>`).join('');
-  $('#vis-leg').querySelectorAll('.modelo').forEach(b => b.onclick = () => { est.legenda_visual = b.dataset.m; pvVez = 0; pintarEstilo(); });
-  $('#ent-tit').innerHTML = Object.entries(MOD.entradas).map(([id, nome]) =>
-    `<button data-e="${id}" class="${id === est.entrada ? 'on' : ''}"${sem || cheia ? ' disabled' : ''}>${esc(nome)}</button>`).join('');
-  $('#ent-tit').querySelectorAll('button').forEach(b => b.onclick = () => { est.entrada = b.dataset.e; pintarEstilo(); animarTitulo(); });
-  pintarLegenda();
-  pintarTitulo();
+function fecharEstilo() {
+  $('#estilo').classList.remove('aberto');
+  pv.pause();
+  cancelAnimationFrame(pvRaf); pvRaf = 0;
+  pvDrag = null;
 }
 
-// O ACORDEÃO: uma pílula por grupo; a do grupo aberto mostra os tipos dele
-// logo abaixo. Grupo de um tipo só escolhe direto, sem abrir nada.
-// `undefined` = popup recém-aberto: abre o grupo da escolha atual
-const abertos = { leg: undefined, tit: undefined };
-const IC_SETA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg>';
-function acordeao(eixo, lista, chave, fonteDe) {
-  const grupos = [];
-  Object.entries(lista).forEach(([id, m]) => {
-    let g = grupos.find(x => x.nome === m.grupo);
-    if (!g) grupos.push(g = { nome: m.grupo, itens: [] });
-    g.itens.push([id, m]);
-  });
-  const atualG = lista[est[chave]].grupo;
-  if (abertos[eixo] === undefined)
-    abertos[eixo] = grupos.find(g => g.nome === atualG).itens.length > 1 ? atualG : null;
-  $(`#grp-${eixo}`).innerHTML = grupos.map(g => {
-    const sel = g.nome === atualG, um = g.itens.length === 1;
-    const rot = sel && !um ? `<small>· ${esc(lista[est[chave]].nome)}</small>` : um ? '' : `<small>${g.itens.length}</small>`;
-    return `<button class="grupo-btn${sel ? ' on' : ''}${abertos[eixo] === g.nome ? ' aberto' : ''}" data-g="${esc(g.nome)}">
-      ${esc(g.nome)} ${rot}${um ? '' : IC_SETA}</button>`;
-  }).join('');
-  $(`#grp-${eixo}`).querySelectorAll('.grupo-btn').forEach(b => b.onclick = () => {
-    const g = grupos.find(x => x.nome === b.dataset.g);
-    if (g.itens.length === 1) { est[chave] = g.itens[0][0]; abertos[eixo] = null; pvVez = 0; pintarEstilo(); if (eixo === 'tit') animarTitulo(); return; }
-    abertos[eixo] = abertos[eixo] === g.nome ? null : g.nome;
-    pintarEstilo(false);
-  });
-  const aberto = grupos.find(g => g.nome === abertos[eixo]);
-  const sub = $(`#mod-${eixo}`);
-  sub.classList.toggle('aberto', !!aberto);
-  sub.innerHTML = aberto ? aberto.itens.map(([id, m]) =>
-    `<button class="modelo${id === est[chave] ? ' on' : ''}" data-m="${id}"><b style="${fonteDe(m)}">${esc(m.nome)}</b><small>${esc(m.descricao || '')}</small></button>`).join('') : '';
-  sub.querySelectorAll('.modelo').forEach(b => b.onclick = () => {
-    est[chave] = b.dataset.m; pvVez = 0; pintarEstilo(); if (eixo === 'tit') animarTitulo();
-  });
-}
-
-const pxPv = n => `${(n * ($('#previa').clientWidth || 280) / 1080).toFixed(2)}px`;
-
-// a mesma conta do _quebras do legenda.py: quebra só se passa de meia largura
-function quebraPv(ws, linhas, maxChars) {
-  if (linhas < 2 || ws.length < 2) return -1;
-  const tam = ws.map(w => w.length), soma = (a, b) => tam.slice(a, b).reduce((x, y) => x + y, 0);
-  if (soma(0) + ws.length - 1 <= 0.55 * maxChars) return -1;
-  let melhor = 1, nota = Infinity;
-  for (let k = 1; k < ws.length; k++) {
-    const n = Math.max(soma(0, k) + k - 1, soma(k) + ws.length - k - 1);
-    if (n < nota) { nota = n; melhor = k; }
+// o vídeo da prévia: a base que a Fase 2 vai usar (o corte em pé). Num corte
+// já gerado, a base limpa do projeto — o arquivo da galeria já tem legenda queimada.
+let basesProjeto = {};
+async function fontePrevia(c) {
+  if (c.editado) {
+    const b = await carregarPalavras(c).then(() => basesProjeto[c.id]).catch(() => null);
+    if (b) return { src: b, ini: 0, fim: Infinity };
   }
-  return melhor - 1;
+  if (exportados[c.id]) return { src: exportados[c.id], ini: 0, fim: Infinity };
+  if (horizontal) return (await gerarOriginal(c)) ? { src: exportados[c.id], ini: 0, fim: Infinity } : null;
+  return { src: '/media', ini: c.start, fim: c.end };
 }
 
-// o que cada palavra pinta, por modo — espelho do _tags do legenda.py
-function pintaPalavra(modo, i, a, w, forcaOn) {
-  const cp = est.cor_principal, seg = clarear(cp), f = forcaOn && forte(w);
-  switch (modo) {
-    case 'karaoke': return i === a ? `color:${cp}` : f ? `color:${seg}` : '';
-    case 'estatico': return f ? `color:${cp}` : '';
-    case 'foco': return i === a ? '' : 'color:#8C96A0';
-    case 'progressivo': return i <= a ? `color:${cp}` : '';
-    case 'maquina': return i > a ? 'visibility:hidden' : i === a ? `color:${cp}` : '';
-    case 'vazado': return i === a ? `color:${cp}` : `color:transparent;-webkit-text-stroke:${pxPv(3)} #fff`;
-    case 'neon': return i === a ? `color:${seg};text-shadow:0 0 ${pxPv(8)} ${cp},0 0 ${pxPv(20)} ${cp}` : '';
-    case 'marca': return i === a ? `background:${cp};border-radius:${pxPv(4)};box-shadow:0 0 0 ${pxPv(8)} ${cp}` : '';
+// as palavras do corte, no tempo dele — agrupadas como o editor agrupa as
+// legendas de verdade (até 3 palavras, quebra na pontuação: groupCaptions)
+const palavrasP = {};
+function carregarPalavras(c) {
+  if (!palavrasP[c.id]) palavrasP[c.id] = fetch(`/api/palavras?id=${encodeURIComponent(c.id)}`)
+    .then(r => r.json()).then(d => {
+      if (d.base) basesProjeto[c.id] = d.base;
+      const ws = d.palavras || [];
+      const cues = []; let cur = [];
+      for (const w of ws) {
+        cur.push(w);
+        if (cur.length >= 3 || /[.,!?…]$/.test(w.w)) { cues.push(cur); cur = []; }
+      }
+      if (cur.length) cues.push(cur);
+      return cues.map(l => ({ text: l.map(w => w.w.replace(/[.,!?…]+$/, '')).join(' '), s: l[0].s, e: l.at(-1).e }));
+    }).catch(() => []);
+  return palavrasP[c.id].then(cues => { if (estCorte === c) pvCues = cues; return cues; });
+}
+function deixaEm(t) {
+  if (pvCues && pvCues.length) {
+    const q = pvCues.find(x => t >= x.s && t < x.e + 0.25);
+    return q ? q.text : '';
   }
-  return '';
+  // antes das palavras chegarem: o começo da fala, para já dar para comparar estilos
+  if (!pvAmostra) {
+    const ws = (estCorte?.transcricao || []).filter(x => x.t === 'w').map(x => x.w);
+    pvAmostra = (ws.length ? ws.slice(0, 3) : ['a', 'sua', 'legenda']).join(' ').replace(/[.,!?…]+$/, '');
+  }
+  return pvAmostra;
 }
 
-// a prévia FALA: a palavra da vez anda sozinha, para mostrar o que o tipo faz
-let pvVez = 0, pvTimer = null;
-function pintarLegenda() {
-  const c = estCorte, tipo = MOD.legendas[est.legenda], vis = MOD.visuais_legenda[est.legenda_visual];
-  const escala = tipo.escala || 1;
-  const maxChars = Math.round(tipo.max_chars * (vis.largura || 1) / escala);
-  const todas = (c.transcricao || []).filter(t => t.t === 'w').map(t => t.w);
-  const base = (todas.length ? todas : (c.texto || 'Uma legenda de exemplo para ver').split(/\s+/))
-    .slice(0, Math.max(tipo.max_palavras, 6)).map((w, i) => i ? w : maiuscula(w))
-    .map(w => vis.maiusculas ? w.toUpperCase() : w);
-  // palavra por palavra: a amostra é a palavra da vez; os outros, o primeiro bloco
-  let ws = base.slice(0, tipo.max_palavras), a = pvVez % ws.length;
-  if (tipo.max_palavras === 1) { ws = [base[pvVez % base.length]]; a = 0; }
-  const q = quebraPv(ws, tipo.linhas || 1, maxChars);
-  const leg = $('#pv-leg > span');
-  leg.innerHTML = ws.map((w, i) => {
-    const st = pintaPalavra(tipo.modo, i, tipo.modo === 'estatico' ? -1 : a, w, tipo.forca !== false);
-    return (st ? `<span style="${st}">${esc(w)}</span>` : esc(w)) + (i === q ? '<br>' : i < ws.length - 1 ? ' ' : '');
-  }).join('');
-  Object.assign(leg.style, {
-    fontFamily: vis.css, fontWeight: vis.peso, fontSize: pxPv(vis.tamanho * escala / MOD.css_k), color: '#fff',
-    maxWidth: pxPv(1080 - 260), whiteSpace: 'nowrap',
-    background: vis.caixa ? est.cor_fundo : 'none', padding: vis.caixa ? pxPv(vis.contorno * 0.9) : '0',
-    webkitTextStroke: vis.caixa ? '0' : `${pxPv(vis.contorno * 1.4)} rgba(0,0,0,.6)`, paintOrder: 'stroke fill',
-    textShadow: vis.sombra ? `0 ${pxPv(vis.sombra)} ${pxPv(vis.sombra * 2)} rgba(0,0,0,.55)` : 'none',
-  });
-  leg.className = vis.caixa ? 'caixa-on' : '';
-  if (tipo.pop) { leg.classList.remove('pv-anim-pop'); void leg.offsetWidth; leg.classList.add('pv-anim-pop'); }
-  $('#pv-leg').style.bottom = pxPv(est.base_px);
-  $('#pv-leg').style.top = 'auto';
+// o laço da prévia: remonta a legenda só quando a deixa (ou o estilo) muda, e a
+// headline só quando ela muda — refazer o DOM a cada quadro seria jogar fora
+function laco() {
+  pvRaf = requestAnimationFrame(laco);
+  if (!est || !pvFonte) return;
+  const w = $('#previa').clientWidth;
+  if (!w) return;
+  const t = Math.max(0, pv.currentTime - pvFonte.ini);
+  const id = est.captions || 'karaoke';
+  const priv = (ESTILOS.STYLE_CATALOG.captions.find(o => o.id === id) || {}).priv;
+  const texto = priv ? '' : deixaEm(t);
+  const kL = [id, texto, Math.round(w), est.capDy || 0, est.capColor, est.accent, est.capFont].join('|');
+  if (kL !== pvChaveLeg) {
+    pvChaveLeg = kL;
+    if (texto) ESTILOS.montarLegendaViva($('#pv-leg'), id, texto, { largura: w });
+    else $('#pv-leg').innerHTML = '';
+  }
+  const hid = est.headline || '';
+  const dentro = t <= ESTILOS.GANCHO_SEC;
+  const kH = [hid, est.headlineText, Math.round(w), dentro, est.accent, est.textColor, est.fontMain, est.fontAccent,
+              est.hookDx || 0, est.hookDy || 0, est.hookScale || 1].join('|');
+  if (kH !== pvChaveHook) {
+    pvChaveHook = kH;
+    if (hid) ESTILOS.montarHeadlineViva($('#pv-hook'), hid, { dentro, largura: w });
+    else $('#pv-hook').innerHTML = '';
+  }
+  const dur = isFinite(pvFonte.fim) ? pvFonte.fim - pvFonte.ini : (pv.duration || 0);
+  if (dur) $('#pv-prog').style.width = `${Math.min(100, t / dur * 100)}%`;
+  $('#pv-tempo').textContent = mmss(t);
+  $('#pv-play').innerHTML = pv.paused ? IC_PLAY : IC_PAUSE;
+  if (isFinite(pvFonte.fim) && pv.currentTime >= pvFonte.fim) { pv.pause(); pv.currentTime = pvFonte.fim; }
 }
-function rodarPrevia(liga) {
-  clearInterval(pvTimer);
-  if (liga && !matchMedia('(prefers-reduced-motion: reduce)').matches)
-    pvTimer = setInterval(() => { pvVez++; pintarLegenda(); }, 480);
-}
+const alternarPv = () => {
+  if (!pvFonte) return;
+  if (pv.paused) {
+    const fim = isFinite(pvFonte.fim) ? pvFonte.fim : pv.duration;
+    if (pv.currentTime >= fim - 0.05) pv.currentTime = pvFonte.ini;
+    pv.play().catch(() => {});
+  } else pv.pause();
+};
+$('#pv-play').onclick = alternarPv;
+pv.onclick = alternarPv;
+$('#pv-barra').onclick = e => {
+  if (!pvFonte) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  const dur = isFinite(pvFonte.fim) ? pvFonte.fim - pvFonte.ini : pv.duration;
+  if (dur) pv.currentTime = pvFonte.ini + (e.clientX - r.left) / r.width * dur;
+};
 
-// A headline vem do SERVIDOR, desenhada pelo mesmo .ass do vídeo (PNG
-// transparente). Troca só quando a nova chegou, para não piscar; a caixa
-// arrastável é medida do alfa da imagem.
-let pvTitTimer = null, pvTitUrl = '', pvAnimar = false;
-function pintarTitulo() {
-  const tt = MOD.titulos[est.titulo], cheia = tt.grupo === 'Tela cheia';
-  $('#pv-leg').style.visibility = ['capa', 'aspas'].includes(est.titulo) ? 'hidden' : '';   // cobrem a legenda, como no .ass
-  const img = $('#pv-tit'), caixa = $('#pv-tit-caixa');
-  if (est.titulo === 'nenhum') { img.style.display = caixa.style.display = 'none'; pvTitUrl = ''; return; }
-  img.style.display = '';
-  caixa.style.cursor = cheia ? 'default' : '';
-  const { base_px, legenda, legenda_visual, ...e } = est;   // a legenda não muda a headline: cache melhor
-  const url = `/api/titulo-previa.png?e=${encodeURIComponent(JSON.stringify(e))}&t=${encodeURIComponent($('#tit-texto').value.trim())}`;
-  if (url === pvTitUrl) return;
-  pvTitUrl = url;
-  clearTimeout(pvTitTimer);
-  pvTitTimer = setTimeout(() => {
-    const nova = new Image();
-    nova.onload = () => {
-      if (pvTitUrl !== url) return;
-      img.src = url; img.style.transform = '';
-      medirCaixa(nova, cheia);
-      if (pvAnimar) { pvAnimar = false; replayAnim(); }
-    };
-    nova.src = url;
-  }, 160);
-}
-function medirCaixa(im, cheia) {
-  const caixa = $('#pv-tit-caixa');
-  if (cheia) { caixa.style.display = 'none'; return; }
-  const cv = document.createElement('canvas'); cv.width = 135; cv.height = 240;   // 1/4 basta para achar a faixa
-  const g = cv.getContext('2d'); g.drawImage(im, 0, 0, cv.width, cv.height);
-  const px = g.getImageData(0, 0, cv.width, cv.height).data;
-  let y0 = -1, y1 = -1;
-  for (let y = 0; y < cv.height; y++) for (let x = 0; x < cv.width; x++)
-    if (px[(y * cv.width + x) * 4 + 3] > 24) { if (y0 < 0) y0 = y; y1 = y; break; }
-  if (y0 < 0) { caixa.style.display = 'none'; return; }
-  Object.assign(caixa.style, { display: 'block', top: `${y0 / cv.height * 100}%`, height: `${(y1 - y0 + 1) / cv.height * 100}%` });
-}
-// a entrada toca quando a imagem NOVA chega — antes disso animaria a velha
-function animarTitulo() { pvAnimar = true; }
-function replayAnim() {
-  const img = $('#pv-tit'), e = MOD.titulos[est.titulo].grupo === 'Tela cheia' ? 'fade' : est.entrada;
-  img.classList.remove('pv-anim-pop', 'pv-anim-desliza', 'pv-anim-fade');
-  void img.offsetWidth;
-  img.classList.add(`pv-anim-${e}`);
-}
+// ARRASTAR, como no editor: a legenda anda na vertical (capDy, px de
+// referência 1080, para cima = positivo); a headline anda livre pela alça e
+// muda de tamanho pelo canto (hookDx/hookDy/hookScale, limites do módulo)
+let pvDrag = null;
+const dica = (txt) => { const d = $('#pv-dica'); d.innerHTML = txt; d.classList.toggle('on', !!txt); };
+$('#pv-leg').addEventListener('pointerdown', e => {
+  if (!est || !e.target.closest('.ave-cap, .ave-cap-static, .ave-stacked, .ave-scatter, .ave-pal, .ave-pop, .ave-rev')) return;
+  pvDrag = { tipo: 'leg', y0: e.clientY, dy0: est.capDy || 0, sc: $('#previa').clientWidth / 1080 };
+  try { e.target.setPointerCapture(e.pointerId); } catch (err) { /* toque */ }
+  e.preventDefault();
+});
+$('#pv-hook').addEventListener('pointerdown', e => {
+  const alca = e.target.closest('.hook-alca');
+  if (!est || !alca) return;
+  const q = alca.getBoundingClientRect();
+  const cx = q.left + q.width / 2, cy = q.top + q.height / 2;
+  pvDrag = { tipo: e.target.closest('.hook-canto') ? 'escala' : 'mover', x0: e.clientX, y0: e.clientY,
+             sc: $('#previa').clientWidth / 1080, dx0: est.hookDx || 0, dy0: est.hookDy || 0, k0: est.hookScale || 1,
+             cx, cy, d0: Math.max(8, Math.hypot(e.clientX - cx, e.clientY - cy)) };
+  e.preventDefault();
+});
+window.addEventListener('pointermove', e => {
+  if (!pvDrag) return;
+  const g = pvDrag, L = ESTILOS.HOOK_LIM;
+  if (g.tipo === 'leg') {
+    est.capDy = Math.round(Math.max(-380, Math.min(760, g.dy0 + (g.y0 - e.clientY) / g.sc)));
+    dica(`legenda <b>${est.capDy >= 0 ? '+' : ''}${est.capDy}</b> px`);
+  } else if (g.tipo === 'mover') {
+    est.hookDx = Math.round(Math.max(-L.dx, Math.min(L.dx, g.dx0 + (e.clientX - g.x0) / g.sc)));
+    est.hookDy = Math.round(Math.max(L.dyMin, Math.min(L.dyMax, g.dy0 + (g.y0 - e.clientY) / g.sc)));
+    dica(`headline <b>${est.hookDx >= 0 ? '+' : ''}${est.hookDx}</b>, <b>${est.hookDy >= 0 ? '+' : ''}${est.hookDy}</b> px`);
+  } else {
+    const d = Math.hypot(e.clientX - g.cx, e.clientY - g.cy);
+    est.hookScale = Math.round(Math.max(L.kMin, Math.min(L.kMax, g.k0 * d / g.d0)) * 100) / 100;
+    dica(`headline <b>${Math.round(est.hookScale * 100)}%</b>`);
+  }
+});
+window.addEventListener('pointerup', () => {
+  if (!pvDrag) return;
+  pvDrag = null;
+  dica('');
+  guardarPrefs();
+});
+$('#pv-hook').addEventListener('dblclick', e => {
+  if (!est || !e.target.closest('.hook-alca')) return;
+  est.hookDx = 0; est.hookDy = 0; est.hookScale = 1;
+  guardarPrefs();
+});
 
-// arrastar na vertical: a legenda mede da BASE (MarginV do .ass), a headline
-// do TOPO. A headline anda como imagem durante o arraste e é redesenhada ao soltar.
-function arrastavel(el, chave, daBase, aoMover, aoSoltar) {
-  el.addEventListener('pointerdown', e => {
-    if (chave === 'topo_px' && MOD.titulos[est.titulo].grupo === 'Tela cheia') return;
-    e.preventDefault();
-    el.setPointerCapture(e.pointerId); el.classList.add('pegando');
-    const k = 1080 / $('#previa').clientWidth, y0 = e.clientY, v0 = est[chave];
-    const lim = chave === 'base_px' ? [60, 1700] : [40, 1600];
-    const mover = ev => {
-      const d = (ev.clientY - y0) * k;
-      est[chave] = Math.round(Math.min(lim[1], Math.max(lim[0], daBase ? v0 - d : v0 + d)));
-      aoMover(est[chave] - v0);
-    };
-    const soltar = () => {
-      el.classList.remove('pegando'); el.removeEventListener('pointermove', mover);
-      aoSoltar?.();
-    };
-    el.addEventListener('pointermove', mover);
-    el.addEventListener('pointerup', soltar, { once: true });
-    el.addEventListener('pointercancel', soltar, { once: true });
-  });
-}
-arrastavel($('#pv-leg'), 'base_px', true, () => { guardarEstilo(); pintarLegenda(); });
-arrastavel($('#pv-tit-caixa'), 'topo_px', false, d => {
-  const k = $('#previa').clientWidth / 1080;
-  $('#pv-tit').style.transform = `translateY(${d * k}px)`;
-  $('#pv-tit-caixa').style.transform = `translateY(${d * k}px)`;
-}, () => { $('#pv-tit-caixa').style.transform = ''; guardarEstilo(); pintarTitulo(); });
-$('#tit-texto').oninput = pintarTitulo;   // o texto é do corte, não do perfil
-$('#tit-inteiro').onchange = e => { est.titulo_inteiro = e.target.checked; guardarEstilo(); };
-$('#cor-p').oninput = e => { est.cor_principal = e.target.value.toUpperCase(); pintarEstilo(); };
-$('#cor-f').oninput = e => { est.cor_fundo = e.target.value.toUpperCase(); pintarEstilo(); };
-$('#est-padrao').onclick = () => { est = { ...MOD.padrao }; pintarEstilo(); };
+$('#est-padrao').onclick = () => {
+  const texto = est.headlineText, caixa = est.caixaPergunta;
+  est = ESTILOS.defaultStyle();
+  for (const id of Object.keys(INDISPONIVEL)) est.elements[id] = false;
+  est.headlineText = texto; est.caixaPergunta = caixa;
+  guardarPrefs();
+  painel.render();
+  pvChaveLeg = pvChaveHook = '';
+};
 $('#est-nao').onclick = fecharEstilo;
 $('#estilo').onclick = e => { if (e.target.id === 'estilo') fecharEstilo(); };
-$('#est-sim').onclick = () => {
+
+// o que a Fase 2 recusaria por falta de conteúdo é barrado AQUI, com o campo à vista
+function faltaConteudo() {
+  const s = est;
+  if (s.elements.caixinha && !(s.caixaPergunta || '').trim()) return 'Escreva a pergunta da caixinha.';
+  if (s.elements.noticia && !(s.headlineText || '').trim()) return 'Escreva o texto da manchete.';
+  if (s.headline && !s.elements.caixinha && !(s.headlineText || '').trim())
+    return 'Escreva o texto da headline (ou escolha “Nenhum” na aba Headline).';
+  return '';
+}
+$('#est-sim').onclick = async () => {
+  if (!est || !estCorte) return;
+  const falta = faltaConteudo();
+  if (falta) {
+    painel.camada('headline');
+    $('#est-erro').textContent = falta;
+    const campo = document.getElementById(est.elements.caixinha ? 'est-caixa' : 'est-hl-texto');
+    if (campo) campo.focus();
+    return;
+  }
   const c = estCorte;
+  const cta = await escolherCta(c);
+  if (cta === undefined) return;   // cancelou: o popup continua aberto, com tudo
+  // o corpo é o do módulo — o MESMO que o editor manda ao /api/save
+  const escolhas = ESTILOS.payloadEstilo(est, { rerender: false });
+  guardarPrefs();
   fecharEstilo();
-  baixar(c, $('#baixar-leg'), 'legendado', versao, { ...est, texto: $('#tit-texto').value.trim() });
+  enfileirar(c, { escolhas, cta });
 };
 
 document.addEventListener('keydown', e => {
+  if ($('#cta-dlg').classList.contains('aberto')) return;   // a escolha do CTA trata as teclas dela
   if ($('#estilo').classList.contains('aberto')) { if (e.key === 'Escape') fecharEstilo(); return; }
   if (atual < 0 || $('#dialogo').classList.contains('aberto')) return;
   if (e.key === 'Escape') fechar();
