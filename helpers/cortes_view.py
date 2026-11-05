@@ -689,6 +689,42 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = unquote(urlparse(self.path).path)
+        # ---- O CATÁLOGO DE ESTILOS DO EDITOR, servido aqui também ----
+        # A galeria oferece as MESMAS escolhas do editor (assets/shared/estilos.js,
+        # `window.AVE_ESTILOS`), e o módulo pede o que desenha pelos MESMOS
+        # caminhos do preview_server.py: /shared/ (o módulo e a folha dele),
+        # /styles/ (folhas, scripts, variants.json e fonts/ do render), /assets/
+        # SÓ com o que as prévias usam (as PNGs do CTA, demos.js, a camada
+        # local — o app do editor não sai daqui) e /api/localfonts. Outra árvore
+        # de URLs seria uma segunda configuração a manter igual nos dois lados.
+        # `no-store`: um estilos.js editado não pode vir do cache do navegador.
+        if path == "/api/localfonts":
+            try:
+                import local_fonts
+                return self._json({"families": local_fonts.catalog()})
+            except Exception as exc:          # sem fontes locais, só as do Google
+                return self._json({"families": [], "error": str(exc)[:200]})
+        for pre, raiz, so in (("/shared/", SKILL / "assets" / "shared", None),
+                              ("/styles/", SKILL / "assets" / "styles", None),
+                              ("/assets/", SKILL / "assets" / "preview",
+                               {"cta-card.png", "cta-simples.png", "demos.js", "styles.local.js"})):
+            if path.startswith(pre):
+                p = (raiz / path[len(pre):]).resolve()
+                tipo = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+                        ".json": "application/json; charset=utf-8", ".png": "image/png",
+                        ".ttf": "font/ttf", ".otf": "font/otf", ".woff": "font/woff",
+                        ".woff2": "font/woff2"}.get(p.suffix.lower())
+                if (not p.is_relative_to(raiz.resolve()) or not p.is_file() or not tipo
+                        or (so and p.name not in so)):
+                    return self.send_error(404)
+                b = p.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", tipo)
+                self.send_header("Content-Length", str(len(b)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(b)
+                return
         if path in ("/", "/index.html"):
             return self._arquivo(PAGINA, "text/html; charset=utf-8")
         if path == "/icone.png":

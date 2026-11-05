@@ -78,6 +78,11 @@ APP_DIR = Path(__file__).resolve().parent.parent / "assets" / "preview"
 # de uma imitação: se houvesse uma cópia no editor, ela começaria igual e
 # divergiria na primeira correção feita só de um lado.
 STYLE_DIR = Path(__file__).resolve().parent.parent / "assets" / "styles"
+# O CATÁLOGO E AS PRÉVIAS DE ESTILO (`window.AVE_ESTILOS`), compartilhados com a
+# galeria de cortes (helpers/cortes_view.py serve a mesma pasta em /shared/).
+# Pasta própria, e não dentro de assets/preview: a galeria não serve o editor, e
+# servir o editor inteiro só para dois arquivos abriria o app dele por lá.
+SHARED_DIR = Path(__file__).resolve().parent.parent / "assets" / "shared"
 PEAKS_PER_SEC = 40
 THUMB_EVERY_S = 2.0
 THUMB_HEIGHT = 90
@@ -95,6 +100,12 @@ MIME = {
     ".webm": "video/webm",
     ".mp3": "audio/mpeg",
     ".srt": "text/plain; charset=utf-8",
+    # as fontes empacotadas do render (/styles/fonts/) iam como octet-stream
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".svg": "image/svg+xml",
 }
 
 def _slug(text: str) -> str:
@@ -543,7 +554,8 @@ def _scan_projects(force: bool = False) -> list[str]:
 def _stale() -> bool:
     """Algum arquivo do app mudou DEPOIS que este processo subiu?"""
     watched = [Path(__file__).resolve(), APP_DIR / "app.js",
-               APP_DIR / "app.css", APP_DIR / "index.html"]
+               APP_DIR / "app.css", APP_DIR / "index.html",
+               SHARED_DIR / "estilos.js", SHARED_DIR / "estilos.css"]
     try:
         return max(f.stat().st_mtime for f in watched if f.exists()) > STARTED_AT
     except (OSError, ValueError):
@@ -726,6 +738,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path.startswith("/styles/"):
             p = self._safe(STYLE_DIR, path[len("/styles/"):])
+            self._send_file(p) if p else self._json({"error": "bad path"}, 400)
+        elif path.startswith("/shared/"):
+            p = self._safe(SHARED_DIR, path[len("/shared/"):])
             self._send_file(p) if p else self._json({"error": "bad path"}, 400)
         elif path.startswith("/media/"):
             if self._no_project():
@@ -1802,6 +1817,16 @@ class Handler(BaseHTTPRequestHandler):
         pass  # quiet
 
 
+class _Servidor(ThreadingHTTPServer):
+    """A FILA DO `listen`. O padrão do socketserver é 5 conexões esperando
+    aceite, e a carga do editor pede mais do que isso de uma vez (as folhas e os
+    scripts do render, o módulo de estilos, o vídeo em faixas). Medido com a
+    máquina ocupada: palavra.css, cartela.css, pop.js e revelar.js voltaram
+    ERR_CONNECTION_RESET numa carga — e sem o palavra.js os cartões do motor
+    `palavra` saem vazios, sem erro nenhum na tela. Com 64, nenhuma queda."""
+    request_queue_size = 64
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Avelin preview interface server")
     # OPCIONAL de propósito. Sem ele o editor abre vazio e a pessoa escolhe na
@@ -1837,7 +1862,7 @@ def main() -> None:
         _recents_touch(root)
 
     _set_root(root)
-    srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    srv = _Servidor(("127.0.0.1", args.port), Handler)
     srv.auto_apply = args.auto
     url = f"http://127.0.0.1:{args.port}"
     # PUBLICA O ENDEREÇO antes de servir. Ver o comentário em SERVER: sem isto,
