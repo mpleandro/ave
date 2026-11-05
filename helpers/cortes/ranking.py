@@ -30,6 +30,12 @@ Critérios, nesta ordem de peso:
 4. especificidade e energia — exemplo concreto, número, cena; voz viva
 5. compartilhável — "preciso mandar isso para alguém"
 
+`Alertas` são defeitos medidos no áudio e no texto (fala de outra pessoa no
+meio, fala que o transcrito engoliu, referência à live) — pesam contra na
+comparação quando atrapalham quem assiste, mas o desconto em pontos já é
+aplicado DEPOIS, sozinho: não desconte de novo só por existirem. `Pico` é a
+frase em que a voz sobe acima do normal de quem fala.
+
 ESPALHE as notas: o melhor fica entre 85 e 95, o mediano por volta de 65, o
 fraco abaixo de 50. Empate só quando forem mesmo equivalentes. A nota do lote
 vem como referência — mude o quanto a comparação pedir. A ordem é a das notas
@@ -57,11 +63,23 @@ def prompt(pedidos: list[dict], contexto: dict) -> str:
                              destino=contexto.get("destino", "analise/ranking.json"),
                              chave=p["chave"])]
     for c in sorted(p["cortes"], key=lambda c: -c["score_final"]):
+        extra = ""
+        fal = c.get("falas") or []
+        if len({q for q, _, _ in fal}) > 1:
+            extra += "Falas: " + " · ".join(f"{q} {de:.0f}–{ate:.0f}s" for q, de, ate in fal) + "\n"
+        if c.get("alertas"):
+            d = c.get("desconto_alertas")
+            extra += ("Alertas" + (f" ({d} automático)" if d else "") + ": "
+                      + " · ".join(a["texto"] for a in c["alertas"]) + "\n")
+        if c.get("picos"):
+            extra += "Pico: " + " · ".join(f"\"{x['texto'][:50]}\" {x['db']:+.0f}dB aos {x['t']:.1f}s"
+                                           for x in c["picos"]) + "\n"
         partes.append(
             f"### {c['id']} · nota do lote {c['score_final']} · {c['dur']:.0f}s · "
             f"\"{c['titulo_sugerido']}\"\n"
             f"Primeiros 3s: {c.get('abertura_3s', '')}\n"
             f"Gancho: {c['gancho'].get('tipo')} · {c['motivo']}\n"
+            + extra +
             f"Texto: {c['texto']}\n\n")
     return "".join(partes)
 

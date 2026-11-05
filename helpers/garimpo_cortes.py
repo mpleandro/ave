@@ -16,6 +16,13 @@ Estágios (um arquivo cada em helpers/cortes/), cada um grava
 
 Quando faltam notas, `avaliar` escreve `analise/para_avaliar.md` e sai com
 código 2: o modelo da sessão lê, grava `analise/notas.json` e roda de novo.
+
+O lote marca, por frase, o que o texto não mostra (`sinais_audio.anotar`):
+quem fala (com `<stem>_cortes/elenco.json`), pico de voz contra o normal de
+quem fala e fala sem texto. Depois das notas, `bordas.aparar` limpa as pontas
+(cauda de live, logística, fala curta de outra pessoa, cauda colada ouvida) e
+os alertas que sobram descontam na nota — antes e depois do ranking.
+
 Parâmetros e pesos: `helpers/cortes/config.json`, sobrescrevíveis por projeto
 em `<stem>_cortes/cortes_config.json`.
 """
@@ -29,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cortes import autocontencao as A  # noqa: E402
 from cortes import bordas as B  # noqa: E402
 from cortes import candidatos as C  # noqa: E402
+from cortes import elenco as EL  # noqa: E402
 from cortes import fala as FL  # noqa: E402
 from cortes import fonte as F  # noqa: E402
 from cortes import legenda as L  # noqa: E402
@@ -56,7 +64,7 @@ class Fonte:
 
     def __init__(self, video: Path, trab: Path, cfg: dict):
         self.video, self.trab, self.cfg = video, trab, cfg
-        self._ws = self._sil = self._frs = None
+        self._ws = self._sil = self._frs = self._voz = None
 
     @property
     def ws(self):
@@ -71,12 +79,19 @@ class Fonte:
         return self._sil
 
     @property
+    def voz(self):
+        """(times, db, limiar de voz) — limiar 6 dB acima do piso da sala: o
+        "Mas" dito baixinho fica ~20 dB acima do piso, o respiro antes do verbo
+        cai nele."""
+        if self._voz is None:
+            t, db = F.energia(self.video)
+            self._voz = (t, db, estimate_floor(db) + 6)
+        return self._voz
+
+    @property
     def frs(self):
         if self._frs is None:
-            t, db = F.energia(self.video)
-            # limiar de voz: 6 dB acima do piso da sala — o "Mas" dito baixinho
-            # fica ~20 dB acima do piso, o respiro antes do verbo cai nele
-            self._frs = C.montar_frases(self.ws, self.sil, (t, db, estimate_floor(db) + 6))
+            self._frs = C.montar_frases(self.ws, self.sil, self.voz, self.cfg)
         return self._frs
 
 
@@ -85,7 +100,11 @@ def palavras_do_corte(frs: list[dict], c: dict) -> list[dict]:
     o refino tirou — é o texto da legenda; o tempo dela vem de ouvir o corte."""
     i, j = c["frases"]
     ws = [{"w": w["w"], "s": w["s"], "e": w["e"]} for f in frs[i:j + 1] for w in f["ws"]]
-    tirou = (c.get("refinado") or {}).get("tirou")
+    ref = c.get("refinado") or {}
+    if (ref.get("cauda") or {}).get("n"):      # a cauda colada que `bordas.aparar` tirou
+        ws = ws[:-ref["cauda"]["n"]]
+        ws[-1] = {**ws[-1], "w": ws[-1]["w"].rstrip(",") + "."}
+    tirou = ref.get("tirou")
     return ws[len(tirou.split()):] if tirou else ws
 
 
@@ -173,8 +192,33 @@ def etapa_candidatos(f: Fonte) -> None:
     p = F.salvar(f.trab, "candidatos", {"fonte": str(f.video), "n_frases": len(f.frs),
                                         "candidatos": cands})
     durs = sorted(c["dur"] for c in cands)
+    ruins = [C.borda_ruim(x, f.cfg) for x in f.frs]
     print(f"[candidatos] {len(f.ws)} palavras · {len(f.frs)} frases · {len(cands)} janelas "
           f"(mediana {durs[len(durs) // 2] if durs else 0}s) → {p.name}")
+    print(f"  bordas recusadas: {ruins.count('cauda')} frases de cauda, {ruins.count('logistica')} de "
+          f"logística · {sum(1 for x in f.frs if x.get('cauda'))} com cauda colada destacável")
+
+
+def conferir_frases(f: Fonte, cands: list[dict]) -> None:
+    """As janelas gravadas apontam para frases por ÍNDICE; se a segmentação
+    mudou desde o estágio `candidatos` (código novo, transcrito refeito), o
+    índice cai em outra frase e o lote mostraria outro texto sem aviso."""
+    for c in cands:
+        i, j = c["frases"]
+        if j >= len(f.frs) or " ".join(x["texto"] for x in f.frs[i:j + 1]) != c["texto"]:
+            raise SystemExit(f"[avaliar] {c['id']}: as frases da fonte mudaram desde o estágio "
+                             f"candidatos — rode de novo a partir dele (sem --so)")
+
+
+def anotacao(f: Fonte, an: dict, c: dict) -> dict:
+    """O que o lote mostra da janela além do texto (ver `sinais_texto.pedido`)."""
+    return {"elenco": an["elenco"], "quem": an["quem"], "picos": SA.picos(c, an, f.cfg),
+            "falas": SA.falas(c, an, f.cfg), "alertas": SA.alertas(c, f.frs, an, f.voz, f.cfg)}
+
+
+def picos_do_corte(f: Fonte, an: dict, r: dict) -> list[dict]:
+    return [{"k": g - r["frases"][0], "t": round(f.frs[g]["s"] - r["start"], 1), "db": d,
+             "texto": f.frs[g]["texto"]} for g, d in sorted(SA.picos(r, an, f.cfg).items())]
 
 
 def etapa_prefiltro(f: Fonte) -> None:
@@ -202,9 +246,22 @@ def etapa_prefiltro(f: Fonte) -> None:
 
 
 def etapa_avaliar(f: Fonte) -> None:
+    import time  # noqa: PLC0415
     pre = F.ler(f.trab, "prefiltro")
     fin = pre["finalistas"]
-    pedidos = [T.pedido(c, f.frs, f.cfg) for c in fin]
+    conferir_frases(f, fin)
+    el = EL.carregar(f.video)
+    t0 = time.time()
+    an = SA.anotar(fin, f.frs, f.video, f.voz, f.cfg, el)
+    anots = {c["id"]: anotacao(f, an, c) for c in fin}
+    n_al = [a["tipo"] for x in anots.values() for a in x["alertas"]]
+    print(f"[avaliar] sinais por frase em {time.time() - t0:.0f}s · "
+          + (f"elenco {', '.join(p['nome'] for p in el['pessoas'])}: quem fala em "
+             f"{sum(1 for q in an['quem'].values() if q and q != '?')} de {len(an['nivel'])} frases"
+             if el else f"sem elenco ({EL.caminho(f.video)}): quem fala não é marcado")
+          + f" · {sum(1 for x in anots.values() if x['picos'])} de {len(fin)} trechos com ⚡PICO · alertas: "
+          + (", ".join(f"{n_al.count(k)} {k}" for k in sorted(set(n_al))) or "nenhum"))
+    pedidos = [T.pedido(c, f.frs, f.cfg, anots[c["id"]]) for c in fin]
     ctx = {**f.cfg["contexto"], "destino": str(f.trab / "analise" / "notas.json")}
     av = llm.provedor(f.cfg.get("avaliador", "sessao"), f.trab, T.prompt)
     try:
@@ -220,6 +277,9 @@ def etapa_avaliar(f: Fonte) -> None:
         for k, v in erros.items():
             print(f"  {k}: {'; '.join(v)}")
         raise SystemExit(f"[avaliar] {len(erros)} nota(s) fora do esquema — corrija notas.json")
+    for p in pedidos:
+        for a in T.avisos(notas[p["chave"]], p):
+            print(f"  aviso {p['id']}: {a}")
 
     times, levels = F.energia(f.video)
     pop = pre["populacao_audio"]
@@ -239,10 +299,18 @@ def etapa_avaliar(f: Fonte) -> None:
         r = B.refinar(c, nota, f.frs, f.cfg)
         if recusado:
             r = {**r, "refinado": {**(r.get("refinado") or {}), "manteve": recusado}}
-        if r is not c:   # janela mudou: áudio e autocontenção são remedidos
+        # as pontas, sem modelo: cauda de live, logística, fala curta de outra
+        # pessoa e a cauda colada — esta conferida ouvindo (fala.fim_sem_cauda)
+        r = B.aparar(r, f.frs, f.cfg, an["quem"],
+                     lambda ponto, ultima, cauda: FL.fim_sem_cauda(f.video, ponto, ultima, cauda), f.voz)
+        if (r["start"], r["end"]) != (c["start"], c["end"]):   # janela mudou: remede
             m = SA.medir([r], times, levels, pre["floor_db"], f.sil, f.cfg)[0]
             r["audio"] = SA.nota_contra(m, pop, f.cfg)
             r["autocontencao"] = A.avaliar(r, f.cfg)
+        r["alertas"] = SA.alertas(r, f.frs, an, f.voz, f.cfg)
+        if (r.get("refinado") or {}).get("cauda_mantida"):
+            r["alertas"].append({"tipo": "cauda", "texto": f"termina em \"{r['refinado']['cauda_mantida']}\" "
+                                                          f"(não deu para cortar sem comer sílaba)"})
         sc = S.final(r, nota, f.cfg)
         contexto[c["id"]] = (r, nota)
         avaliados.append({
@@ -255,6 +323,9 @@ def etapa_avaliar(f: Fonte) -> None:
             "titulo_sugerido": nota["titulo_sugerido"], "frase_gancho": nota.get("frase_gancho", ""),
             "motivo": nota["motivo"], "gancho": nota["gancho"],
             "refinado": r.get("refinado"), "previa": c["previa"],
+            "alertas": r["alertas"], "falas": SA.falas(r, an, f.cfg), "picos": picos_do_corte(f, an, r),
+            "payoff": nota.get("payoff"), "referencias_live": nota.get("referencias_live"),
+            "pico_uso": nota.get("pico"),
             "ruido": bool(nota.get("ruido", False)), "chave_nota": p["chave"]})
 
     # Ruído (bastidor da live) e nota abaixo do mínimo não entram na galeria.
@@ -297,7 +368,9 @@ def etapa_avaliar(f: Fonte) -> None:
     for c in top:   # versões na escala do lote; o ranking desloca tudo junto
         r, nota = contexto[c["id"]]
         versoes(f, c, r, nota, pop, (times, levels), pre["floor_db"])
-    top = [c for c in RK.aplicar(rk, top) if c["score_final"] >= f.cfg["selecao"]["nota_min"]]
+    # o ranking SUBSTITUI a nota do lote; os alertas descontam de novo por cima
+    top = [c for c in S.aplicar_alertas(RK.aplicar(rk, top), f.cfg)
+           if c["score_final"] >= f.cfg["selecao"]["nota_min"]]
     # pedidos pelo assunto (`prefiltro.incluir`) entram na galeria com a nota do
     # lote, mesmo abaixo da régua: quem pediu já decidiu que o trecho vale
     incl = set(f.cfg["prefiltro"].get("incluir") or [])
