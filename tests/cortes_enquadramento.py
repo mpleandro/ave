@@ -164,5 +164,14 @@ EQ._miniaturas = orig_mini
 ok(len(fx) == 1 and abs(fx[0][0] - 101.9) < 1e-6 and abs(fx[0][1] - 107.0) < 1e-6,
    f"a tela achada em 4–5s vai de 1,9s (fusão) a 7s, mesmo sem rosto ({[(round(x0, 2), round(x1, 2)) for x0, x1, _ in fx]})")
 
+# trecho LONGO num plano só (33s): o caminho inteiro virava ~110 termos e o
+# ffmpeg recusava o filtro ("Failed to configure input pad") — sete cortes
+import subprocess as _sp  # noqa: E402
+longo33 = [[0.3 * k, int(800 + 120 * np.sin(k / 9))] for k in range(115)]
+e33 = EQ.x_expr(longo33, 0.0, 34.0)
+r33 = _sp.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=gray:s=1920x1080:r=30:d=1",
+               "-vf", f"crop=606:1080:'{e33}':0", "-f", "null", "-"], capture_output=True)
+ok(r33.returncode == 0, "trecho de 33s num plano só: o ffmpeg aceita o caminho")
+
 print("\ntudo certo" if not falhas else f"\n{falhas} falha(s)")
 sys.exit(1 if falhas else 0)

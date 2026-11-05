@@ -1119,6 +1119,33 @@ def _trajeto(p: dict, t0: float, t1: float, faixa, a: float) -> list[list[float]
     return pts
 
 
+def _simplificar(pts: list, tol: float = 2.0, teto: int = 40) -> list:
+    """Tira do caminho os pontos que a reta entre os vizinhos já descreve (erro
+    ≤ `tol` px) e, se ainda sobrar demais, espaça até `teto` pontos. Trecho
+    longo num plano só (33s no "Você trabalha e o dinheiro nunca é seu") virava
+    ~110 termos e o ffmpeg recusava o filtro inteiro ("Failed to configure
+    input pad") — sete cortes não saíam."""
+    if len(pts) <= 2:
+        return pts
+
+    def dp(i, j):
+        (ta, xa), (tb, xb) = pts[i], pts[j]
+        pior, k_pior = 0.0, None
+        for k in range(i + 1, j):
+            t, x = pts[k]
+            lin = xa + (xb - xa) * ((t - ta) / (tb - ta) if tb > ta else 0)
+            if abs(x - lin) > pior:
+                pior, k_pior = abs(x - lin), k
+        if k_pior is None or pior <= tol:
+            return [i, j]
+        return dp(i, k_pior)[:-1] + dp(k_pior, j)
+    keep = dp(0, len(pts) - 1)
+    out = [pts[k] for k in keep]
+    while len(out) > teto:
+        out = out[::2] + ([out[-1]] if len(out) % 2 == 0 else [])
+    return out
+
+
 def x_expr(xs: list, t0: float, t1: float | None = None) -> str:
     """A expressão de x do `crop` para um pedaço [t0, t1] da fonte (o pedaço
     passa por setpts=PTS-STARTPTS, então t do filtro = fonte − t0).
@@ -1128,6 +1155,7 @@ def x_expr(xs: list, t0: float, t1: float | None = None) -> str:
     versão "sem respiros" parte o corte em dezenas de pedaços, e o ffmpeg
     recusava a expressão ("Missing ')' or too many args") — o corte não saía."""
     pts = [(round(t - t0, 3), int(x)) for t, x in xs]
+    pts = _simplificar(pts)
     if t1 is not None:
         fim = t1 - t0
         dentro = [k for k, (t, _) in enumerate(pts) if -0.5 <= t <= fim + 0.5]
