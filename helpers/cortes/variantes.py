@@ -259,7 +259,7 @@ def render(video: Path, segs: list[tuple[float, float]], destino: Path,
         entradas += ["-ss", f"{sa:.3f}", "-t", f"{d:.4f}", "-i", str(video)]
         base = f"[{n}:v]setpts=PTS-STARTPTS"
         if tr is not None:
-            base += "," + EQ.filtro(tr, W, H, (OW, OH), str(n))
+            base += "," + EQ.filtro(tr, W, H, (OW, OH), str(n), t0=sa, t1=sb)
         if zoom and len(segs) > 1 and k % 2 == 1:
             z = zoom["fator"]
             zw, zh = int(OW * z) // 2 * 2, int(OH * z) // 2 * 2

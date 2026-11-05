@@ -119,9 +119,61 @@ def _plano(c: dict, versao: str) -> list[tuple[float, float]]:
     return VR.plano(c, versao, VR.janela(c))
 
 
+def _baixados_path() -> Path:
+    return TRAB / "analise" / "baixados.json"
+
+
+def baixados() -> dict:
+    """{id do corte: {"arquivos": [...], "em": epoch}} — o que já saiu da galeria
+    pelo botão de baixar. A tela pinta a seta de verde para esses."""
+    try:
+        return json.loads(_baixados_path().read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def marcar_baixado(nome: str) -> None:
+    ids = [c["id"] for c in cortes()["cortes"] if nome.startswith(c["id"] + "_")]
+    if not ids:
+        return
+    cid = max(ids, key=len)
+    with _TRAVA:
+        d = baixados()
+        r = d.setdefault(cid, {"arquivos": [], "em": 0})
+        if nome not in r["arquivos"]:
+            r["arquivos"].append(nome)
+        r["em"] = int(__import__("time").time())
+        _baixados_path().write_text(json.dumps(d, ensure_ascii=False, indent=1))
+
+
+def edicao(c: dict) -> Path | None:
+    """O corte EDITADO à mão (`<trabalho>/edicao/edicoes.json` → {id: arquivo}),
+    quando existe. Ele vira a base de TODO download do corte — limpo, com
+    legenda e .srt. Antes disso, "Com legenda" refazia o corte a partir da
+    fonte e entregava a versão do garimpo: no "pneu do Gol" (2026-11) o arquivo
+    legendado saiu sem o gancho novo, sem a transição e sem o CTA pedidos."""
+    mapa = TRAB / "edicao" / "edicoes.json"
+    try:
+        rel = json.loads(mapa.read_text()).get(c["id"])
+    except (OSError, json.JSONDecodeError):
+        return None
+    p = (mapa.parent / rel) if rel else None
+    return p if p and p.exists() else None
+
+
+def _palavras_editado(ed: Path) -> tuple[list[dict], float]:
+    """Palavras OUVIDAS no próprio corte editado — a montagem é outra, então o
+    transcrito do garimpo não serve."""
+    d = duracao(ed)
+    return L.ouvir(ed, 0.0, d), d
+
+
 def palavras_da_versao(c: dict, versao: str) -> tuple[list[dict], float]:
     """A legenda da versão: texto do transcrito, tempo de ouvir o corte, e cada
     palavra levada para onde ela cai no vídeo montado."""
+    ed = edicao(c)
+    if ed and versao == "original":
+        return _palavras_editado(ed)
     a, b = VR.janela(c)
     alinhadas = L.alinhar(c.get("palavras") or [], L.ouvir(VIDEO, a, b), b - a)
     segs = _plano(c, versao)
@@ -130,8 +182,9 @@ def palavras_da_versao(c: dict, versao: str) -> tuple[list[dict], float]:
 
 def legenda_srt(c: dict, versao: str = "original") -> Path:
     destino = TRAB / f"{nome_versao(c, versao)}.srt"
+    ed = edicao(c) if versao == "original" else None
     with _trava(destino.name):
-        if not destino.exists():
+        if not destino.exists() or (ed and destino.stat().st_mtime < ed.stat().st_mtime):
             ws, dur = palavras_da_versao(c, versao)
             destino.write_text(L.srt(ws, dur), encoding="utf-8")
     return destino
@@ -211,7 +264,28 @@ def exportar(c: dict, versao: str = "original", legendado: bool = False,
         if estilo:
             sufixo += "_" + hashlib.sha1(json.dumps(estilo, sort_keys=True).encode()).hexdigest()[:8]
     destino = TRAB / f"{nome_versao(c, versao)}{sufixo}.mp4"
+    ed = edicao(c) if versao == "original" else None
     with _trava(destino.name):
+        if ed:
+            # o editado é a base: arquivo mais velho que ele é de outra montagem
+            if destino.exists() and destino.stat().st_mtime >= ed.stat().st_mtime:
+                return destino
+            if not legendado:
+                shutil.copy2(ed, destino)
+                return destino
+            ws, dur = _palavras_editado(ed)
+            with tempfile.TemporaryDirectory() as d:
+                ass = Path(d) / "legenda.ass"
+                cfg = L.com_estilo(F.config(TRAB), estilo) if estilo else F.config(TRAB)
+                texto = (estilo or {}).get("texto") or c.get("titulo_sugerido")
+                ass.write_text(L.ass(ws, dur, cfg, texto), encoding="utf-8")
+                tmp = destino.with_suffix(".tmp.mp4")
+                subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(ed),
+                                "-vf", f"ass={ass}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                                "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", str(tmp)],
+                               check=True)
+                tmp.rename(destino)
+            return destino
         if destino.exists():
             return destino
         segs = _plano(c, versao)
@@ -449,9 +523,22 @@ class Handler(BaseHTTPRequestHandler):
             # navegador seguia tocando o enquadramento antigo do cache
             exp = {c["id"]: f"/arquivo/{base_nome(c)}.mp4?v={int((TRAB / f'{base_nome(c)}.mp4').stat().st_mtime)}"
                    for c in d["cortes"] if horiz and (TRAB / f"{base_nome(c)}.mp4").exists()}
-            d.update({"horizontal": horiz, "exportados": exp,
+            for c in d["cortes"]:          # o editado à mão manda na duração mostrada
+                ed = edicao(c)
+                if ed:
+                    # editado à mão: as versões do garimpo (gancho, respiros,
+                    # falhas) refariam o corte a partir da fonte e jogariam a
+                    # edição fora — só o original (o editado) fica na tela
+                    c["editado"] = True
+                    c["dur"] = round(duracao(ed), 1)
+                    orig = (c.get("variantes") or {}).get("original") or {"score": c.get("score_final")}
+                    c["variantes"] = {"original": {**orig, "dur": c["dur"]}}
+                    c["pecas"] = {k: None for k in (c.get("pecas") or {})}
+                    c["respiros"], c["fala"] = [], []
+            d.update({"horizontal": horiz, "exportados": exp, "baixados": sorted(baixados()),
                       "video": VIDEO.name, "duracao": duracao(VIDEO), "pasta": str(TRAB),
-                      "aplicadas": {k: v for k, v in ap.items() if v != "original"}})
+                      "aplicadas": {k: v for k, v in ap.items()
+                                    if v != "original" and not edicao(por_id[k])}})
             return self._json(d)
         if path.startswith("/thumb/"):
             p = TRAB / "analise" / "thumbs" / Path(path[len("/thumb/"):]).name
@@ -465,6 +552,7 @@ class Handler(BaseHTTPRequestHandler):
             p = TRAB / Path(path[len("/baixar/"):]).name
             tipos = {".mp4": "video/mp4", ".srt": "application/x-subrip; charset=utf-8"}
             if p.exists() and p.suffix in tipos:
+                marcar_baixado(p.name)
                 return self._arquivo(p, tipos[p.suffix], baixar=p.name)
         self.send_error(404)
 
