@@ -23,6 +23,7 @@ pedir de novo reaproveita o arquivo.
 from __future__ import annotations
 
 import argparse
+import os
 import hashlib
 import io
 import json
@@ -377,6 +378,20 @@ def preparar_edicao(c: dict) -> dict:
     sozinha. O vídeo base é congelado na primeira abertura: renderizar de novo
     parte dele, e não do resultado anterior (senão headline e legenda se
     empilhariam a cada rodada)."""
+    edit = preparar_projeto(c)
+    url = _editor()
+    req = urllib.request.Request(f"{url}/api/open", method="POST",
+                                 data=json.dumps({"path": str(edit)}).encode(),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=10).read()
+    except OSError as e:
+        raise Recusa(f"o editor não abriu o corte: {e}", 502)
+    return {"url": f"{url}/?modo=corte", "pasta": str(edit)}
+
+
+def preparar_projeto(c: dict) -> Path:
+    """O projeto Avelin do corte (ver `preparar_edicao`), sem abrir editor."""
     edit = projeto_corte(c)
     (edit / "transcripts").mkdir(parents=True, exist_ok=True)
     base = edit / "preview.mp4"
@@ -402,15 +417,105 @@ def preparar_edicao(c: dict) -> dict:
             "finalVideo": "final.mp4", "fps": fps, "awaitingStyle": True, "modoCorte": True,
             "message": "Corte da galeria — escolha o estilo e renderize",
             "origem": {"galeria": str(TRAB), "id": c["id"]}}, ensure_ascii=False, indent=2))
-    url = _editor()
-    req = urllib.request.Request(f"{url}/api/open", method="POST",
-                                 data=json.dumps({"path": str(edit)}).encode(),
-                                 headers={"Content-Type": "application/json"})
+    return edit
+
+
+# ------------------------------------------------- fila de geração (2º plano)
+# "Adicionar legenda e elementos": o popup manda as escolhas no MESMO formato
+# do editor (o `style-setup` que o app.js envia) e volta para a galeria na
+# hora. Um trabalhador gera UM corte por vez (dois renders juntos deixam a
+# máquina lenta e os dois demoram mais) com a Fase 2 do Avelin; o estado fica
+# em `analise/fila.json`, então recarregar a página não perde nada.
+
+_FILA_TRAVA = threading.Lock()
+_FILA_SINAL = threading.Event()
+
+
+def _fila_path() -> Path:
+    return TRAB / "analise" / "fila.json"
+
+
+def fila() -> list[dict]:
     try:
-        urllib.request.urlopen(req, timeout=10).read()
-    except OSError as e:
-        raise Recusa(f"o editor não abriu o corte: {e}", 502)
-    return {"url": f"{url}/?modo=corte", "pasta": str(edit)}
+        return json.loads(_fila_path().read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _fila_gravar(f: list[dict]) -> None:
+    _fila_path().write_text(json.dumps(f, ensure_ascii=False, indent=1))
+
+
+def enfileirar(c: dict, escolhas: dict) -> dict:
+    import time  # noqa: PLC0415
+    with _FILA_TRAVA:
+        f = [j for j in fila() if not (j["id"] == c["id"] and j["estado"] == "na fila")]
+        job = {"id": c["id"], "titulo": c.get("titulo_sugerido"), "estado": "na fila",
+               "escolhas": escolhas, "pedido": int(time.time())}
+        f.append(job)
+        _fila_gravar(f)
+    _FILA_SINAL.set()
+    return job
+
+
+def _progresso(edit: Path) -> dict:
+    try:
+        return json.loads((edit / "progress.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _gerar(c: dict, escolhas: dict) -> str:
+    """Roda a Fase 2 do Avelin no projeto do corte com as escolhas do popup e
+    registra o resultado como a versão editada do corte. Devolve o arquivo
+    publicado na galeria (o que o botão Baixar entrega)."""
+    edit = preparar_projeto(c)
+    pedido = {"type": "style-setup", "rerender": (edit / "final.mp4").exists(), **escolhas}
+    (edit / "preview_style.json").write_text(json.dumps(pedido, ensure_ascii=False, indent=2))
+    log = edit / "fase2.log"
+    with open(log, "w") as fo:
+        r = subprocess.run([sys.executable, str(SKILL / "helpers" / "phase2.py"), str(edit)],
+                           stdout=fo, stderr=subprocess.STDOUT, cwd=str(SKILL))
+    final = edit / "final.mp4"
+    if r.returncode or not final.exists() or final.stat().st_mtime < log.stat().st_mtime - 1:
+        cauda = [l for l in log.read_text(errors="ignore").splitlines() if l.strip()][-6:]
+        raise RuntimeError(" / ".join(cauda)[-600:] or f"Fase 2 saiu com código {r.returncode}")
+    estado_edicao(c)                       # registra em edicao/edicoes.json
+    return exportar(c, "original").name    # o arquivo da galeria passa a ser o editado
+
+
+def _trabalhador() -> None:
+    import time  # noqa: PLC0415
+    while True:
+        _FILA_SINAL.wait(5)
+        _FILA_SINAL.clear()
+        with _FILA_TRAVA:
+            f = fila()
+            # um "gerando" que sobrou de um servidor anterior volta para a fila
+            for j in f:
+                if j["estado"] == "gerando" and j.get("pid") != os.getpid():
+                    j["estado"] = "na fila"
+            prox = next((j for j in f if j["estado"] == "na fila"), None)
+            if prox:
+                prox.update(estado="gerando", inicio=int(time.time()), pid=os.getpid())
+            _fila_gravar(f)
+        if not prox:
+            continue
+        c = next((x for x in cortes()["cortes"] if x["id"] == prox["id"]), None)
+        try:
+            if not c:
+                raise RuntimeError("corte não encontrado")
+            arq = _gerar(c, prox["escolhas"])
+            novo = {"estado": "pronto", "arquivo": arq, "url": f"/baixar/{arq}"}
+        except Exception as e:  # noqa: BLE001
+            novo = {"estado": "erro", "erro": str(e)}
+        with _FILA_TRAVA:
+            f = fila()
+            for j in f:
+                if j["id"] == prox["id"] and j.get("pedido") == prox["pedido"]:
+                    j.update(novo, fim=int(time.time()))
+            _fila_gravar(f)
+        _FILA_SINAL.set()
 
 
 def estado_edicao(c: dict) -> dict:
@@ -607,6 +712,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/legenda-modelos":
             return self._json({"modelos": L.MODELOS, "salvo": estilo_salvo(),
                                "forca": L.FORCA.pattern})
+        if path == "/api/fila":
+            itens = fila()
+            for j in itens:
+                if j["estado"] == "gerando":
+                    p = _progresso(TRAB / "editor" / j["id"] / "edit")
+                    j["pct"], j["detalhe"] = p.get("pct"), p.get("detail") or p.get("label")
+            return self._json({"fila": itens})
         if path == "/api/editar/estado":
             q = parse_qs(urlparse(self.path).query)
             c = next((x for x in cortes()["cortes"] if x["id"] == (q.get("id") or [""])[0]), None)
@@ -662,7 +774,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         corpo = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         c = next((x for x in cortes()["cortes"] if x["id"] == corpo.get("id")), None)
-        if path in ("/api/exportar", "/api/avelin", "/api/aplicar", "/api/editar") and not c:
+        if path in ("/api/exportar", "/api/avelin", "/api/aplicar", "/api/editar", "/api/gerar") and not c:
             return self._json({"erro": "corte não encontrado"}, 404)
         versao = normalizar(c, corpo.get("versao") or "original") if c else "original"
         rotulo = str(corpo.get("rotulo") or "Processando…")[:60]
@@ -672,6 +784,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/editar":
                 return self._json(preparar_edicao(c))
+            if path == "/api/gerar":
+                return self._json(enfileirar(c, corpo.get("escolhas") or {}))
             if path == "/api/avelin":
                 return self._json(importar_avelin(c, versao, bool(corpo.get("forcar"))))
             if path == "/api/legenda-estilo":
@@ -730,6 +844,7 @@ def main() -> None:
         FPS = float(n) / float(d)
     except ValueError:
         pass
+    threading.Thread(target=_trabalhador, daemon=True, name="fila-geracao").start()
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
     print(f"Avelin — cortes → http://127.0.0.1:{a.port}  ({VIDEO.name})", flush=True)
     srv.serve_forever()
