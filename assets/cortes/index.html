@@ -497,8 +497,61 @@ async function vigiar() {
   setTimeout(vigiar, Object.keys(doServidor).length ? 2500 : 6000);
 }
 
+// A FILA DE GERAÇÃO (legenda e elementos em segundo plano): o servidor gera um
+// corte por vez; o card mostra "Na fila"/"Gerando… %" e, pronto, um aviso FIXO
+// com "Baixar" — o download precisa de um clique (o navegador bloqueia
+// download que dispara sozinho no fim de um trabalho assíncrono).
+const daFila = {};
+let filaVista = null;
+function avisadosFila() {
+  try { return new Set(JSON.parse(localStorage.getItem('fila-avisados') || '[]')); } catch (e) { return new Set(); }
+}
+function marcarAvisado(chave) {
+  try { const a = avisadosFila(); a.add(chave); localStorage.setItem('fila-avisados', JSON.stringify([...a].slice(-200))); } catch (e) { /* sem storage */ }
+}
+async function vigiarFila() {
+  let ativos = 0;
+  try {
+    const f = (await (await fetch('/api/fila')).json()).fila || [];
+    const ult = {};
+    for (const j of f) if (!ult[j.id] || j.pedido >= ult[j.id].pedido) ult[j.id] = j;
+    const naFila = f.filter(j => j.estado === 'na fila');
+    const ids = new Set([...Object.keys(ult), ...Object.keys(daFila)]);
+    const avisados = avisadosFila();
+    for (const id of ids) {
+      const j = ult[id];
+      const antes = daFila[id];
+      let rot = '';
+      if (j && j.estado === 'na fila') rot = `Na fila (${naFila.indexOf(j) + 1}º)`;
+      else if (j && j.estado === 'gerando') rot = `Gerando… ${j.pct ? Math.round(j.pct) + '%' : ''}`.trim();
+      if (rot) { daFila[id] = rot; ativos++; } else delete daFila[id];
+      if (antes !== daFila[id]) pintar(id);
+      const chave = j ? `${id}:${j.pedido}:${j.estado}` : '';
+      if (j && (j.estado === 'pronto' || j.estado === 'erro') && !avisados.has(chave) && filaVista !== null) {
+        marcarAvisado(chave);
+        const c = cortes.find(x => x.id === id);
+        const nome = c ? c.titulo_sugerido : id;
+        if (j.estado === 'pronto') {
+          delete exportados[id];
+          avisar(`“${nome}” pronto com legenda e elementos.`, { texto: 'Baixar', fixo: true, fn: () => {
+            const a = document.createElement('a'); a.href = j.url; a.download = j.arquivo; a.click();
+            if (c) { baixadosIds.add(c.id); pintarBaixado(c); }
+          } });
+          if (c) atualizarCard(c);
+        } else {
+          avisar(`Não consegui gerar “${nome}”: ${j.erro || 'erro na Fase 2'}`, { texto: 'Ok', fixo: true, fn: () => {} });
+        }
+      } else if (j && (j.estado === 'pronto' || j.estado === 'erro') && filaVista === null) {
+        marcarAvisado(chave);   // o que terminou antes de abrir a página não vira aviso atrasado
+      }
+    }
+    filaVista = true;
+  } catch (e) { /* servidor fora: tenta de novo */ }
+  setTimeout(vigiarFila, ativos ? 2500 : 6000);
+}
+
 function pintar(id) {
-  const rot = processando[id]?.at(-1) || doServidor[id];
+  const rot = processando[id]?.at(-1) || doServidor[id] || daFila[id];
   const card = document.querySelector(`.card[data-id="${id}"]`);
   if (card) {
     card.classList.toggle('processando', !!rot);
@@ -536,7 +589,7 @@ function avisar(msg, acao) {
   if (acao) el.querySelector('button').onclick = () => { el.remove(); acao.fn(); };
   $('#avisos').append(el);
   while ($('#avisos').children.length > 3) $('#avisos').firstElementChild.remove();
-  setTimeout(() => el.remove(), acao ? 9000 : 5000);
+  if (!acao || !acao.fixo) setTimeout(() => el.remove(), acao ? 9000 : 5000);
 }
 
 async function carregar() {
@@ -589,6 +642,7 @@ async function carregar() {
   const pedido = cortes.findIndex(c => '#' + c.id === location.hash);
   if (pedido >= 0) abrir(pedido);
   vigiar();
+  if (!vigiarFila.ligado) { vigiarFila.ligado = true; vigiarFila(); }
 }
 
 const v = $('#video');
