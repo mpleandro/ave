@@ -140,27 +140,35 @@ def preparar() -> int:
     if ffbin.garantir() != "sistema":
         print("· ffmpeg: usando a build completa que vem pelo pip (sem brew)")
         est = ffbin.estatico()
-        if est:
+        if est and sys.platform != "win32":
+            # no Windows o link simbólico exige modo desenvolvedor; lá os helpers
+            # já acham o estático pelo PATH do processo (ffbin.garantir)
             bin_dir = Path.home() / ".local" / "bin"
             bin_dir.mkdir(parents=True, exist_ok=True)
+            feitos = 0
             for src in est:
                 dst = bin_dir / Path(src).name
                 if not shutil.which(Path(src).name) or dst.is_symlink():
                     try:
                         dst.unlink(missing_ok=True)
                         dst.symlink_to(src)
+                        feitos += 1
                     except OSError:
                         pass
-            print(f"  linkado em {bin_dir} (ffmpeg, ffprobe)")
+            if feitos:
+                print(f"  linkado em {bin_dir} (ffmpeg, ffprobe)")
+        elif est:
+            print(f"  em {Path(est[0]).parent} (os helpers o encontram sozinhos)")
     import transcribe_local as TL
     if TL._APPLE_SILICON:
         print("· modelo de voz (whisper-large-v3-turbo, ~1,6 GB) — uma vez só")
         from huggingface_hub import snapshot_download
         snapshot_download(TL.MODELO_MLX)
     else:
-        print("· modelo de voz (faster-whisper large-v3-turbo) — uma vez só")
+        print("· modelos de voz (faster-whisper large-v3-turbo + large-v3) — uma vez só")
         from faster_whisper import WhisperModel
         WhisperModel(TL.MODELO_FW, compute_type="int8")
+        WhisperModel(TL.MODELO_FW_CURTO, compute_type="int8")
     print("pronto.")
     return 0
 

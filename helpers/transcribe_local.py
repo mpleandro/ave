@@ -77,7 +77,11 @@ CTX_PAD_S = 2.0
 # retake, e ele precisa ficar em pedaços diferentes.
 MIN_PEDACO_S = 6.0
 VAO_JUNTA_S = 1.0
-_APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
+# AVE_MOTOR=faster força o caminho faster-whisper (o de Windows/Linux/Mac Intel)
+# mesmo em Apple Silicon — é como o testamos aqui; AVE_MOTOR=mlx força o inverso.
+_APPLE_SILICON = {"faster": False, "mlx": True}.get(
+    os.environ.get("AVE_MOTOR", "").lower(),
+    sys.platform == "darwin" and platform.machine() == "arm64")
 
 
 # --------------------------------------------------------------------------- #

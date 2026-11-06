@@ -3,6 +3,7 @@
 $ErrorActionPreference = "Stop"
 $AVE = if ($env:AVE_DIR) { $env:AVE_DIR } else { "$env:USERPROFILE\.claude\skills\ave" }
 $REPO = if ($env:AVE_REPO) { $env:AVE_REPO } else { "https://github.com/mpleandro/ave" }
+$RAMO = $env:AVE_RAMO
 
 Write-Host "`n1/5  uv (instalador Python)"
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
@@ -18,7 +19,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 }
 if (Test-Path "$AVE\.git") { git -C $AVE pull --ff-only } else {
   New-Item -ItemType Directory -Force (Split-Path $AVE) | Out-Null
-  git clone $REPO $AVE
+  if ($RAMO) { git clone --branch $RAMO $REPO $AVE } else { git clone $REPO $AVE }
 }
 
 Write-Host "`n3/5  dependências (Python, ffmpeg completo, transcrição local)"
