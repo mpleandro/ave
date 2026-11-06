@@ -1,5 +1,24 @@
 # Avelin — diagnóstico e plano de execução (2026-11-06)
 
+## Estado da execução (2026-11-06, branch `rapido-e-preciso`)
+
+Executado e medido nesta máquina (M3, fonte de teste "conselho ou mentoria", 180 s):
+
+| Passo | Estado | Evidência |
+|---|---|---|
+| B0 fixture + regressão | feito | `tests/fala_limpa_regressao.py` passa (3 repetições, silêncios limpos, 0 falsos positivos) |
+| B1 transcrição local VAD-first | feito | `transcribe_local.py`; `transcribe.py --backend auto` → local; 57 s por 180 s |
+| B2 detector + EDL proposto + roteiro | feito | `fala_limpa.py`: 6 cortes automáticos, 4 perguntas, `roteiro.md`, `triagem.json`; proxy renderiza; portão passa após as respostas |
+| B3 esperas e caches | feito | `verify_takes` VAD-first: render 45 s (era ~4 min), fonte 55 s (era ~15 min); caches derivado (silencedetect, rms, signalstats, detect_restarts); `AVE_OFFLINE` |
+| B4 bugs 1–12 | feito | ver commit "B4"; bug 9 resolvido alinhando o SKILL ao servidor (aprovar sempre aprova, parecer em `gate_report.json`) |
+| B5 instalação | feito | `install.sh`/`install.ps1`, `doctor.py`, `ffbin.py` (static-ffmpeg com zscale); instalação limpa testada em 31 s com cache quente; `install.md` e README reescritos |
+| B6 `fase1.py` + SKILL.md | feito, parcial | drop → proxy em 1 min 30 s (3 min de fonte); 2ª rodada com respostas em 27 s; SKILL.md 159 KB → 147 KB (a meta de ≤ 50 KB NÃO foi atingida: só a Fase 1 e o Setup foram reescritos) |
+
+Pendências conhecidas: `install.ps1` e o caminho faster-whisper (fora de Apple
+Silicon) não foram testados; SKILL.md ainda carrega as narrativas de incidentes
+das outras seções; o portão com render ainda acusa riso/ruído sem texto como
+"ar morto" (caso legítimo de inspeção, não bug).
+
 Documento para um modelo executor. Cada passo diz O QUE fazer, ONDE, COMO
 conferir, e o que NÃO fazer. Execute na ordem. Não pule os testes de aceite.
 Os números citados foram medidos nesta máquina (Apple M3, 24 GB) no projeto
