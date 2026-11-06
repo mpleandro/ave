@@ -177,7 +177,8 @@ def main() -> int:
             st = json.loads(st_p.read_text()) if st_p.exists() else {}
         except json.JSONDecodeError:
             st = {}
-        st.update({"video": str(proxy), "ritmo": args.ritmo,
+        # relativo ao <edit>: é assim que o preview_server resolve (`_safe`)
+        st.update({"video": proxy.name, "ritmo": args.ritmo,
                    "message": "Corte proposto pronto — leia o roteiro e responda às perguntas"})
         st_p.write_text(json.dumps(st, ensure_ascii=False, indent=2))
 
