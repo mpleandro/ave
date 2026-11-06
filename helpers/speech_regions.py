@@ -35,6 +35,10 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 # ---------------------------------------------------------------------------
 # API IMPORTÁVEL — o silêncio MEDIDO, para quem precisa dele como dado e não

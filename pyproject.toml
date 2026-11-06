@@ -16,6 +16,10 @@ dependencies = [
     # Transcrição LOCAL (transcribe_local.py): Silero VAD acha as regiões de fala
     # e o Whisper transcreve cada região isolada — é o que faz retake e gaguejo
     # sobreviverem no texto. Sem chave de API. onnxruntime roda o VAD na CPU.
+    # ffmpeg COMPLETO (zscale/deesser/loudnorm) sem brew: helpers/ffbin.py e o
+    # install.sh usam esta build quando o ffmpeg do sistema falta ou é enxuto.
+    "static-ffmpeg>=2.7",
+    "huggingface_hub>=0.23",
     "silero-vad>=5.1",
     "onnxruntime>=1.17",
     "soundfile>=0.12",

@@ -77,6 +77,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 
 # O ÚNICO botão da API que mexe no defeito central: o Whisper limpa gaguejo e

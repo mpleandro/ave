@@ -35,6 +35,10 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 try:
     from grade import get_preset, auto_grade_for_clip  # same directory

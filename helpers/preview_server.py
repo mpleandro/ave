@@ -52,6 +52,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import progress  # noqa: E402
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 
 def helper_python() -> str:

@@ -38,6 +38,10 @@ import time
 from pathlib import Path
 
 import numpy as np
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 os.environ.setdefault("TQDM_DISABLE", "1")   # mlx-whisper imprime uma barra por pedaço
 

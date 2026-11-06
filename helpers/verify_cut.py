@@ -27,6 +27,10 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 POP_DB = -8.0     # junction window louder than this → suspected pop
 HOT_DB = -6.0     # pre/post window louder than this → suspected clipped word

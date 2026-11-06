@@ -43,7 +43,7 @@ AVE = Path(__file__).resolve().parent.parent
 ESTADO = AVE / ".ave-atualizacoes.json"
 RAMO = "origin/main"
 SEMANA = 7 * 24 * 3600
-FFMPEG_RECOMENDADO = 9
+FFMPEG_RECOMENDADO = 5   # piso real: `-fps_mode` existe desde 5.1; o estático do pip é 7.x
 
 
 def _frequencia() -> str:

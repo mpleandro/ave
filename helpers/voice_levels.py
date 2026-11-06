@@ -44,6 +44,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 FRAME = 1024          # samples per astats window @48k ≈ 21.3ms
 SR = 48000
