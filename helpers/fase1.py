@@ -105,6 +105,9 @@ def main() -> int:
     if rc != 0:
         print(out[-2000:])
         return 1
+    # 2b. carimbo esticado: o Whisper estende o fim da palavra por cima da
+    # pausa; o portão exige o aparo (mecânico, idempotente) — então ele roda aqui
+    _run([str(HELPERS / "transcript_audit.py"), str(edit), "--fix-times"], "aparo de carimbos", quiet=True)
     # 3. vista de leitura
     _run([str(HELPERS / "pack_transcripts.py"), "--edit-dir", str(edit)], "takes_packed.md", quiet=True)
 

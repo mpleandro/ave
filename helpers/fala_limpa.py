@@ -259,10 +259,31 @@ def triagem(itens: list[dict], decisoes: dict[str, str]) -> list[dict]:
     return out
 
 
+def _fragmentos(ws: list[dict]) -> list[dict]:
+    """Frase curta que morre em reticência e é refeita logo em seguida
+    ("porque... Eles iam..." → "Isso porque essas diquinhas…"). O detect_restarts
+    exige n-grama comum de 2 palavras; aqui basta UMA palavra de conteúdo em
+    comum nas primeiras 6 da frase seguinte, com a pausa curta entre as duas."""
+    fs = DR.frases(ws)
+    out = []
+    for a, b in zip(fs, fs[1:]):
+        if len(a["n"]) > 5 or not _reticencia(a["texto"]) or (b["t"] - a["fim"]) > 2.0:
+            continue
+        ca = {w for w in a["n"] if _conteudo([w])}
+        cb = {w for w in b["n"][:6] if _conteudo([w])}
+        if not ca or not (ca & cb) or len(b["n"]) <= len(a["n"]):
+            continue
+        idx = [w["i"] for w in ws if a["t"] <= w["t"] <= a["fim"]]
+        if idx:
+            out.append({"tipo": "retake", "classe": "fragmento", "i": idx[0], "j": idx[-1],
+                        "texto": a["texto"], "confianca": 0.8, "acao": "cortar_primeira"})
+    return out
+
+
 def detectar(words: list[dict], vad: list[tuple[float, float]] | None = None) -> list[dict]:
     """Itens de corte/pergunta sobre a lista de palavras (schema Scribe)."""
     ws = palavras(words)
-    itens = _retakes(ws) + _gaguejos(ws) + _muletas(ws)
+    itens = _retakes(ws) + _fragmentos(ws) + _gaguejos(ws) + _muletas(ws)
     # sem sobreposição: o item mais longo em cada palavra vence
     usados: set[int] = set()
     out = []

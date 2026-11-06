@@ -38,9 +38,11 @@ import time
 from pathlib import Path
 
 import numpy as np
+
 # ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import ffbin  # noqa: E402
+import ffbin
+
 ffbin.garantir()
 
 os.environ.setdefault("TQDM_DISABLE", "1")   # mlx-whisper imprime uma barra por pedaço
@@ -52,7 +54,29 @@ TOKENS_POR_S_MAX = 8.0       # pedaço com mais que isto é alucinação
 REPETICAO_CURTA_MAX = 6      # ≥ N tokens iguais de 1–2 letras seguidos = lixo
 MODELO_MLX = "mlx-community/whisper-large-v3-turbo"
 MODELO_FW = "large-v3-turbo"
-PROMPT_DISFLUENCIA = "Ahn, é, tipo, né, então... eu, eu acho que... quer dizer, hum."
+# Pedaço CURTO vai no large-v3 inteiro, sem prompt: medido na CTA do projeto
+# "conselho ou mentoria" — o turbo (com ou sem prompt) ouvia "busca um
+# conselho" onde o large-v3 sem prompt ouve "você quer um conselho" em 3 de 4
+# janelas. Curto é barato o bastante para pagar o modelo maior.
+MODELO_MLX_CURTO = "mlx-community/whisper-large-v3-mlx"
+MODELO_FW_CURTO = "large-v3"
+# Só muletas, sem frase de conteúdo: "eu acho que..." no prompt virou texto
+# ("Eu acho que é um comentário") numa fala real — medido na CTA do projeto
+# "conselho ou mentoria". Muleta solta não tem como ser ecoada como frase.
+PROMPT_DISFLUENCIA = "Ahn... é... tipo, né, hum, então..."
+# Pedaço curto perde precisão isolado ("busque um conselho" por "você quer um
+# conselho", medido em 3,8 s). Abaixo disto o pedaço é transcrito com CONTEXTO
+# de áudio em volta e só as palavras dentro da janela são mantidas — o
+# contexto acústico ajuda a acertar a palavra, e manter só a janela preserva a
+# repetição entre pedaços vizinhos.
+CTX_MIN_S = 6.0
+CTX_PAD_S = 2.0
+# Regiões vizinhas separadas por pausa CURTA são a mesma frase ("Responda! |
+# Buscar um conselho? | você quer uma mentoria?" saiu de três pedaços de 2 s):
+# juntam-se até o pedaço ter MIN_PEDACO_S. Pausa longa separa — é onde mora o
+# retake, e ele precisa ficar em pedaços diferentes.
+MIN_PEDACO_S = 6.0
+VAO_JUNTA_S = 1.0
 _APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
 
 
@@ -139,12 +163,24 @@ def ponto_mais_silencioso(mono: np.ndarray, a: float, b: float,
     return melhor
 
 
+def juntar_curtas(regioes: list[tuple[float, float]], min_s: float = MIN_PEDACO_S,
+                  vao: float = VAO_JUNTA_S) -> list[tuple[float, float]]:
+    """Junta regiões vizinhas (vão < `vao`) até cada pedaço ter `min_s`."""
+    out: list[list[float]] = []
+    for s, e in regioes:
+        if out and (s - out[-1][1]) < vao and (out[-1][1] - out[-1][0]) < min_s:
+            out[-1][1] = e
+        else:
+            out.append([s, e])
+    return [(a, b) for a, b in out]
+
+
 def fatiar(mono: np.ndarray, regioes: list[tuple[float, float]],
            max_s: float = MAX_S) -> list[tuple[float, float]]:
     """Regiões maiores que max_s viram pedaços cortados no ponto mais
     silencioso em ±1,5 s do múltiplo de max_s. Região curta fica inteira."""
     out: list[tuple[float, float]] = []
-    for s, e in regioes:
+    for s, e in juntar_curtas(regioes):
         while e - s > max_s:
             alvo = s + max_s
             corte = ponto_mais_silencioso(mono, max(s + 2.0, alvo - 1.5), min(e - 1.0, alvo + 1.5))
@@ -159,28 +195,25 @@ def fatiar(mono: np.ndarray, regioes: list[tuple[float, float]],
 # --------------------------------------------------------------------------- #
 
 class Motor:
-    """Carrega o modelo uma vez; transcreve pedaços isolados."""
+    """Modelos carregados uma vez (turbo para pedaço longo, large-v3 para curto)."""
 
     def __init__(self, language: str = "pt", verbose: bool = False):
         self.language = language
         self.verbose = verbose
-        self.nome = ""
-        self._fw = None
+        self._fw: dict[str, object] = {}
         if _APPLE_SILICON:
             import mlx_whisper  # noqa: F401
-            self.nome = f"local-mlx/{MODELO_MLX.split('/')[-1]}"
+            self.nome = f"local-mlx/{MODELO_MLX.split('/')[-1]}+{MODELO_MLX_CURTO.split('/')[-1]}"
         else:
-            from faster_whisper import WhisperModel
-            self._fw = WhisperModel(MODELO_FW, compute_type="int8")
-            self.nome = f"local-faster/{MODELO_FW}"
+            self.nome = f"local-faster/{MODELO_FW}+{MODELO_FW_CURTO}"
 
-    def transcrever(self, seg: np.ndarray) -> list[dict]:
+    def transcrever(self, seg: np.ndarray, curto: bool = False) -> list[dict]:
         """Palavras {start,end,text} RELATIVAS ao início do pedaço."""
-        prompt = PROMPT_DISFLUENCIA if self.language == "pt" else None
-        if self._fw is None:
+        prompt = None if curto else (PROMPT_DISFLUENCIA if self.language == "pt" else None)
+        if _APPLE_SILICON:
             import mlx_whisper
             r = mlx_whisper.transcribe(
-                seg, path_or_hf_repo=MODELO_MLX, language=self.language,
+                seg, path_or_hf_repo=MODELO_MLX_CURTO if curto else MODELO_MLX, language=self.language,
                 word_timestamps=True, condition_on_previous_text=False,
                 initial_prompt=prompt, no_speech_threshold=0.5, verbose=None,
             )
@@ -192,7 +225,11 @@ class Motor:
                     out.append({"start": float(w["start"]), "end": float(w["end"]),
                                 "text": str(w["word"]).strip()})
             return out
-        segs, _info = self._fw.transcribe(
+        nome = MODELO_FW_CURTO if curto else MODELO_FW
+        if nome not in self._fw:
+            from faster_whisper import WhisperModel
+            self._fw[nome] = WhisperModel(nome, compute_type="int8")
+        segs, _info = self._fw[nome].transcribe(
             seg, language=self.language, word_timestamps=True,
             condition_on_previous_text=False, initial_prompt=prompt,
             no_speech_threshold=0.5, vad_filter=False,
@@ -212,6 +249,18 @@ _CURTA = re.compile(r"^[\W_]*[a-zà-ú]{1,2}[\W_]*$", re.IGNORECASE)
 
 
 _PROMPT_NORM = re.sub(r"[^a-zà-ú ]", "", PROMPT_DISFLUENCIA.lower())
+
+
+def _tem_repeticao_colada(ws: list[dict]) -> bool:
+    """N-grama de 1–4 palavras repetido imediatamente (sem contar 1 letra)."""
+    toks = [re.sub(r"[^a-zà-ú0-9]", "", w["text"].lower()) for w in ws]
+    toks = [t for t in toks if t]
+    for n in (4, 3, 2, 1):
+        for i in range(len(toks) - 2 * n + 1):
+            a, b = toks[i:i + n], toks[i + n:i + 2 * n]
+            if a == b and (n > 1 or len(a[0]) > 2):
+                return True
+    return False
 
 
 def guarda_alucinacao(palavras: list[dict], dur: float) -> list[dict]:
@@ -302,8 +351,30 @@ def transcrever_arquivo(fonte: Path, language: str = "pt", verbose: bool = True,
     motor = Motor(language=language, verbose=verbose)
     todas: list[dict] = []
     for i, (s, e) in enumerate(pedacos):
-        seg = mono[int(s * SR):int(e * SR)]
-        ws = guarda_alucinacao(motor.transcrever(seg), e - s)
+        if e - s < CTX_MIN_S:
+            # CURTO: duas escutas. A = isolada, turbo + prompt (preserva a
+            # repetição: "uma dúvida... uma dúvida"); B = com folga de áudio em
+            # volta, large-v3 sem prompt (acerta a palavra: "você quer um
+            # conselho", não "busca"). Fica A quando ela ouviu uma repetição
+            # colada que B não ouviu — é a evidência de retake que o contexto
+            # apaga; senão fica B.
+            seg_a = mono[int(s * SR):int(e * SR)]
+            ws_a = guarda_alucinacao(motor.transcrever(seg_a), e - s)
+            s0 = max(0.0, s - CTX_PAD_S)
+            e0 = min(dur_total, e + CTX_PAD_S)
+            seg_b = mono[int(s0 * SR):int(e0 * SR)]
+            ws_b = [w for w in motor.transcrever(seg_b, curto=True)
+                    if s <= s0 + (w["start"] + w["end"]) / 2 <= e]
+            ws_b = guarda_alucinacao([{**w, "start": w["start"] - (s - s0), "end": w["end"] - (s - s0)}
+                                      for w in ws_b], e - s)
+            ws = ws_a if (_tem_repeticao_colada(ws_a) and not _tem_repeticao_colada(ws_b)) else ws_b
+            if os.environ.get("AVE_DEBUG_PECAS"):
+                print(f"    [{s:.2f}-{e:.2f}] A: {' '.join(w['text'] for w in ws_a)}\n"
+                      f"    [{s:.2f}-{e:.2f}] B: {' '.join(w['text'] for w in ws_b)}  → {'A' if ws is ws_a else 'B'}",
+                      flush=True)
+        else:
+            seg = mono[int(s * SR):int(e * SR)]
+            ws = guarda_alucinacao(motor.transcrever(seg), e - s)
         for w in ws:
             todas.append({"start": s + w["start"], "end": min(s + w["end"], e + PAD_REGIAO_S),
                           "text": w["text"]})
