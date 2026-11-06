@@ -262,6 +262,13 @@ def isolate_check(path: Path, at: float, to: float, antes_txt: str) -> str | Non
     chamada falha (rede, chave ausente): sem rede, a régua velha ainda vale,
     só perde esta camada extra.
     """
+    try:
+        from ambiente import offline  # noqa: PLC0415
+        if offline():
+            return None
+    except ImportError:
+        pass
+
     if not antes_txt:
         return None
     alvo = _norm_tok(antes_txt)

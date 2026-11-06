@@ -90,7 +90,7 @@ def checar_spacing(edit: Path) -> list[dict]:
             continue
         if str(d.get("_transcription_backend") or "").startswith("elevenlabs"):
             continue                       # Scribe mede pausa por conta própria
-        if d.get("_spacing_source") == "measured/silencedetect":
+        if d.get("_spacing_source") in ("measured/silencedetect", "measured/silero-vad"):
             continue
         # A MARCA, e não uma heurística sobre os vãos. Tentei deduzir do formato
         # ("todo vão entre palavras é 0.00") e não discrimina: mesmo depois de
@@ -351,6 +351,19 @@ def checar_transcricao(edit: Path) -> list[dict]:
                    for ini, e in janelas.get(stem, []))
 
     resolvidas = _resolvidas(edit)
+    # TRANSCRITO LOCAL VAD-FIRST JÁ É A PASSADA ISOLADA. O `--recheck` que a
+    # densidade pede transcreve a janela sozinha — e é exatamente assim que o
+    # transcribe_local.py transcreveu CADA região de fala. Repetir não traria
+    # outra resposta; nesses arquivos a densidade baixa vira aviso (palavra
+    # longa, riso, hesitação), não bloqueio.
+    isolados: set[str] = set()
+    for q in (edit / "transcripts").glob("*.json"):
+        try:
+            d = json.loads(q.read_text())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(d, dict) and d.get("_spacing_source") == "measured/silero-vad":
+            isolados.add(q.stem)
     faltas = []
     for f in achados:
         ini, fim = float(f.get("start", 0)), float(f.get("end", 0))
@@ -368,7 +381,7 @@ def checar_transcricao(edit: Path) -> list[dict]:
                    and min(fim, float(c.get("srcEnd", 0))) - max(ini, float(c.get("srcStart", 0))) > 0.05
                    for c in resolvidas):
                 continue               # já ouvida isolada e registrada — ver _resolvidas
-            dentro = no_corte(arq, ini, fim)
+            dentro = no_corte(arq, ini, fim) and Path(arq or "").stem not in isolados
             faltas.append({
                 "check": "transcricao", "t": ini, "aviso": not dentro,
                 "problema": f"{f.get('n', 0)} palavra(s) em {f.get('dur', 0):.2f}s de fala "

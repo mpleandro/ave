@@ -13,6 +13,14 @@ dependencies = [
     # Haar detection — stay on the 4.10 line. Headless = no GUI/Qt deps.
     "opencv-python-headless==4.10.0.84",
     "fonttools[woff]>=4.50",
+    # Transcrição LOCAL (transcribe_local.py): Silero VAD acha as regiões de fala
+    # e o Whisper transcreve cada região isolada — é o que faz retake e gaguejo
+    # sobreviverem no texto. Sem chave de API. onnxruntime roda o VAD na CPU.
+    "silero-vad>=5.1",
+    "onnxruntime>=1.17",
+    "soundfile>=0.12",
+    "mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "faster-whisper>=1.1; sys_platform != 'darwin' or platform_machine != 'arm64'",
 ]
 
 [project.optional-dependencies]

@@ -81,6 +81,12 @@ def _buscar(forcar: bool) -> bool:
     vencido = time.time() - estado.get("ultima_busca", 0) >= SEMANA
     if not (forcar or freq == "rodada" or vencido):
         return False
+    try:
+        from ambiente import offline  # noqa: PLC0415
+        if offline():
+            return False
+    except ImportError:
+        pass
     # sem rede ou GitHub fora: segue com o que já foi buscado, sem reclamar
     if _git("fetch", "--quiet", "origin", "main", timeout=20) is None:
         return False

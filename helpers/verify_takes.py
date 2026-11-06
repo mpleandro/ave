@@ -210,6 +210,41 @@ def varrer(video: Path, modelo: str = MODELO) -> list[dict]:
     return sorted(achados.values(), key=lambda a: a["t"])
 
 
+def varrer_regioes(video: Path) -> list[dict]:
+    """A escuta VAD-first: transcreve cada região de fala ISOLADA
+    (transcribe_local.py) e procura repetição colada no texto que sai.
+
+    Substitui as ~300 janelas deslizantes de `varrer` (2 min de áudio ≈ 15 min
+    de relógio) por uma passada de ~1/3 do tempo real, e nunca transcreve
+    silêncio — que é onde a janela isolada alucinava e "confirmava" repetição
+    em trecho mudo (medido: "tchau ×2" aos 19,2 s de um silêncio de 4 s).
+    Devolve o mesmo formato de `varrer`, todos `confirmado`."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import fala_limpa as FL  # noqa: PLC0415
+    import transcribe_local as TL  # noqa: PLC0415
+    if not TL.disponivel():
+        raise SystemExit("escuta local indisponível: rode `uv sync --inexact` na pasta do Avelin")
+    payload, regioes = TL.transcrever_arquivo(video, language="pt", verbose=False)
+    ws = FL.palavras(payload["words"])
+    out = []
+    for h in FL.detectar(payload["words"], regioes):
+        if not h["acao"].startswith("cortar") or h["tipo"] == "muleta":
+            continue
+        i, j = h["i"], h["j"]
+        n = j - i + 1
+        occ1 = [round(ws[i]["t"], 2), round(ws[j]["fim"], 2)]
+        k = j + 1
+        occ2 = [round(ws[k]["t"], 2), round(ws[min(len(ws) - 1, k + n - 1)]["fim"], 2)] if k < len(ws) else None
+        ng = " ".join(ws[x]["n"] for x in range(i, j + 1))
+        ctx = " ".join(w["txt"] for w in ws[max(0, i - 6):min(len(ws), j + n + 7)])
+        out.append({"ngrama": ng, "t": occ1[0], "janela": round((occ2 or occ1)[1] - occ1[0], 2),
+                    "vezes": 2, "texto": ctx, "vistas": 2, "confirmado": True,
+                    "palavra_unica": n == 1, "suspeita_de_laco": False,
+                    "t_fino": occ1[0], "fim_fino": (occ2 or occ1)[1],
+                    "occ1": occ1, "occ2": occ2, "classe": h.get("classe", h["tipo"])})
+    return sorted(out, key=lambda a: a["t"])
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Ouve o corte pronto e acusa frase repetida")
     ap.add_argument("edit", type=Path)
@@ -220,6 +255,8 @@ def main() -> None:
                          "<edit>/defeitos_audio.json — é o modo que transforma o "
                          "detector de portão em insumo da seleção de tomadas")
     ap.add_argument("--modelo", default=MODELO)
+    ap.add_argument("--janelas", action="store_true",
+                    help="varredura antiga por janelas deslizantes (lenta; só para comparar)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--forcar", action="store_true",
                      help="revarre mesmo se o cache do mapa já cobre esta fonte "
@@ -264,7 +301,7 @@ def main() -> None:
                       f"--forcar revarre do zero)")
             return
 
-        achados = varrer(fonte, args.modelo)
+        achados = (varrer(fonte, args.modelo) if args.janelas else varrer_regioes(fonte))
         conf = [a for a in achados if a.get("confirmado")]
         mapa[fonte.stem] = {"fp": fp,
                              "achados": [{"t": a.get("t_fino", a["t"]),
@@ -291,7 +328,7 @@ def main() -> None:
     if video is None:
         sys.exit(f"nenhum render encontrado em {edit} — renderize antes de ouvir")
 
-    achados = varrer(video, args.modelo)
+    achados = varrer(video, args.modelo) if args.janelas else varrer_regioes(video)
 
     confirmados = [a for a in achados if a.get("confirmado")]
     if args.json:

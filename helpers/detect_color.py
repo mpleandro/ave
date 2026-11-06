@@ -75,7 +75,19 @@ def _sample_stats(video: Path, n: int = 24) -> dict[str, float] | None:
 
     Returns the 10th-percentile YMIN (the clip's realistic black floor — a single
     dead-pixel frame shouldn't decide it) and the 90th-percentile YMAX.
+    Em cache por fonte (`derivado`): é um decode de vídeo inteiro.
     """
+    try:
+        import sys as _sys  # noqa: PLC0415
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from derivado import derivado  # noqa: PLC0415
+        return derivado("signalstats", [Path(video)], {"n": int(n)}, "1",
+                        lambda: _sample_stats_ffmpeg(video, n))
+    except Exception:  # noqa: BLE001
+        return _sample_stats_ffmpeg(video, n)
+
+
+def _sample_stats_ffmpeg(video: Path, n: int = 24) -> dict[str, float] | None:
     try:
         dur = float(subprocess.check_output(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
