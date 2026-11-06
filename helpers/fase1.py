@@ -70,6 +70,11 @@ def main() -> int:
     ap.add_argument("--fonte", type=Path, default=None, help="qual arquivo é a fala (com mais de um)")
     ap.add_argument("--ritmo", default="equilibrado", choices=["conservador", "equilibrado", "agressivo"])
     ap.add_argument("--respostas", type=Path, default=None, help="{id: cortar|manter} para as perguntas")
+    ap.add_argument("--alvo", dest="alvo_s", type=float, default=0.0,
+                    help="duração alvo em s da SELEÇÃO (0 = só o corte limpo completo)")
+    ap.add_argument("--tese", default="", help="a ideia do vídeo em uma frase (guia a seleção)")
+    ap.add_argument("--manter", default="", help="blocos que ficam na seleção (ex.: 3,5)")
+    ap.add_argument("--tirar", default="", help="blocos que saem da seleção")
     ap.add_argument("--sem-proxy", action="store_true")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
@@ -144,8 +149,23 @@ def main() -> int:
     cortes = [h for h in defeitos["itens"] if h["acao"].startswith("cortar")
               and defeitos.get("decisoes", {}).get(str(h["id"])) != "manter"]
 
+    # 5b. seleção (corte curto guiado pela tese) sobre o corte limpo
+    prop = edit / "edl_proposto.json"
+    if args.alvo_s > 0:
+        cmd = [str(HELPERS / "selecao.py"), str(edit), "--alvo", str(args.alvo_s), "--tese", args.tese,
+               "--fonte", str(fonte)]
+        if args.manter:
+            cmd += ["--manter", args.manter]
+        if args.tirar:
+            cmd += ["--tirar", args.tirar]
+        rc, out = _run(cmd, f"seleção (alvo {args.alvo_s:.0f}s)")
+        if rc != 0:
+            print(out[-2000:])
+            return 1
+        rel["selecao"] = out.strip().splitlines()[0] if out.strip() else ""
+        prop = edit / "edl_selecao.json"
     # 6. edl.json
-    edl_p, prop = edit / "edl.json", edit / "edl_proposto.json"
+    edl_p = edit / "edl.json"
     if edl_p.exists():
         shutil.copy(edl_p, edit / "edl.prev.json")
     shutil.copy(prop, edl_p)
@@ -194,7 +214,7 @@ def main() -> int:
         print(json.dumps(rel, ensure_ascii=False, indent=1))
     else:
         print()
-        print(f"Roteiro: {edit / 'roteiro.md'}")
+        print(f"Roteiro: {edit / 'roteiro.md'}" + (f"  ·  seleção: {rel['selecao']}" if rel.get("selecao") else ""))
         print(f"Cortes automáticos: {len(cortes)}  ·  ritmo {args.ritmo}: "
               + ", ".join(f"{k} {v['respiros']} respiros/−{v['segundos']}s" for k, v in defeitos.get("ritmos", {}).items()))
         if perguntas:
