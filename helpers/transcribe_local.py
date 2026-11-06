@@ -211,11 +211,20 @@ class Motor:
 _CURTA = re.compile(r"^[\W_]*[a-zà-ú]{1,2}[\W_]*$", re.IGNORECASE)
 
 
+_PROMPT_NORM = re.sub(r"[^a-zà-ú ]", "", PROMPT_DISFLUENCIA.lower())
+
+
 def guarda_alucinacao(palavras: list[dict], dur: float) -> list[dict]:
     """Descarta o que não pode ser fala real num pedaço de `dur` segundos."""
     if not palavras:
         return []
     if len(palavras) / max(dur, 0.5) > TOKENS_POR_S_MAX:
+        return []
+    # ECO DO PROMPT: sobre riso ou ruído o decoder devolve o próprio prompt
+    # ("Eu acho que...") — medido numa risada de 2 s. Pedaço cujo texto inteiro
+    # é um trecho do prompt não é fala.
+    texto = re.sub(r"[^a-zà-ú ]", "", " ".join(w["text"] for w in palavras).lower()).strip()
+    if len(texto.split()) >= 2 and texto in _PROMPT_NORM:
         return []
     out: list[dict] = []
     corrida: list[dict] = []

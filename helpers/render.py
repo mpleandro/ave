@@ -704,7 +704,9 @@ def expand_breaths(edl: dict) -> int:
         # trazia: o lead original vale para o PRIMEIRO pedaço (a emenda de
         # entrada não mudou) e o aparo original para o ÚLTIMO (a saída também
         # não). Só as emendas do MEIO — as que este código criou — são fixadas.
-        base = {k: v for k, v in r.items() if k != "breaths"}
+        # sem `quote`: o pedaço não contém a frase inteira, e o portão confere
+        # a última palavra citada contra o conteúdo real do range
+        base = {k: v for k, v in r.items() if k not in ("breaths", "quote")}
         cur = a
         depois_de_respiro = False
         for m in sorted(marks, key=lambda x: float(x["at"])):

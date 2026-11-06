@@ -46,9 +46,11 @@ import subprocess
 import sys
 import unicodedata
 from pathlib import Path
+
 # ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import ffbin  # noqa: E402
+import ffbin
+
 ffbin.garantir()
 
 HELPERS = Path(__file__).resolve().parent
@@ -500,7 +502,18 @@ def checar_render(edit: Path, render: str | None) -> list[dict]:
     if not edl_p.exists() or video is None:
         return [{"check": "verify_cut", "problema": "render ainda não existe — "
                  "o portão só fecha depois de renderizar", "conserto": "renderizar", "aviso": True}]
-    cod, out = _rodar([str(HELPERS / "verify_cut.py"), str(edl_p), str(video)])
+    # O LIMIAR DE AR MORTO SEGUE O RITMO ESCOLHIDO. Abaixo do limiar de
+    # retórica do perfil, a pausa foi PRESERVADA de propósito pelo fala_limpa /
+    # propose_breaths; acusá-la ensinaria a forçar o portão. Acima dele, o
+    # ritmo devia ter encurtado — aí é defeito mesmo.
+    ritmo = "equilibrado"
+    try:
+        ritmo = str(json.loads((edit / "state.json").read_text()).get("ritmo") or ritmo)
+    except (OSError, json.JSONDecodeError):
+        pass
+    min_sil = {"conservador": 1.6, "equilibrado": 1.4, "agressivo": 0.9}.get(ritmo, 1.4)
+    cod, out = _rodar([str(HELPERS / "verify_cut.py"), str(edl_p), str(video),
+                       "--min-silence", f"{min_sil:.2f}"])
     if cod == 0:
         return []
     aceitos = []

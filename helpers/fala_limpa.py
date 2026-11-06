@@ -308,13 +308,23 @@ def borda(mono: np.ndarray | None, t: float, busca: float = BORDA_BUSCA, janela:
 
 
 def bordas_do_item(mono: np.ndarray | None, ws: list[dict], h: dict) -> tuple[float, float]:
-    """[início, fim] do corte: do vão antes da primeira palavra ao vão depois da última."""
+    """[início, fim] do corte: FOLGA curta de cada lado, não a pausa inteira.
+
+    Cortar no meio do vão deixava meia pausa antes e meia depois; emendadas,
+    viravam 2,8 s de ar morto na junção (medido). Aqui o corte começa logo
+    depois da palavra anterior (até 0,30 s, no ponto mais silencioso) e termina
+    logo antes da próxima (até 0,30 s antes dela): o que sobra na emenda é da
+    ordem do respiro que o ritmo preserva, não a soma de duas pausas."""
     ini = ws[h["i"]]
     fim = ws[h["j"]]
     ant_fim = ws[h["i"] - 1]["fim"] if h["i"] > 0 else max(0.0, ini["t"] - 0.1)
     prox_t = ws[h["j"] + 1]["t"] if h["j"] + 1 < len(ws) else fim["fim"] + 0.1
-    x = borda(mono, (ant_fim + ini["t"]) / 2, busca=max(BORDA_BUSCA, (ini["t"] - ant_fim) / 2))
-    y = borda(mono, (fim["fim"] + prox_t) / 2, busca=max(BORDA_BUSCA, (prox_t - fim["fim"]) / 2))
+    # início: entre ant_fim+0.05 e min(ant_fim+0.30, ini−0.02)
+    lo, hi = ant_fim + 0.05, max(ant_fim + 0.05, min(ant_fim + 0.30, ini["t"] - 0.02))
+    x = borda(mono, (lo + hi) / 2, busca=max(0.01, (hi - lo) / 2)) if mono is not None else hi
+    # fim: entre max(fim+0.02, prox−0.30) e prox−0.03
+    lo2, hi2 = max(fim["fim"] + 0.02, prox_t - 0.30), max(fim["fim"] + 0.02, prox_t - 0.03)
+    y = borda(mono, (lo2 + hi2) / 2, busca=max(0.01, (hi2 - lo2) / 2)) if mono is not None else lo2
     if y - x < CORTE_MIN:
         y = x + CORTE_MIN
     return round(x, 3), round(y, 3)
@@ -334,9 +344,18 @@ def _classe_vao(ws: list[dict], at: float) -> str:
     if ant is None:
         return "respiracao"
     txt = ant["txt"]
-    if re.search(r"[?!…]$|\.$|—$", txt) or txt.endswith("..."):
+    # O PONTO FINAL de uma região isolada é sintético: o Whisper fecha cada
+    # pedaço com ".", então "." num vão entre regiões não diz nada sobre
+    # retórica — classificá-lo assim preservava TODA pausa (medido: 16 vãos de
+    # 0,5–1,4 s, todos "retórica", 2 encurtados). Retórica é só `?!…`; o ponto
+    # cai no meio-termo (respiração), que é o erro que não estraga nada.
+    # Reticência numa região isolada é fala que PAROU ("Gastava muito tempo
+    # em..."), não pausa dramática: vira hesitação, que o ritmo encurta.
+    if txt.endswith(("...", "…")):
+        return "hesitacao"
+    if re.search(r"[?!]$|—$", txt):
         return "retorica"
-    if re.search(r"[,;:]$", txt):
+    if re.search(r"[,;:.]$", txt):
         return "respiracao"
     return "hesitacao"
 
