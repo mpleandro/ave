@@ -17,8 +17,13 @@ Executado e medido nesta máquina (M3, fonte de teste "conselho ou mentoria", 18
 | B7 seleção guiada pela tese (`selecao.py`, `fase1 --alvo/--tese`) | feito | 'conselho ou mentoria' alvo 65 s: 66% da seleção humana sem revisão, 90% com uma linha de revisão; proxy de 70 s em 26 s |
 | B8 retake dentro do fôlego vira pergunta | feito | fixture `oriento16`; apontado pelo usuário no proxy de 70 s |
 
-Pendências conhecidas: `install.ps1` e o caminho faster-whisper (fora de Apple
-Silicon) não foram testados; SKILL.md ainda carrega as narrativas de incidentes
+Pendências conhecidas: o caminho faster-whisper (Windows/Linux/Mac Intel) foi
+testado SÓ neste M3 com `AVE_MOTOR=faster` (2026-11-06): doctor ✓, os dois
+fixtures ✓, Fase 1 inteira ✓ em 4m31 para a fonte 4K de 4m15 (≈1× tempo real
+em CPU; esperar 2× em Intel) — mas o conjunto de defeitos difere do mlx (3 itens
+a menos, 2 a mais, sobre 18), então a régua real em máquina sem Apple Silicon
+segue pendente; `install.ps1` não foi executado (sem PowerShell aqui — só
+revisado); SKILL.md ainda carrega as narrativas de incidentes
 das outras seções; o portão com render ainda acusa riso/ruído sem texto como
 "ar morto" (caso legítimo de inspeção, não bug).
 
