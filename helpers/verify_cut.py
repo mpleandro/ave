@@ -27,6 +27,10 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 POP_DB = -8.0     # junction window louder than this → suspected pop
 HOT_DB = -6.0     # pre/post window louder than this → suspected clipped word
@@ -186,10 +190,15 @@ def main() -> None:
 
     actual = probe_duration(args.video)
 
+    # Sob J-cut a emenda de ÁUDIO não está na junção de vídeo: a saída termina
+    # em `prev_end` e a entrada começa em `a_in`. É lá que uma palavra clipada
+    # aparece — HOT-TAIL/HOT-HEAD continuam valendo, só mudam de lugar.
+    pre_t = [aud_seams[i][1] for i in range(len(junctions))] if jcut else list(junctions)
+    post_t = [aud_seams[i][0] for i in range(len(junctions))] if jcut else list(junctions)
     with ThreadPoolExecutor(max_workers=8) as ex:
-        pre_f = [ex.submit(peak_db, args.video, j - 0.13, 0.08) for j in junctions]
+        pre_f = [ex.submit(peak_db, args.video, t - 0.13, 0.08) for t in pre_t]
         jct_f = [ex.submit(peak_db, args.video, j - 0.015, 0.03) for j in junctions]
-        post_f = [ex.submit(peak_db, args.video, j + 0.05, 0.08) for j in junctions]
+        post_f = [ex.submit(peak_db, args.video, t + 0.05, 0.08) for t in post_t]
         sil_f = ex.submit(audio_scan, args.video, args.min_silence)
         blk_f = ex.submit(black_scan, args.video)
         # Each range's level ON THE OUTPUT TIMELINE, so gains already applied.
@@ -230,6 +239,10 @@ def main() -> None:
                 verdicts.append("justaposto")
             else:
                 verdicts.append(f"encavalado {lap * 1000:.0f}ms")
+            if pres[i] > HOT_DB:
+                verdicts.append("HOT-TAIL")
+            if posts[i] > HOT_DB:
+                verdicts.append("HOT-HEAD")
         else:
             if jcts[i] > POP_DB:
                 verdicts.append("POP?")

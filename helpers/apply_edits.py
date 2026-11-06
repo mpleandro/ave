@@ -20,9 +20,14 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 SKILL = Path(__file__).resolve().parent.parent
 HELPERS = SKILL / "helpers"
+sys.path.insert(0, str(HELPERS))
 
 TOL = 1e-3  # casamento de bordas em segundos
 
@@ -198,6 +203,103 @@ def aplicar_correcoes(edit: Path, novas: list[dict]) -> tuple[list[str], bool]:
     return log, fase2_ja_rodou
 
 
+def _borda_acustica(video: Path, t: float, busca: float) -> float:
+    """Ponto de menor energia em volta de `t` (fala_limpa.borda); sem áudio, t."""
+    try:
+        import fala_limpa as FL  # noqa: PLC0415
+        import transcribe_local as TL  # noqa: PLC0415
+        import tempfile  # noqa: PLC0415
+        with tempfile.TemporaryDirectory() as tmp:
+            wav = Path(tmp) / "a.wav"
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{max(0.0, t - 1.0):.3f}", "-t", "2.0",
+                            "-i", str(video), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le",
+                            str(wav)], check=True)
+            mono = TL.carregar_mono(wav)
+        return round(max(0.0, t - 1.0) + FL.borda(mono, min(1.0, t), busca=busca), 3)
+    except Exception:  # noqa: BLE001
+        return round(t, 3)
+
+
+def aplicar_marcas(edl: dict, edit: Path, cut_words: list[dict], cut_breaths: list[dict]) -> list[str]:
+    """Palavras riscadas e respiros marcados no editor → ranges e `breaths`.
+
+    Eram PEDIDOS que só uma sessão de IA atachada lia (watch_edits), e o
+    servidor apagava o preview_edits.json logo depois de rodar este script —
+    com ninguém atachado, sumiam. Agora são mecânicos: uma palavra riscada vira
+    um corte na borda acústica (dentro da folga medida que o editor já manda),
+    e um respiro marcado vira `breaths` no range, que o render.py já entende.
+    """
+    log: list[str] = []
+    sources = edl.get("sources", {})
+
+    def fonte(key: str) -> Path | None:
+        src = sources.get(key)
+        if not src:
+            return None
+        p = Path(src)
+        return p if p.is_absolute() else (edit / src).resolve()
+
+    # respiros primeiro: eles não mudam os índices dos ranges
+    for b in cut_breaths or []:
+        try:
+            ri = int(b["range"]); at = float(b["srcFrom"]); to = float(b["srcTo"])
+            keep = float(b.get("keep") or 0.15)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if ri >= len(edl["ranges"]) or to <= at:
+            continue
+        r = edl["ranges"][ri]
+        if not (float(r["start"]) < at and to < float(r["end"])):
+            log.append(f"  ! respiro {at:.2f}–{to:.2f} fora do trecho {ri} — ignorado")
+            continue
+        br = r.setdefault("breaths", [])
+        if not any(abs(float(x["at"]) - at) < 0.05 for x in br):
+            br.append({"at": round(at, 3), "to": round(to, 3), "keep": round(keep, 3)})
+            log.append(f"  respiro {at:.2f}–{to:.2f}s → fica {keep:.2f}s (trecho {ri})")
+
+    # palavras riscadas: do último para o primeiro, para os índices não andarem
+    cortes = []
+    for w in cut_words or []:
+        try:
+            ri = int(w["range"]); s0 = float(w["srcStart"]); e0 = float(w["srcEnd"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if ri >= len(edl["ranges"]):
+            continue
+        gb = float(w.get("gapBefore") or 0); ga = float(w.get("gapAfter") or 0)
+        vid = fonte(edl["ranges"][ri]["source"])
+        x = _borda_acustica(vid, s0 - min(gb, 0.12) / 2, busca=max(0.02, min(gb, 0.12) / 2)) if vid else s0
+        y = _borda_acustica(vid, e0 + min(ga, 0.12) / 2, busca=max(0.02, min(ga, 0.12) / 2)) if vid else e0
+        if y - x < 0.06:
+            y = x + 0.06
+        cortes.append((ri, x, y, w.get("text", ""), gb, ga))
+    for ri, x, y, txt, gb, ga in sorted(cortes, key=lambda c: (c[0], c[1]), reverse=True):
+        r = edl["ranges"][ri]
+        a, b = float(r["start"]), float(r["end"])
+        if not (a <= x and y <= b):
+            log.append(f"  ! \"{txt}\" ({x:.2f}–{y:.2f}) fora do trecho {ri} — ignorado")
+            continue
+        base = {k: v for k, v in r.items() if k not in ("start", "end", "breaths", "quote")}
+        br = r.get("breaths") or []
+        novos = []
+        if x - a >= 0.08:
+            novos.append({**base, "start": a, "end": round(x, 3),
+                          "breaths": [z for z in br if float(z["to"]) < x] or None,
+                          "reason": f"{r.get('reason', '')} | riscado no editor: \"{txt}\"".strip(" |")})
+        if b - y >= 0.08:
+            novos.append({**base, "start": round(y, 3), "end": b,
+                          "breaths": [z for z in br if float(z["at"]) > y] or None})
+        for n in novos:
+            if n.get("breaths") is None:
+                n.pop("breaths", None)
+        edl["ranges"][ri:ri + 1] = novos
+        aviso = "  ⚠ sem folga medida — a emenda pode cair na fala" if (not gb and not ga) else ""
+        log.append(f"  \"{txt}\" riscada → corte {x:.2f}–{y:.2f}s no trecho {ri}{aviso}")
+    if cortes or cut_breaths:
+        edl["total_duration_s"] = round(sum(float(r["end"]) - float(r["start"]) for r in edl["ranges"]), 3)
+    return log
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -221,7 +323,8 @@ def main() -> None:
     pedido = (payload.get("request") or "").strip()
     if pedido:
         notes = list(notes) + [{"text": pedido, "request": True}]
-    has_edl = bool(payload.get("edl"))
+    has_marcas = bool(payload.get("cutWords") or payload.get("cutBreaths"))
+    has_edl = bool(payload.get("edl")) or has_marcas
     has_data = bool(payload.get("editData"))
     has_fix = bool(payload.get("corrections"))
 
@@ -231,8 +334,12 @@ def main() -> None:
         if not edl:
             sys.exit(f"não achei o edl.json em {edit}")
         before = len(edl.get("ranges", []))
-        edl, log = apply_to_edl(edl, payload["edl"])
-        warns = warn_clipped_edges(edl, edit, payload["edl"])
+        log, warns = [], []
+        if payload.get("edl"):
+            edl, log = apply_to_edl(edl, payload["edl"])
+            warns = warn_clipped_edges(edl, edit, payload["edl"])
+        if has_marcas:
+            log += aplicar_marcas(edl, edit, payload.get("cutWords") or [], payload.get("cutBreaths") or [])
 
         # backup antes de escrever: o corte aprovado é trabalho do usuário
         (edit / "edl.prev.json").write_text(json.dumps(load(edl_path), ensure_ascii=False, indent=2))
@@ -278,16 +385,27 @@ def main() -> None:
     # que está escrito muda. Refazer aqui custaria minutos por uma palavra.
     if has_edl and not args.no_render:
         print("\nrefazendo o corte…")
+        # O ALVO É O RENDER QUE O USUÁRIO ESTÁ VENDO. Na Fase 1 é o proxy
+        # (state.json.video = preview_proxy.mp4); refazer só o preview.mp4
+        # deixava o portão e a escuta conferindo um proxy VELHO contra o EDL
+        # novo. Depois da aprovação o alvo é o pleno.
+        st = load(edit / "state.json", {}) or {}
+        alvo = "preview_proxy.mp4" if str(st.get("video", "")).endswith("preview_proxy.mp4") else "preview.mp4"
         cmd = [sys.executable, str(HELPERS / "render.py"), str(edit / "edl.json"),
-               "-o", str(edit / "preview.mp4")]
+               "-o", str(edit / alvo), "--no-subtitles"]
+        if alvo == "preview_proxy.mp4":
+            cmd.append("--proxy")
         if args.draft:
             cmd.append("--draft")
         r = subprocess.run(cmd)
         if r.returncode != 0:
             sys.exit("o render falhou — o edl novo está salvo, o corte antigo continua no lugar")
+        # o outro render descreve um corte que não existe mais
+        outro = "preview.mp4" if alvo == "preview_proxy.mp4" else "preview_proxy.mp4"
+        (edit / outro).unlink(missing_ok=True)
         print("\nconferindo…")
         subprocess.run([sys.executable, str(HELPERS / "verify_cut.py"),
-                        str(edit / "edl.json"), str(edit / "preview.mp4")])
+                        str(edit / "edl.json"), str(edit / alvo)])
 
     state = load(edit / "state.json", {})
     state["message"] = ("Corte atualizado a partir do editor"

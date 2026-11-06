@@ -35,6 +35,10 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 # ---------------------------------------------------------------------------
 # API IMPORTÁVEL — o silêncio MEDIDO, para quem precisa dele como dado e não
@@ -83,41 +87,62 @@ def measured_silences(
 def _silences_ffmpeg(video: Path, noise: str, min_silence: float) -> list[tuple[float, float]]:
     """silencedetect, com o pareamento start/end feito na ordem em que sai.
 
+    Em cache por fonte (`derivado`): é uma passada inteira de ffmpeg e todo
+    estágio da Fase 1 a pede de novo — medido, 9 a 10 decodes da mesma fonte
+    antes do primeiro proxy.
+
     Não reusa `detect_silences()` abaixo porque aquela devolve `(s, s)` quando o
     arquivo termina em silêncio — um intervalo de duração zero, que para o
     consumidor de `measured_silences` seria um vão inexistente.
     """
-    proc = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-nostats", "-i", str(video), "-vn",
-         "-af", f"silencedetect=noise={noise}:d={min_silence}", "-f", "null", "-"],
-        capture_output=True, text=True,
-    )
-    out: list[tuple[float, float]] = []
-    start: float | None = None
-    for line in proc.stderr.splitlines():
-        m = re.search(r"silence_start:\s*(-?[\d.]+)", line)
-        if m:
-            start = max(0.0, float(m.group(1)))
-            continue
-        m = re.search(r"silence_end:\s*([\d.]+)", line)
-        if m and start is not None:
-            end = float(m.group(1))
-            if end > start:
-                out.append((start, end))
-            start = None
-    return out
+    def medir() -> list[list[float]]:
+        proc = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostats", "-i", str(video), "-vn",
+             "-af", f"silencedetect=noise={noise}:d={min_silence}", "-f", "null", "-"],
+            capture_output=True, text=True,
+        )
+        out: list[list[float]] = []
+        start: float | None = None
+        for line in proc.stderr.splitlines():
+            m = re.search(r"silence_start:\s*(-?[\d.]+)", line)
+            if m:
+                start = max(0.0, float(m.group(1)))
+                continue
+            m = re.search(r"silence_end:\s*([\d.]+)", line)
+            if m and start is not None:
+                end = float(m.group(1))
+                if end > start:
+                    out.append([start, end])
+                start = None
+        return out
+
+    dados = _cache("silencedetect", video, {"noise": str(noise), "min": float(min_silence)}, medir)
+    return [(float(a), float(b)) for a, b in dados]
+
+
+def _cache(nome: str, video: Path, params: dict, produtor):
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from derivado import derivado  # noqa: PLC0415
+        return derivado(nome, [Path(video)], params, "1", produtor)
+    except Exception:  # noqa: BLE001 — cache é upgrade, nunca requisito
+        return produtor()
 
 
 def detect_silences(video: Path, noise: str, min_silence: float) -> list[tuple[float, float]]:
-    cmd = [
-        "ffmpeg", "-hide_banner", "-i", str(video), "-vn",
-        "-af", f"silencedetect=noise={noise}:d={min_silence}",
-        "-f", "null", "-",
-    ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    text = proc.stderr
-    starts = [float(m) for m in re.findall(r"silence_start:\s*([\d.]+)", text)]
-    ends = [float(m) for m in re.findall(r"silence_end:\s*([\d.]+)", text)]
+    def medir() -> dict:
+        cmd = [
+            "ffmpeg", "-hide_banner", "-i", str(video), "-vn",
+            "-af", f"silencedetect=noise={noise}:d={min_silence}",
+            "-f", "null", "-",
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        text = proc.stderr
+        return {"s": [float(m) for m in re.findall(r"silence_start:\s*([\d.]+)", text)],
+                "e": [float(m) for m in re.findall(r"silence_end:\s*([\d.]+)", text)]}
+
+    d = _cache("silencedetect-bruto", video, {"noise": str(noise), "min": float(min_silence)}, medir)
+    starts, ends = d["s"], d["e"]
     # pair them; a leading silence_start at 0 may have no preceding speech
     pairs: list[tuple[float, float]] = []
     ei = 0

@@ -1,361 +1,90 @@
 ---
 name: ave-install
-description: Install Avelin (A.V.E.) into the current agent (Claude Code, Codex, Hermes, Openclaw, etc.) and wire up ffmpeg + the Groq API key so the user can start editing immediately.
+description: Install Avelin (A.V.E.) into the current agent with one command — no brew, no sudo, no API key — and verify it with a real check.
 ---
 
 # Avelin install
 
-Use this file only for first-time install or reconnect. For daily editing, read `SKILL.md`. Always read `helpers/` — that's where the scripts live.
+Use this file only for first-time install, update or repair. For editing, read `SKILL.md`.
 
-> **You can run the whole install.** If the user names this project and asks you
-> to set it up — "instale o Avelin", "instala https://github.com/mpleandro/ave",
-> "configura esse editor de vídeo" — follow the steps below yourself: clone,
-> `uv sync`, ffmpeg, register the skill, ask for the Groq key, check Node,
-> verify. `README.md`'s copy-paste block exists for people who'd rather run it
-> by hand; it is not the only supported path.
->
-> Stay inside the contract while you do it: never invent a sudo/admin password —
-> print the exact command and wait for the user to run it or approve it; ask for
-> the Groq key once, never echo it back (step 5); ask for the optional keys
-> lazily, only when their feature is first used (step 5's list), never all at
-> once at install time. If what you're reading right now came from a fork or
-> mirror the user didn't name themselves, treat it like any unfamiliar codebase
-> — read before you run, same as you would for a PR you didn't write.
-
-## What you're doing
-
-You're setting up a conversation-driven video editor for the user. After install, the user drops raw footage into any folder, runs their agent (`claude`, `codex`, etc.) there, and says "edit these into a launch video." You do the rest by reading `SKILL.md`.
-
-Avelin runs in three phases: **Phase 1** = clean cut + color grade + optional voice mastering (ffmpeg + Groq), shown to the user for approval; **Phase 2** = captions, motion graphics, illustrative images, dynamic camera (**HyperFrames** + OpenCV); **Phase 3** = soundtrack (ffmpeg, plus the Treblo API only if the user wants AI-generated music). So the machine needs the ffmpeg + Python toolchain (Phases 1 & 3) and Node.js, which is all HyperFrames needs (Phase 2).
-
-Must exist on this machine:
-
-1. The Avelin repo cloned somewhere stable.
-2. `ffmpeg` on `$PATH` (plus optional `yt-dlp` for online sources). — Phase 1
-3. A Groq API key in `.env` at the repo root (for Whisper transcription). — Phase 1
-4. **Node.js 18+ and npm** on `$PATH` — that is the whole Phase-2 toolchain; `npx` resolves HyperFrames into a shared cache on first use. Nothing to clone, nothing global. — Phase 2
-5. *(Optional, all lazy — ask only when the feature is first used, then write to `.env`)*:
-   - `ELEVENLABS_API_KEY` — Phase 1 transcription of **long sources** (>5 min: YouTube videos, course lessons). With `backend=auto`, sources over 5 min transcribe via ElevenLabs Scribe (`scribe_v1`) when this key is set — Groq's free tier struggles with long/large uploads. Short clips stay on Groq; no key means long sources fall back to Groq (with chunking). Ask for it the first time a >5 min source appears. https://elevenlabs.io/app/settings/api-keys
-   - `PEXELS_API_KEY` — Phase 2 illustrative images (stock photos/videos). https://www.pexels.com/api/
-   - `TREBLO_API_KEY` — Phase 3 AI-generated soundtrack, only if the user picks "create with AI" (a local music file needs no key). https://sonauto.ai (Treblo)
-   - `GOOGLE_API_KEY` + `GOOGLE_CSE_ID` — Phase 2 images of **named brands/people/logos** that Pexels lacks. Optional and finicky to provision (the key and the Custom Search API must live in the same Google Cloud project). **Wikimedia Commons is the no-key fallback** (`wikimedia_images.py`) and covers most people/places, so Google is rarely required.
-
-And one thing must be true about the current agent:
-
-6. It can discover `SKILL.md` — either via a global skills directory (`~/.claude/skills/`, `~/.codex/skills/`) or via a `CLAUDE.md` / system-prompt import.
-
-**The same checklist exists at runtime, and it is the fastest way to diagnose.**
-`preview_server.py` publishes `deps` (ffmpeg, ffprobe, uv, node, yt-dlp, the
-HyperFrames cache) and `keys` (presence only, never the value) on every
-`/api/state`, and the editor's home screen renders them split into mandatory and
-optional — ✓/✗ with the fix command on each missing line. When the user says
-"something is missing", read that instead of guessing:
-
-```bash
-curl -s localhost:4820/api/state | python3 -m json.tool | sed -n '/deps/,/}/p'
-```
-
-## Install prompt contract
-
-- **Talk to the user in plain Portuguese, never in tooling terms** (the user's
-  rule, 2026-10-19). The person installing or updating Avelin is a creator, not
-  a developer. Never say package, extra, dependency, `uv sync`, virtual
-  environment, compile, PATH, or model sizes without context. Say what they
-  get and what *they* need to do next — e.g. "Agora vou instalar o programa que
-  mexe nos vídeos. Vai aparecer um pedido de permissão aqui no chat: é só
-  aceitar." Commands, paths and flags stay with you; the user only ever sees
-  the next step in conversational language. Same for every on-demand feature
-  `helpers/instalar.py` installs later.
-- Only ask the user for things you cannot generate — the Groq API key, and confirmation before any package-manager install that needs sudo/admin.
-- Never tell the user to open a separate terminal for a setup step (`uv sync`,
-  `brew install`, `winget install`, `apt-get install`, …). Claude Code's normal
-  interactive mode shows an inline approval prompt for these commands — the
-  user accepts it without leaving the chat. Explain what the command does and
-  wait for that in-chat approval; a "run this yourself in a terminal" message
-  is a worse experience than the prompt itself, not a safer one.
-- Two supported layouts. **User layout** (the README default, and what you should assume): the repo *is* the skill directory — `~/.claude/skills/ave` on macOS/Linux, `%USERPROFILE%\.claude\skills\ave` on Windows. Nothing to register, no symlink, identical on every OS. **Contributor layout**: repo at `~/Developer/ave` plus a symlink into the skills dir (step 4) — use it only when the user develops the skill and wants the repo among their projects.
-- The skill references helpers by bare name (`transcribe.py`, `render.py`). That works because SKILL.md and `helpers/` ship together — keep them as siblings whichever layout you use.
-- Detect the platform before emitting commands. This file's blocks are POSIX shell unless marked; every step has a PowerShell variant for Windows. Do not hand a Windows user `ln`, `brew`, `chmod`, `grep`, `sed`, or `curl -s -w` — `curl` in PowerShell is an alias for `Invoke-WebRequest` and takes different flags.
-- After install, verify by running one real command against one real file. Don't declare success on file-existence checks alone.
-
-## Steps
-
-### 1. Clone
-
-**User layout (default).** The repo lands directly in the skills directory, which also completes step 4 — there is nothing to register afterwards.
+## The one command
 
 ```bash
 # macOS / Linux
-mkdir -p "$HOME/.claude/skills"
-test -d "$HOME/.claude/skills/ave" || \
-  git clone https://github.com/mpleandro/ave "$HOME/.claude/skills/ave"
+bash <(curl -fsSL https://raw.githubusercontent.com/mpleandro/ave/main/install.sh)
+# or, with the repo already cloned:
+bash ~/.claude/skills/ave/install.sh
 ```
 
 ```powershell
-# Windows (PowerShell)
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills" | Out-Null
-if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ave")) {
-  git clone https://github.com/mpleandro/ave "$env:USERPROFILE\.claude\skills\ave"
-}
+# Windows (PowerShell) — o script clona o repositório sozinho
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/mpleandro/ave/main/install.ps1 | iex"
+# ou, com o repositório já clonado:
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ave\install.ps1"
 ```
 
-**Contributor layout.** Clone to `~/Developer/ave` instead, then do step 4 to register it.
+**O gatilho mais simples:** o usuário diz ao agente *"instale
+https://github.com/mpleandro/ave"*. O topo do `README.md` diz ao agente
+exatamente qual comando rodar; não há nada para interpretar.
 
-If the repo is already there, `git pull --ff-only` and continue.
+It does, in order: `uv` (Python installer, user-level, no sudo) → clone or
+update the repo into `~/.claude/skills/ave` (the clone *is* the skill; nothing
+to register) → Python deps, which include a **complete ffmpeg build** (with
+`zscale` for iPhone HDR) and the **local transcription engine** (Silero VAD +
+Whisper) → the voice model (~1.6 GB, once) → `helpers/doctor.py`, a real check
+that runs the VAD and the Whisper engine on synthetic audio.
 
-Everything below refers to that clone as `<AVE>`. Substitute the real path.
+**No API key is required.** Transcription is local. Groq/ElevenLabs are
+optional fallbacks for machines without a usable local engine; Pexels/Treblo
+only for stock images and AI music. Ask for a key only when the user picks a
+feature that needs it, never at install.
 
-### 2. Install Python deps
+**Node.js 18+** is the only system prerequisite left, and only for Phase 2
+(captions, graphics). `doctor.py` reports it; if missing, say so in one line
+("a Fase 2 precisa do Node.js — nodejs.org, versão LTS") and continue: Phase 1
+works without it.
 
-`uv` is the supported installer: it reads `pyproject.toml`, provisions a Python 3.10+ interpreter on its own when the system one is too old, and builds a `.venv` inside the repo. That venv is why helpers run under `uv run python …` — a bare `python` won't see the deps.
+## When you run it as the agent
+
+- Talk in plain Portuguese; the person is a creator, not a developer. Say what
+  they get and what *they* need to do next, not package names or flags.
+- Run `install.sh` (or `.ps1`) as one command and wait for the in-chat approval
+  prompt; never tell the user to open a terminal. Never ask for sudo.
+- Fewer approval prompts: `doctor.py` prints an allowlist for
+  `~/.claude/settings.json` → `permissions.allow`. Offer it once; apply it only
+  with explicit consent. Claude Code's `fewer-permission-prompts` skill builds
+  the same list from history.
+- After install, verify with one real command on one real file — the installer
+  already ran `doctor.py`; show its ✓/✗ lines in plain words.
+
+## Diagnose
 
 ```bash
-# macOS / Linux — prefer uv; fall back to pip.
-command -v uv >/dev/null && uv sync --directory <AVE> || pip install -e <AVE>
+uv run --directory ~/.claude/skills/ave python helpers/doctor.py              # ✓/✗ + fix per line
+uv run --directory ~/.claude/skills/ave python helpers/doctor.py --preparar   # re-download ffmpeg/model
+curl -s localhost:4820/api/state | python3 -m json.tool | sed -n '/deps/,/}/p'  # what the editor sees
 ```
 
-```powershell
-# Windows (PowerShell)
-uv sync --directory <AVE>
-```
+Common failures:
+- `ModuleNotFoundError` → run helpers with `uv run python helpers/<name>.py`, never bare `python`.
+- `ffmpeg` missing or without `zscale` → `doctor.py --preparar` links the pip build into `~/.local/bin`.
+- Windows: after any install, `$PATH` only refreshes in a **new** PowerShell window.
+- Old `uv sync` habit: always `uv sync --inexact`, or the on-demand resources (matting, 3D) get removed.
 
-If `uv` is missing: `brew install uv` (macOS), `winget install astral-sh.uv` (Windows), or the installer at https://docs.astral.sh/uv/. On Windows, a `winget install` only reaches `$PATH` in a **new** PowerShell window — reopen the terminal before continuing.
+## Update
 
-`pyproject.toml` lists `requests`, `pillow`, `numpy`, and `opencv-python-headless==4.10.0.84` (the last one powers the Phase-2 dynamic-camera face/eye tracking in `face_track.py` — keep it pinned to the 4.10 line; 5.x dropped `CascadeClassifier` and breaks Haar detection). No console scripts — helpers are invoked directly as `python helpers/<name>.py`.
+`git -C ~/.claude/skills/ave pull --ff-only && uv sync --directory ~/.claude/skills/ave --inexact`
+— or just run the install command again; it is idempotent. `helpers/atualizacoes.py`
+tells the user when there is something to pull (weekly fetch; `AVE_ATUALIZACOES=nunca` disables;
+`AVE_OFFLINE=1` disables every network call).
 
-#### Optional features install themselves (gradual install)
-
-The base install above stays light. Heavy or niche features are **resources**
-that `helpers/instalar.py` installs the first time the user asks for the
-effect that needs them — never during setup, and never requiring a terminal:
+## Optional resources (install themselves on first use)
 
 | Resource | Size | Installed when the user asks for |
 |---|---|---|
-| `recorte` (torch + Robust Video Matting) | ~2 GB | head over the card border, the 5s cutout test, element behind the presenter |
+| `recorte` (torch + Robust Video Matting) | ~2 GB | head over the card border, cutout test, element behind the presenter |
 | `anim3d` (MediaPipe + Depth Anything) | ~2.5 GB | the "Animação em 3D" format |
-| `escuta` (mlx-whisper + turbo model, Apple Silicon only) | ~1.6 GB | listening to the cut for repeated takes (Phase-1 gate) |
-| `link` (yt-dlp, inside the venv) | ~10 MB | editing from a URL |
+| `enquadramento` (MediaPipe + 3 small models) | ~100 MB | vertical reframing in the cuts gallery |
+| `link` (yt-dlp) | ~10 MB | editing from a URL |
 
-Do **not** pre-install them. `uv run python helpers/instalar.py status` shows
-what this machine has. Each one is a `pyproject.toml` extra installed with
-`uv sync --extra <x> --inexact` — `--inexact` matters: a plain `uv sync --extra`
-uninstalls the other extras.
-
-### 3. Install ffmpeg (+ optional yt-dlp)
-
-`ffmpeg` and `ffprobe` are hard requirements for Phase 1. `yt-dlp` is only needed if the user wants to pull sources from URLs — and the `link` resource installs it inside the venv on first use, so the system install below is optional. Phase 2 uses HyperFrames (Node.js) — set up in step 6.
-
-```bash
-# macOS — ffmpeg-full, não ffmpeg (ver a nota abaixo)
-ffmpeg -hide_banner -filters 2>/dev/null | grep -qE ' zscale ' || {
-  brew install ffmpeg-full
-  brew unlink ffmpeg 2>/dev/null
-  brew link --overwrite --force ffmpeg-full
-}
-command -v yt-dlp >/dev/null || brew install yt-dlp     # optional
-
-# Debian / Ubuntu
-# sudo apt-get update && sudo apt-get install -y ffmpeg
-# pip install yt-dlp
-
-# Arch
-# sudo pacman -S ffmpeg yt-dlp
-```
-
-**macOS: `ffmpeg-full`, not `ffmpeg`.** Homebrew's `ffmpeg` formula is now a
-slim build (the 9.0 bottle has 11 deps) without `zscale`/zimg — and `zscale` is
-what `render.py` tone-maps HDR with. iPhone records HLG by default, so with the
-slim build every iPhone clip fails mid-render (`render.py` now stops before
-extracting and says so). `ffmpeg-full` is the complete build but keg-only, hence
-the `unlink`/`link --force` to put it on PATH. Windows (`Gyan.FFmpeg`) and the
-Linux distro packages already include zimg.
-
-```powershell
-# Windows (PowerShell)
-winget install Gyan.FFmpeg
-winget install yt-dlp.yt-dlp     # optional
-```
-
-If `brew` / `apt` / `pacman` requires a sudo prompt, tell the user the exact command and wait. Do not invent a password. On Windows, `winget` may need the user to accept a source agreement on first run — let them answer it themselves, then reopen PowerShell so the new `$PATH` takes effect.
-
-### 4. Register the skill with the current agent
-
-**Skip this step entirely on the user layout** — cloning into the skills directory already registered it. This step exists for the contributor layout (repo at `~/Developer/ave`) and for agents other than Claude Code.
-
-Figure out which agent you are running under, and register once. A link to the whole repo directory is the right shape — helpers/ needs to sit next to SKILL.md.
-
-- **Claude Code** (`~/.claude/` present):
-
-    ```bash
-    mkdir -p ~/.claude/skills
-    ln -sfn ~/Developer/ave ~/.claude/skills/ave
-    ```
-
-- **Codex** (`$CODEX_HOME` set, or `~/.codex/` present):
-
-    ```bash
-    mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
-    ln -sfn ~/Developer/ave "${CODEX_HOME:-$HOME/.codex}/skills/ave"
-    ```
-
-- **Hermes / Openclaw / another agent with a skills directory**: symlink `~/Developer/ave` into that agent's skills directory under the name `ave`. If the agent has no skills directory, add a line to its system prompt / config pointing at `~/Developer/ave/SKILL.md` (e.g. an `@~/Developer/ave/SKILL.md` import in a `CLAUDE.md`-equivalent).
-
-- **Windows (PowerShell)**: `ln` doesn't exist, and `New-Item -ItemType SymbolicLink` needs admin rights or Developer Mode. Use a **directory junction**, which needs neither:
-
-    ```powershell
-    New-Item -ItemType Junction `
-      -Path "$env:USERPROFILE\.claude\skills\ave" `
-      -Target "$env:USERPROFILE\Developer\ave"
-    ```
-
-    If that still fails, don't fight it — the user layout (step 1) removes the need for a link at all.
-
-If you can't tell which agent you're in, ask the user once: "which agent am I running under — Claude Code, Codex, or something else?" Then pick the right target.
-
-### 5. Groq API key
-
-Groq Whisper (`whisper-large-v3`) is the base transcription backend and handles short sources (≤5 min). Without a Groq key, nothing transcribes. (Groq does not diarize speakers or tag audio events — every word gets `speaker_id: speaker_0`.) Long sources (>5 min) prefer the optional `ELEVENLABS_API_KEY` (Scribe) when present — see requirement 6 — but fall back to Groq when it isn't, so Groq is still required.
-
-1. Check existing state in this order and stop at the first hit:
-
-    ```bash
-    # macOS / Linux
-    # a) env var already exported
-    [ -n "$GROQ_API_KEY" ] && echo "env"
-    # b) .env at repo root already has it
-    grep -q '^GROQ_API_KEY=..' <AVE>/.env 2>/dev/null && echo "dotenv"
-    ```
-
-    ```powershell
-    # Windows (PowerShell)
-    if ($env:GROQ_API_KEY) { "env" }
-    elseif (Select-String -Path "<AVE>\.env" -Pattern '^GROQ_API_KEY=..' -Quiet -EA SilentlyContinue) { "dotenv" }
-    ```
-
-2. If neither is set, ask the user exactly once:
-
-    > I need a Groq API key for transcription (word-level timestamps). Grab one at https://console.groq.com/keys and paste it here — I'll write it to the skill's `.env`. Or if you already have it exported as `GROQ_API_KEY`, say "use env" and I'll skip.
-
-    When the user pastes a key, write it to `<AVE>/.env`:
-
-    ```bash
-    # macOS / Linux
-    printf 'GROQ_API_KEY=%s\n' "$KEY" > <AVE>/.env
-    chmod 600 <AVE>/.env
-    ```
-
-    ```powershell
-    # Windows (PowerShell) — no chmod; NTFS inherits the user-profile ACL
-    Set-Content -Path "<AVE>\.env" -Value "GROQ_API_KEY=$KEY"
-    ```
-
-    Never echo the key back in tool output. Never commit `.env`.
-
-3. Sanity check with a cheap, quota-free call:
-
-    ```bash
-    # macOS / Linux
-    curl -s -o /dev/null -w '%{http_code}\n' \
-      -H "Authorization: Bearer $(sed -n 's/^GROQ_API_KEY=//p' <AVE>/.env)" \
-      https://api.groq.com/openai/v1/models
-    ```
-
-    ```powershell
-    # Windows (PowerShell) — `curl` here is an alias for Invoke-WebRequest and
-    # does NOT take -s/-o/-w. Use the native cmdlet instead.
-    $k = (Select-String -Path "<AVE>\.env" -Pattern '^GROQ_API_KEY=(.+)$').Matches.Groups[1].Value
-    try {
-      Invoke-RestMethod -Uri https://api.groq.com/openai/v1/models `
-        -Headers @{ Authorization = "Bearer $k" } | Out-Null
-      "200"
-    } catch { $_.Exception.Response.StatusCode.value__ }
-    ```
-
-    `200` means the key works. `401` means the user pasted a wrong/expired key — ask once more and stop. Anything else (network, 5xx), move on and verify during first real transcription.
-
-### 6. Node.js (Phase 2)
-
-Phase 2 (captions, motion graphics, images) renders with **HyperFrames**, and the whole setup is Node.js 18+. There is no second skill to clone: `helpers/phase2.py` calls a pinned `npx hyperframes@<version>`, which resolves into a shared cache (~365 MB in `~/.cache/hyperframes`) the first time it runs — once for every project on the machine. Session projects carry no `node_modules`.
-
-```bash
-# macOS / Linux
-node --version   # 18+; install via nvm or `brew install node` if missing
-```
-
-```powershell
-# Windows (PowerShell)
-node --version   # if missing: winget install OpenJS.NodeJS.LTS, then reopen PowerShell
-```
-
-Do **not** install `remotion-best-practices` — it is not this skill's engine, and SKILL.md tells the agent never to load it.
-
-None of the optional keys (`ELEVENLABS_API_KEY`, `PEXELS_API_KEY`, `TREBLO_API_KEY`, `GOOGLE_API_KEY`/`GOOGLE_CSE_ID` — see requirement 5) are needed at install time. Ask for each **lazily**, the first time its feature is used, and append it to `.env` next to `GROQ_API_KEY`. `ELEVENLABS_API_KEY` is the Phase-1 exception to "Phase 2/3": ask for it the first time a **>5 min source** shows up (long lessons / YouTube), since that's when the auto backend wants Scribe. Image search also works with **zero keys** via Wikimedia Commons, so Phase 2 images are never hard-blocked.
-
-### 7. Verify end-to-end
-
-Run one real thing. Prefer the lightest verification that still proves the pipeline is wired up. Use `uv run` (or activate the venv) so the helper sees its deps — after `uv sync` a bare `python` won't find `opencv`/`numpy`:
-
-```bash
-# macOS / Linux
-cd <AVE>
-uv run python helpers/timeline_view.py --help >/dev/null && echo "helpers OK"      # or: python … after pip install -e .
-uv run python -c "import cv2; print('opencv', cv2.__version__)"                    # Phase-2 face tracking
-ffprobe -hide_banner -filters | grep -qE '\bdeesser\b' && echo "ffmpeg has voice-master filters"   # Phase-1 --voice-master
-ffprobe -hide_banner -filters | grep -qE ' zscale ' && echo "ffmpeg has zscale (HDR sources)"      # iPhone/HLG
-ffprobe -version | head -1
-node --version && echo "node OK (Phase 2)"
-```
-
-```powershell
-# Windows (PowerShell) — no grep/head; use Select-String and Select-Object
-cd <AVE>
-uv run python helpers/timeline_view.py --help > $null; if ($?) { "helpers OK" }
-uv run python -c "import cv2; print('opencv', cv2.__version__)"
-if (ffprobe -hide_banner -filters | Select-String -Pattern '\bdeesser\b' -Quiet) { "ffmpeg has voice-master filters" }
-if (ffprobe -hide_banner -filters | Select-String -Pattern ' zscale ' -Quiet) { "ffmpeg has zscale (HDR sources)" }
-ffprobe -version | Select-Object -First 1
-node --version; if ($?) { "node OK (Phase 2)" }
-```
-
-Full transcription test is optional at install time — it uses Groq credits. Better to wait until the user hands you their first clip.
-
-### 8. Hand off
-
-Tell the user, in one short message:
-
-- Where the skill is installed (the `<AVE>` path).
-- That they should `cd` into their footage folder and start their agent there (e.g. `claude`).
-- That a good first message is: *"edit these into a launch video"* or *"inventory these takes and propose a strategy."*
-- **What the first video looks like from their side:** the editor opens on the
-  dropzone with the install checklist under it; dropping a file creates the
-  project **and starts the cut immediately**, following the source video's
-  aspect ratio — the screen goes straight to a loading state with the Phase-1
-  steps while you work. A different format or a briefing is asked for in the
-  chat, whenever the user wants.
-- That all outputs land in `<videos_dir>/edit/` — the repo stays clean.
-
-## Keeping the skill current
-
-When the user asks to update ("atualiza o Avelin"), do it for them and report
-in plain language — what's new for *them*, and whether they need to do
-anything. Never paste a changelog, commit list or command output at them.
-
-- `git -C <AVE> pull --ff-only` pulls the latest code — same command on every OS, and no `cd` needed. The next run picks it up automatically (the clone *is* the skill dir on the user layout; the symlink/junction resolves to it on the contributor layout).
-- `git clone` does **not** update an existing install — it fails on a non-empty directory. Clone once, pull forever.
-- If `pyproject.toml` changed deps, re-run `uv sync --directory <AVE>` (or `pip install -e .`) after pulling.
-- **The skill tells the user when there is something to pull.** `helpers/atualizacoes.py` runs at the start of every round (SKILL.md, Setup): it fetches `origin/main` once a week (`AVE_ATUALIZACOES=rodada` in `.env` fetches every round, `nunca` turns it off) and, while the clone is behind, reminds in one line each round until the user updates. It never pulls by itself. It flags what makes a pull need care: changed deps (`uv sync`), uncommitted local changes, a local branch that diverged from `origin/main`.
-
-## Cold-start reminders
-
-- Link the **whole directory**, not just `SKILL.md`. The helpers need to sit next to it. Better still: on the user layout there's no link at all.
-- On Windows, prefer a **junction** over a symlink (no admin/Developer Mode needed) — and prefer the user layout over both.
-- Detect the shell before emitting commands. PowerShell has no `ln`, `chmod`, `grep`, `sed`, or `head`, and its `curl` is `Invoke-WebRequest` with incompatible flags. Use `Select-String`, `Select-Object -First`, `Set-Content`, `Invoke-RestMethod`.
-- After any `winget install`, `$PATH` only refreshes in a **new** PowerShell window. A "command not found" right after a successful install is almost always this.
-- Helpers run under `uv run python helpers/<name>.py`. A bare `python` won't see the `.venv` that `uv sync` builds — this is the most common post-install failure.
-- If `.env` exists but the key is empty, treat it the same as missing — don't assume existence means validity.
-- `ffmpeg` from static builds works fine. Tested on **9.0**; the floor is **5.1** — the helpers use `-fps_mode`, which replaced `-vsync` (removed in 9.0). The build must have `zscale` for HDR sources (on macOS: `ffmpeg-full`, see step 3).
-- `yt-dlp` is optional. Don't block install on it; install lazily the first time a user asks to pull from a URL.
-- Node.js 18+ is required for Phase 2 (captions, motion graphics, images). Phase 1 (cut + grade) works without it, so a user who only wants a clean cut can start immediately — but set up step 6 so Phase 2 is ready when the cut is approved.
-- Phase-2 projects are scaffolded per-video by `helpers/phase2.py` into `<videos_dir>/edit/hyperframes/`, and the composition is GENERATED from `edit-data.json` — there is no template to copy and no `node_modules` per project. The engine version is pinned in `phase2.py` so an upstream release can't break a render.
-- Never run transcription as part of install verification unless the user explicitly asks — Groq usage draws on the user's quota.
-- If the user is on Linux without a package manager Claude recognizes, print the manual `ffmpeg` install URL and wait rather than guessing.
+Do not pre-install them. `uv run python helpers/instalar.py status` shows what this machine has.

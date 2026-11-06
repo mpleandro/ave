@@ -1,0 +1,43 @@
+{
+  "fonte": "tests/fixtures/audio/conselho180.m4a",
+  "nota": "Verdade medida em 2026-11-06 ouvindo a fonte 'conselho ou mentoria' (DJI_20261027144155_0025_D, primeiros 180 s). `corte: false` = o n-grama repete no texto mas NÃO é defeito; fala_limpa não pode propor cortá-lo.",
+  "repeticoes": [
+    {
+      "t": 0.0,
+      "tol": 8.0,
+      "ngrama": "você quer um conselho ou uma mentoria",
+      "vezes": 2,
+      "tipo": "retake",
+      "corte": true
+    },
+    {
+      "t": 47.8,
+      "tol": 1.5,
+      "ngrama": "uma dúvida",
+      "vezes": 2,
+      "tipo": "gaguejo",
+      "corte": true
+    },
+    {
+      "t": 164.7,
+      "tol": 1.5,
+      "ngrama": "passo a",
+      "vezes": 2,
+      "tipo": "frase legítima ('passo a passo, a pessoa')",
+      "corte": false
+    }
+  ],
+  "silencios_obrigatorios": [
+    [
+      17.9,
+      21.6
+    ]
+  ],
+  "falsos_positivos_proibidos": [
+    {
+      "t": 19.2,
+      "tol": 2.0,
+      "ngrama": "tchau"
+    }
+  ]
+}

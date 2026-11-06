@@ -32,6 +32,10 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 HELPERS = Path(__file__).resolve().parent
 sys.path.insert(0, str(HELPERS))
@@ -159,8 +163,17 @@ def balance_two_lines(text: str) -> list[str]:
     # um" tem duas linhas parelhas e parte a locução no lugar errado. Quem sabe
     # onde a frase respira é quem a escreveu.
     if "/" in text:
-        partes = [t.strip() for t in text.split("/") if t.strip()]
-        return (partes + ["", ""])[:2]
+        # "/ /" (parte vazia) = MAIS ESPAÇO antes da linha seguinte: vira o
+        # prefixo "§" que o compositor lê (`hl_marcas`), junto com os `+`/`-`
+        # do começo da linha (±10% de corpo cada). Pedido do usuário, 2026-11.
+        partes, gap = [], False
+        for t in (x.strip() for x in text.split("/")):
+            if not t:
+                gap = bool(partes)
+                continue
+            partes.append(("§" if gap else "") + t)
+            gap = False
+        return (partes + ["", ""])[:max(2, min(len(partes), 4))]
     w = text.split()
     if len(w) < 2:
         return [text, ""]
@@ -271,6 +284,13 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
         data.setdefault("hook", {})["style"] = "noticia"
     elif pick.get("headline"):
         data.setdefault("hook", {})["style"] = pick["headline"]
+    elif "headline" in pick:
+        # "Sem headline" escolhido: DESLIGA. O popup da galeria manda o texto
+        # pré-preenchido com o título do corte mesmo assim, e sem esta saída o
+        # bloco abaixo ligava o hook com style None — a Fase 2 recusava
+        # ("estilo de headline 'None' ainda não foi portado"), medido ao gerar
+        # só legenda + CTA no "Trabalho, trabalho e o dinheiro nunca é meu".
+        data["hook"] = {**data.get("hook", {}), "enabled": False}
     # O TEXTO da headline não tem mais campo na interface — o texto não é
     # estilo, é conteúdo, e chega depois por uma conversa (AskUserQuestion),
     # o MESMO protocolo da Caixinha/Notícia. `headlineText` só sobrevive aqui
@@ -281,7 +301,8 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     # a Fase 2 e pedir a pergunta, em vez de renderizar em silêncio sem
     # headline nenhuma.
     txt = (pick.get("headlineText") or "").strip()
-    if txt:
+    sem_headline = "headline" in pick and not pick.get("headline") and not elements.get("noticia")
+    if txt and not sem_headline:
         hook = data.setdefault("hook", {})
         hook["lines"] = balance_two_lines(txt)
         hook["enabled"] = True
@@ -320,7 +341,10 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
     # também valem. O envio comum não as aplica — a aba manda as de fábrica e
     # quem muda fonte e cor é o chat —, mas escolher "Reels da Marca" é pedir
     # o pacote inteiro, letra e cor inclusas.
-    if pick.get("estiloSalvo"):
+    # MODO CORTE (editor dentro da galeria de cortes): não há chat no circuito,
+    # então fonte e cor escolhidas na própria aba VALEM — é o único canal.
+    modo_corte = bool(load(edit / "state.json", {}).get("modoCorte"))
+    if pick.get("estiloSalvo") or modo_corte:
         hook = data.setdefault("hook", {})
         for de, para in (("fontMain", "fontMain"), ("fontAccent", "fontAccent"),
                          ("textColor", "color")):
@@ -328,7 +352,10 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
                 hook[para] = pick[de]
         if pick.get("capFont"):
             data.setdefault("captions", {})["fontMain"] = pick["capFont"]
-        data["estiloSalvo"] = pick["estiloSalvo"]
+        if pick.get("estiloSalvo"):
+            data["estiloSalvo"] = pick["estiloSalvo"]
+        else:
+            data.pop("estiloSalvo", None)
     else:
         # escolha feita à mão depois de um salvo: o vídeo já não é mais ele
         data.pop("estiloSalvo", None)

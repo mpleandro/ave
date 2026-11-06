@@ -48,6 +48,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".avi", ".webm", ".mts", ".mxf", ".m2ts"}
 # Pastas de trabalho da própria skill. Um `clips_graded/` tem cem extrações do

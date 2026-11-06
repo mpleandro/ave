@@ -47,6 +47,12 @@ import sys
 import unicodedata
 from pathlib import Path
 
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin
+
+ffbin.garantir()
+
 HELPERS = Path(__file__).resolve().parent
 
 
@@ -79,7 +85,8 @@ def checar_spacing(edit: Path) -> list[dict]:
     DERIVADOS = {"cut_mapped"}
     faltas = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
-                    if not q.name.startswith(".") and q.stem not in DERIVADOS):
+                    if not q.name.startswith(".") and q.stem not in DERIVADOS
+                    and not q.stem.endswith((".raw", ".prev"))):
         d = json.loads(p.read_text())
         # NEM TODO .json EM transcripts/ É UM TRANSCRITO. O `corrections.json`
         # mora aqui (é o registro de onde o transcrito errou) e é uma LISTA —
@@ -90,7 +97,7 @@ def checar_spacing(edit: Path) -> list[dict]:
             continue
         if str(d.get("_transcription_backend") or "").startswith("elevenlabs"):
             continue                       # Scribe mede pausa por conta própria
-        if d.get("_spacing_source") == "measured/silencedetect":
+        if d.get("_spacing_source") in ("measured/silencedetect", "measured/silero-vad"):
             continue
         # A MARCA, e não uma heurística sobre os vãos. Tentei deduzir do formato
         # ("todo vão entre palavras é 0.00") e não discrimina: mesmo depois de
@@ -151,7 +158,7 @@ def checar_quotes(edit: Path) -> list[dict]:
 
     palavras = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
-                    if not q.name.startswith(".")):
+                    if not q.name.startswith(".") and not q.stem.endswith((".raw", ".prev"))):
         d = json.loads(p.read_text())
         if not isinstance(d, dict):
             continue                 # corrections.json é lista — ver checar_spacing
@@ -351,6 +358,19 @@ def checar_transcricao(edit: Path) -> list[dict]:
                    for ini, e in janelas.get(stem, []))
 
     resolvidas = _resolvidas(edit)
+    # TRANSCRITO LOCAL VAD-FIRST JÁ É A PASSADA ISOLADA. O `--recheck` que a
+    # densidade pede transcreve a janela sozinha — e é exatamente assim que o
+    # transcribe_local.py transcreveu CADA região de fala. Repetir não traria
+    # outra resposta; nesses arquivos a densidade baixa vira aviso (palavra
+    # longa, riso, hesitação), não bloqueio.
+    isolados: set[str] = set()
+    for q in (edit / "transcripts").glob("*.json"):
+        try:
+            d = json.loads(q.read_text())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(d, dict) and d.get("_spacing_source") == "measured/silero-vad":
+            isolados.add(q.stem)
     faltas = []
     for f in achados:
         ini, fim = float(f.get("start", 0)), float(f.get("end", 0))
@@ -368,7 +388,7 @@ def checar_transcricao(edit: Path) -> list[dict]:
                    and min(fim, float(c.get("srcEnd", 0))) - max(ini, float(c.get("srcStart", 0))) > 0.05
                    for c in resolvidas):
                 continue               # já ouvida isolada e registrada — ver _resolvidas
-            dentro = no_corte(arq, ini, fim)
+            dentro = no_corte(arq, ini, fim) and Path(arq or "").stem not in isolados
             faltas.append({
                 "check": "transcricao", "t": ini, "aviso": not dentro,
                 "problema": f"{f.get('n', 0)} palavra(s) em {f.get('dur', 0):.2f}s de fala "
@@ -482,7 +502,18 @@ def checar_render(edit: Path, render: str | None) -> list[dict]:
     if not edl_p.exists() or video is None:
         return [{"check": "verify_cut", "problema": "render ainda não existe — "
                  "o portão só fecha depois de renderizar", "conserto": "renderizar", "aviso": True}]
-    cod, out = _rodar([str(HELPERS / "verify_cut.py"), str(edl_p), str(video)])
+    # O LIMIAR DE AR MORTO SEGUE O RITMO ESCOLHIDO. Abaixo do limiar de
+    # retórica do perfil, a pausa foi PRESERVADA de propósito pelo fala_limpa /
+    # propose_breaths; acusá-la ensinaria a forçar o portão. Acima dele, o
+    # ritmo devia ter encurtado — aí é defeito mesmo.
+    ritmo = "equilibrado"
+    try:
+        ritmo = str(json.loads((edit / "state.json").read_text()).get("ritmo") or ritmo)
+    except (OSError, json.JSONDecodeError):
+        pass
+    min_sil = {"conservador": 1.6, "equilibrado": 1.4, "agressivo": 0.9}.get(ritmo, 1.4)
+    cod, out = _rodar([str(HELPERS / "verify_cut.py"), str(edl_p), str(video),
+                       "--min-silence", f"{min_sil:.2f}"])
     if cod == 0:
         return []
     aceitos = []

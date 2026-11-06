@@ -23,6 +23,7 @@ from pathlib import Path
 from transcribe import (
     DEFAULT_MODEL,
     LONG_SOURCE_SECONDS,
+    _local_disponivel,
     load_api_key,
     load_elevenlabs_key,
     transcribe_one,
@@ -72,10 +73,11 @@ def main() -> None:
         "--backend",
         type=str,
         default="auto",
-        choices=["auto", "groq", "elevenlabs", "whispercpp"],
-        help=f"Transcription backend per file. 'auto' (default) uses ElevenLabs Scribe "
-             f"for sources longer than {LONG_SOURCE_SECONDS}s when ELEVENLABS_API_KEY is "
-             "set, else Groq. Force with 'groq', 'elevenlabs', or 'whispercpp' (local).",
+        choices=["auto", "local", "groq", "elevenlabs", "whispercpp"],
+        help="Transcription backend per file. 'auto' (default) uses 'local' when "
+             f"installed; otherwise ElevenLabs Scribe for sources longer than {LONG_SOURCE_SECONDS}s "
+             "when ELEVENLABS_API_KEY is set, else Groq. Force with 'local', 'groq', "
+             "'elevenlabs', or 'whispercpp'.",
     )
     args = ap.parse_args()
 
@@ -99,14 +101,20 @@ def main() -> None:
         return
 
     # Local transcription must not require a cloud key.
-    api_key = "" if args.backend == "whispercpp" else load_api_key()
+    local = args.backend in ("whispercpp", "local") or (args.backend == "auto" and _local_disponivel())
+    api_key = "" if local else load_api_key()
     elevenlabs_key = load_elevenlabs_key()
 
+    # O prompt de disfluência (pt) só entra com idioma explícito — com `auto`
+    # o caminho recomendado pelo SKILL perdia o viés a favor da gagueira.
+    if args.language is None and local:
+        args.language = "pt"
+
     # The cloud backends are I/O-bound, so parallel workers are free throughput.
-    # whisper.cpp already saturates every core and the GPU on one file — running
+    # Local inference already saturates the GPU/cores on one file — running
     # several at once only makes them contend and finish later.
-    if args.backend == "whispercpp" and args.workers != 1:
-        print("whisper.cpp runs one file at a time (local inference already uses every core)")
+    if local and args.workers != 1:
+        print("transcrição local roda um arquivo por vez (já usa a GPU inteira)")
         args.workers = 1
 
     print(f"transcribing {len(pending)} files with {args.workers} parallel workers")

@@ -1,5 +1,22 @@
 # A.V.E. — Avelin Video Edit
 
+> **Para o agente (Claude Code, Codex, Cursor…): se o usuário disse "instale" +
+> esta URL, faça só isto e nada mais** — não clone à mão, não instale pacotes
+> um a um, não peça chave de API nem senha de administrador:
+>
+> ```bash
+> # macOS / Linux
+> bash <(curl -fsSL https://raw.githubusercontent.com/mpleandro/ave/main/install.sh)
+> ```
+> ```powershell
+> # Windows (PowerShell)
+> powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/mpleandro/ave/main/install.ps1 | iex"
+> ```
+> O instalador é idempotente (serve para atualizar) e termina com uma
+> conferência ✓/✗. Depois: ofereça a lista de permissões que ela imprime, e
+> diga ao usuário para abrir o agente na pasta do vídeo e pedir *"edita esse
+> vídeo"*. Detalhes em `install.md`.
+
 Editor de vídeo por conversa. Você joga o material bruto numa pasta, abre seu
 agente ali dentro e diz *"edita isso num vídeo de lançamento"*. Ele transcreve,
 escolhe as melhores tomadas, corta os silêncios, aplica a correção de cor e te
@@ -23,249 +40,63 @@ já em pé.
 
 ---
 
-## Checklist da instalação
+## Instalação — um comando
 
-São **três passos** — instalar os programas, baixar a skill, colar a chave do
-Groq — e depois o primeiro vídeo. O passo a passo com os comandos está logo
-abaixo; use esta lista para conferir onde você está.
+Sem Homebrew, sem senha de administrador, sem chave de API.
 
-**Obrigatório — sem isto nada roda:**
-
-- [ ] **Git**, **uv**, **ffmpeg** e **Node.js 18+** instalados *(passo 1)*
-- [ ] Os quatro respondendo no terminal — `git --version` e companhia *(passo 2)*
-- [ ] A skill baixada em `.claude/skills/ave` *(passo 3)*
-- [ ] `uv sync` rodado dentro dela *(passo 4)*
-- [ ] A **chave do Groq** gravada no `.env` *(passo 5)*
-
-O ffmpeg traz o `ffprobe` junto — é um item só. O Node.js só é usado da Fase 2
-em diante (legendas, gráficos), mas instale junto: é o mesmo comando, e ele
-para de ser opcional no dia em que você aprovar o primeiro corte.
-
-**Opcional — dá para trabalhar sem, hoje e sempre:**
-
-| Item | Sem ele | Vale a pena quando |
-|---|---|---|
-| `yt-dlp` | — instala sozinho (recurso `link`, ~10 MB) na primeira vez que você manda um link | você edita coisa que está no YouTube/Drive |
-| `ELEVENLABS_API_KEY` | fontes longas transcrevem no Groq, em pedaços | você edita aulas e vídeos de mais de 5 min |
-| `PEXELS_API_KEY` | as imagens vêm só da Wikimedia | você usa muito B-roll e imagem ilustrativa |
-| `TREBLO_API_KEY` | a trilha tem de ser um arquivo seu | você quer trilha gerada por IA |
-| `GOOGLE_API_KEY` + `GOOGLE_CSE_ID` | marcas e pessoas vêm da Wikimedia | a Wikimedia não achou a marca que você precisa |
-
-Nenhuma chave opcional é pedida na instalação: a IA pede cada uma **na primeira
-vez que o recurso for usado**, e você decide na hora.
-
-**Instalação gradual.** O mesmo vale para os efeitos pesados: nada deles vem na
-instalação base. Pediu o efeito, ele instala o que precisa — uma vez só, avisando
-o tamanho:
-
-| Recurso | Tamanho | Instala quando você pede |
-|---|---|---|
-| recorte | ~2 GB | a cabeça vazando o card, o teste de recorte, o elemento atrás de você |
-| anim3d | ~2,5 GB | o formato Animação em 3D |
-| escuta | ~1,6 GB | a conferência que ouve o corte atrás de frase repetida (só Mac Apple Silicon) |
-| link | ~10 MB | editar a partir de um link |
-
-`uv run python helpers/instalar.py status` mostra o que esta máquina já tem. O editor também mostra
-essa mesma checklist na tela inicial, com ✓ e ✗ do que esta máquina tem.
-
----
-> **Do jeito mais simples: peça para o agente instalar.** Abra o Claude Code (ou
-> Codex) numa pasta qualquer e diga *"instale https://github.com/mpleandro/ave"*
-> — ele clona o repo, instala as dependências (Python, ffmpeg, confere o Node) e
-> pergunta a chave do Groq quando chegar a hora. Leva uns 5 minutos, sem você
-> copiar nada.
-
-Depois de instalada, o agente ajuda com o resto (chave de API, verificação,
-problemas de PATH) — aí é tudo local e não tem recusa nenhuma.
-
-### Windows
-
-Abra o **PowerShell** (não o Prompt de Comando antigo — os comandos abaixo não
-funcionam nele).
-
-**1. Instale os pré-requisitos:**
-
-```powershell
-winget install Git.Git astral-sh.uv Gyan.FFmpeg OpenJS.NodeJS.LTS
-```
-
-**2. Feche e reabra o PowerShell.** Isso não é opcional: o Windows só enxerga os
-programas recém-instalados numa janela nova.
-
-**Confira antes de seguir.** Este comando tem que responder as quatro versões:
-
-```powershell
-git --version; uv --version; ffmpeg -version | Select-Object -First 1; node --version
-```
-
-Se algum dos quatro disser *"não é reconhecido"*, o passo 1 não terminou ou você
-não reabriu a janela. Resolva antes de continuar — os passos seguintes vão
-falhar de um jeito bem menos claro.
-
-**3. Baixe a skill:**
-
-```powershell
-git clone https://github.com/mpleandro/ave "$env:USERPROFILE\.claude\skills\ave"
-```
-
-**4. Instale as dependências Python:**
-
-```powershell
-uv sync --directory "$env:USERPROFILE\.claude\skills\ave"
-```
-
-Cole os comandos exatamente como estão. O `$env:USERPROFILE` é uma variável que
-o PowerShell troca sozinho pelo caminho da sua pasta de usuário — não edite nada.
-
-### macOS
-
-Abra o **Terminal** (Aplicativos → Utilitários).
-
-**1. Instale o Homebrew**, se você ainda não tem. O comando está em
-[brew.sh](https://brew.sh).
-
-**2. Instale os pré-requisitos:**
+**macOS / Linux** — abra o Terminal e cole:
 
 ```bash
-brew install git uv node ffmpeg-full
-brew link --overwrite --force ffmpeg-full
+bash <(curl -fsSL https://raw.githubusercontent.com/mpleandro/ave/main/install.sh)
 ```
 
-É o `ffmpeg-full`, e não o `ffmpeg`, de propósito: o `ffmpeg` do Homebrew hoje
-vem sem a peça que converte vídeo HDR — e o iPhone grava em HDR. Se você já
-tinha o `ffmpeg` instalado, rode `brew unlink ffmpeg` antes do `link`.
-
-**Confira antes de seguir.** Este comando tem que responder as quatro versões:
-
-```bash
-git --version; uv --version; ffmpeg -version | head -1; node --version
-```
-
-Se algum disser *"command not found"*, resolva antes de continuar.
-
-**3. Baixe a skill:**
-
-```bash
-git clone https://github.com/mpleandro/ave "$HOME/.claude/skills/ave"
-```
-
-**4. Instale as dependências Python:**
-
-```bash
-uv sync --directory "$HOME/.claude/skills/ave"
-```
-
-Cole os comandos exatamente como estão — o `$HOME` é uma variável que o Terminal
-troca sozinho pelo caminho da sua pasta de usuário.
-
-### Linux
-
-Igual ao macOS, trocando o passo 2 pelo gerenciador da sua distro
-(`apt install git ffmpeg nodejs`, `pacman -S git ffmpeg nodejs`) e instalando o
-`uv` pelo instalador oficial em [astral.sh/uv](https://docs.astral.sh/uv/).
-
----
-
-## Passo 5 — a chave do Groq (obrigatória)
-
-A transcrição roda no Groq Whisper. Sem essa chave nada funciona, porque a
-edição inteira parte do texto do que foi falado.
-
-Pegue uma chave gratuita em
-[console.groq.com/keys](https://console.groq.com/keys) e grave num arquivo
-`.env` dentro da pasta da skill:
-
-**Windows (PowerShell):**
+**Windows** — abra o PowerShell e cole:
 
 ```powershell
-Set-Content -Path "$env:USERPROFILE\.claude\skills\ave\.env" -Value "GROQ_API_KEY=cole_sua_chave_aqui"
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/mpleandro/ave/main/install.ps1 | iex"
 ```
 
-**macOS / Linux:**
+O instalador faz tudo e termina com uma conferência (✓/✗ por peça):
 
-```bash
-echo "GROQ_API_KEY=cole_sua_chave_aqui" > "$HOME/.claude/skills/ave/.env"
-```
+1. **uv** — o instalador de Python, só na sua pasta de usuário.
+2. **Avelin** em `~/.claude/skills/ave` — a pasta já é a skill; nada a registrar.
+3. **Dependências** — incluindo um **ffmpeg completo** (converte vídeo HDR do
+   iPhone) e a **transcrição local** (detector de voz + Whisper), que é o que
+   mantém no texto as repetições e os falsos começos que o corte precisa achar.
+4. **Modelo de voz** (~1,6 GB, uma vez só).
+5. **Conferência real** — transcreve um áudio de teste antes de dizer "pronto".
 
-Substitua `cole_sua_chave_aqui` pela chave de verdade — essa parte sim você
-edita. Se preferir, abra o Claude Code e peça: *"coloca minha chave do Groq no
-.env do Avelin"*.
+Se preferir que o agente faça: abra o Claude Code e peça *"instala o Avelin"*.
+Ele roda o mesmo comando e explica cada passo.
 
-### Chaves opcionais
+**Node.js** é o único programa que o instalador não baixa: só a Fase 2
+(legendas e gráficos) precisa dele. Se faltar, a conferência avisa; instale a
+versão LTS em [nodejs.org](https://nodejs.org) quando quiser a Fase 2. A Fase 1
+(corte limpo) funciona sem ele.
 
-Nenhuma é necessária para começar. O agente pede cada uma na primeira vez que o
+**Menos pedidos de aprovação no Claude Code:** a conferência sugere uma lista
+para `~/.claude/settings.json` (`permissions.allow`). Com ela, uma edição
+inteira roda sem interromper você a cada comando.
+
+### Chaves de API — todas opcionais
+
+Nenhuma é necessária para editar. O agente pede cada uma na primeira vez que o
 recurso for usado, e você decide na hora:
 
 | Chave | Para quê |
 |---|---|
-| `ELEVENLABS_API_KEY` | transcrever fontes longas (>5 min) com mais precisão |
-| `PEXELS_API_KEY` | imagens e vídeos ilustrativos na Fase 2 |
-| `TREBLO_API_KEY` | trilha sonora gerada por IA na Fase 3 |
-| `GOOGLE_API_KEY` + `GOOGLE_CSE_ID` | imagens de marcas/pessoas específicas |
+| `GROQ_API_KEY` / `ELEVENLABS_API_KEY` | transcrição em nuvem, só como reserva em máquina sem motor local |
+| `PEXELS_API_KEY` | imagens e vídeos de banco na Fase 2 (sem ela, Wikimedia Commons) |
+| `TREBLO_API_KEY` | trilha gerada por IA na Fase 3 (um arquivo de música local não precisa) |
+| `GOOGLE_API_KEY` + `GOOGLE_CSE_ID` | imagens de marcas e pessoas que a Wikimedia não tem |
 
-Imagens funcionam sem chave nenhuma via Wikimedia Commons, e trilha funciona com
-um arquivo de música local. Nada da Fase 2 ou 3 fica bloqueado por falta de
-chave.
-
----
-
-## Fase 2 — nada a instalar
-
-A Fase 2 (legendas, gráficos, imagens) roda em **HyperFrames**, resolvido na hora
-por `npx`. Não há segunda skill para clonar nem `node_modules` por projeto: o
-motor fica num cache compartilhado (~365 MB em `~/.cache/hyperframes`, baixado
-uma vez para todos os vídeos). A primeira Fase 2 da máquina leva alguns minutos
-baixando isso; as seguintes começam na hora.
-
-O Node.js 18+ dos pré-requisitos é o que o `npx` precisa — já instalado no passo
-1 da instalação.
-
----
-
-## Transcrição local, sem chave de API (opcional)
-
-Por padrão a transcrição usa a API do Groq. Quem preferir rodar tudo na própria
-máquina — sem chave, sem internet, sem cota — pode usar o
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp):
-
-```bash
-git clone https://github.com/ggml-org/whisper.cpp ~/whisper.cpp
-cd ~/whisper.cpp && cmake -B build && cmake --build build -j --config Release
-bash ./models/download-ggml-model.sh large-v3
-```
-
-Use o **large-v3** — os modelos menores erram muito em português. São ~3,1 GB, e
-o download não avisa se for interrompido, então confira o tamanho no fim.
-
-Depois é só pedir esse backend:
-
-```bash
-uv run python helpers/transcribe.py video.mp4 --backend whispercpp
-```
-
-O Avelin acha o binário e o modelo sozinho em `~/whisper.cpp`. Se você instalou
-em outro lugar, aponte com `WHISPERCPP_BIN` e `WHISPERCPP_MODEL` no `.env`.
-
-Instalar o whisper.cpp **não muda nada** por si só: o Groq continua o padrão até
-você pedir `--backend whispercpp` explicitamente.
-
-**O que esperar.** Medido num clipe de 16s em português, contra a detecção
-acústica de fala da própria skill:
-
-| | Groq | whisper.cpp |
-|---|---|---|
-| Texto | referência | 28 de 29 palavras idênticas |
-| Palavras no tempo certo | 97% | 66% |
-| Desvio típico | — | 240 ms (pior caso 2,5 s) |
-
-Ou seja: **o texto é equivalente, os tempos não.** Para a Fase 1 isso não
-atrapalha, porque o corte usa a detecção acústica para definir as bordas, não os
-tempos do Whisper. Para as legendas karaokê da Fase 2, que leem o tempo de cada
-palavra, o desvio aparece na tela — nesse caso prefira o Groq.
+`AVE_OFFLINE=1` no `.env` desliga toda chamada de rede.
 
 ---
 
 ## Primeiro vídeo
+
+A Fase 1 é um comando (`helpers/fase1.py <pasta> --alvo 60 --tese "…"`): transcrição local, erros de fala, seleção pela tese e proxy. O agente faz uma pergunta no upload (entrega, tese, ritmo) e mostra o corte proposto; o que precisa de decisão sua (retake ou ênfase?) vem como pergunta antes da versão final.
 
 1. Coloque seus vídeos brutos numa pasta.
 2. Abra o Claude Code **dentro dessa pasta** e diga: *"abre o editor do
@@ -493,7 +324,7 @@ terminar e rode o `git clone` de novo.
 está instalada. Você queria o comando de atualizar (`git pull`), não o de
 instalar.
 
-**`ModuleNotFoundError` ao usar a skill** — faltou o passo 4, o `uv sync`.
+**`ModuleNotFoundError` ao usar a skill** — faltou o passo 4, o `uv sync --inexact`.
 
 **O Claude não encontra a skill** — confirme que a pasta está exatamente em
 `.claude/skills/ave` dentro da sua pasta de usuário, e reinicie o Claude Code.

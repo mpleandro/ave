@@ -23,6 +23,7 @@ pedir de novo reaproveita o arquivo.
 from __future__ import annotations
 
 import argparse
+import os
 import hashlib
 import io
 import json
@@ -119,9 +120,61 @@ def _plano(c: dict, versao: str) -> list[tuple[float, float]]:
     return VR.plano(c, versao, VR.janela(c))
 
 
+def _baixados_path() -> Path:
+    return TRAB / "analise" / "baixados.json"
+
+
+def baixados() -> dict:
+    """{id do corte: {"arquivos": [...], "em": epoch}} — o que já saiu da galeria
+    pelo botão de baixar. A tela pinta a seta de verde para esses."""
+    try:
+        return json.loads(_baixados_path().read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def marcar_baixado(nome: str) -> None:
+    ids = [c["id"] for c in cortes()["cortes"] if nome.startswith(c["id"] + "_")]
+    if not ids:
+        return
+    cid = max(ids, key=len)
+    with _TRAVA:
+        d = baixados()
+        r = d.setdefault(cid, {"arquivos": [], "em": 0})
+        if nome not in r["arquivos"]:
+            r["arquivos"].append(nome)
+        r["em"] = int(__import__("time").time())
+        _baixados_path().write_text(json.dumps(d, ensure_ascii=False, indent=1))
+
+
+def edicao(c: dict) -> Path | None:
+    """O corte EDITADO à mão (`<trabalho>/edicao/edicoes.json` → {id: arquivo}),
+    quando existe. Ele vira a base de TODO download do corte — limpo, com
+    legenda e .srt. Antes disso, "Com legenda" refazia o corte a partir da
+    fonte e entregava a versão do garimpo: no "pneu do Gol" (2026-11) o arquivo
+    legendado saiu sem o gancho novo, sem a transição e sem o CTA pedidos."""
+    mapa = TRAB / "edicao" / "edicoes.json"
+    try:
+        rel = json.loads(mapa.read_text()).get(c["id"])
+    except (OSError, json.JSONDecodeError):
+        return None
+    p = (mapa.parent / rel) if rel else None
+    return p if p and p.exists() else None
+
+
+def _palavras_editado(ed: Path) -> tuple[list[dict], float]:
+    """Palavras OUVIDAS no próprio corte editado — a montagem é outra, então o
+    transcrito do garimpo não serve."""
+    d = duracao(ed)
+    return L.ouvir(ed, 0.0, d), d
+
+
 def palavras_da_versao(c: dict, versao: str) -> tuple[list[dict], float]:
     """A legenda da versão: texto do transcrito, tempo de ouvir o corte, e cada
     palavra levada para onde ela cai no vídeo montado."""
+    ed = edicao(c)
+    if ed and versao == "original":
+        return _palavras_editado(ed)
     a, b = VR.janela(c)
     alinhadas = L.alinhar(c.get("palavras") or [], L.ouvir(VIDEO, a, b), b - a)
     segs = _plano(c, versao)
@@ -130,8 +183,9 @@ def palavras_da_versao(c: dict, versao: str) -> tuple[list[dict], float]:
 
 def legenda_srt(c: dict, versao: str = "original") -> Path:
     destino = TRAB / f"{nome_versao(c, versao)}.srt"
+    ed = edicao(c) if versao == "original" else None
     with _trava(destino.name):
-        if not destino.exists():
+        if not destino.exists() or (ed and destino.stat().st_mtime < ed.stat().st_mtime):
             ws, dur = palavras_da_versao(c, versao)
             destino.write_text(L.srt(ws, dur), encoding="utf-8")
     return destino
@@ -211,8 +265,29 @@ def exportar(c: dict, versao: str = "original", legendado: bool = False,
         if estilo:
             sufixo += "_" + hashlib.sha1(json.dumps(estilo, sort_keys=True).encode()).hexdigest()[:8]
     destino = TRAB / f"{nome_versao(c, versao)}{sufixo}.mp4"
+    ed = edicao(c) if versao == "original" else None
     with _trava(destino.name):
-        if destino.exists():
+        if ed:
+            # o editado é a base: arquivo mais velho que ele é de outra montagem
+            if destino.exists() and destino.stat().st_mtime >= ed.stat().st_mtime:
+                return destino
+            if not legendado:
+                shutil.copy2(ed, destino)
+                return destino
+            ws, dur = _palavras_editado(ed)
+            with tempfile.TemporaryDirectory() as d:
+                ass = Path(d) / "legenda.ass"
+                cfg = L.com_estilo(F.config(TRAB), estilo) if estilo else F.config(TRAB)
+                texto = (estilo or {}).get("texto") or c.get("titulo_sugerido")
+                ass.write_text(L.ass(ws, dur, cfg, texto), encoding="utf-8")
+                tmp = destino.with_suffix(".tmp.mp4")
+                subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(ed),
+                                "-vf", f"ass={ass}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                                "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", str(tmp)],
+                               check=True)
+                tmp.rename(destino)
+            return destino
+        if destino.exists() and destino.stat().st_mtime >= valido_desde():
             return destino
         segs = _plano(c, versao)
         with tempfile.TemporaryDirectory() as d:
@@ -265,6 +340,440 @@ def avelin_url() -> str | None:
         return url
     except (OSError, ValueError, KeyError):
         return None
+
+
+# ------------------------------------------------------------- modo corte
+
+def _editor(garantir: bool = True) -> str:
+    """URL do editor do Avelin — sobe um se nenhum estiver no ar."""
+    url = avelin_url()
+    if url or not garantir:
+        return url
+    import socket  # noqa: PLC0415
+    import time  # noqa: PLC0415
+    sk = socket.socket()
+    sk.bind(("127.0.0.1", 0))
+    porta = sk.getsockname()[1]
+    sk.close()
+    log = TRAB / "editor" / "servidor.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.Popen([sys.executable, str(SKILL / "helpers" / "preview_server.py"), "--port", str(porta)],
+                     stdout=open(log, "ab"), stderr=subprocess.STDOUT, start_new_session=True)
+    for _ in range(60):
+        time.sleep(0.25)
+        url = avelin_url()
+        if url:
+            return url
+    raise Recusa("não consegui abrir o editor do Avelin", 503)
+
+
+def projeto_corte(c: dict) -> Path:
+    return TRAB / "editor" / c["id"] / "edit"
+
+
+def preparar_edicao(c: dict) -> dict:
+    """O corte vira um projeto do Avelin JÁ APROVADO: `preview.mp4` é o corte
+    pronto (em pé, enquadrado — não se refaz nada a partir da fonte), o texto
+    da legenda é o MESMO da galeria (`cut_mapped.json`) e a aba Estilo abre
+    sozinha. O vídeo base é congelado na primeira abertura: renderizar de novo
+    parte dele, e não do resultado anterior (senão headline e legenda se
+    empilhariam a cada rodada)."""
+    edit = preparar_projeto(c)
+    url = _editor()
+    req = urllib.request.Request(f"{url}/api/open", method="POST",
+                                 data=json.dumps({"path": str(edit)}).encode(),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        urllib.request.urlopen(req, timeout=10).read()
+    except OSError as e:
+        raise Recusa(f"o editor não abriu o corte: {e}", 502)
+    return {"url": f"{url}/?modo=corte", "pasta": str(edit)}
+
+
+def valido_desde() -> float:
+    """Exportado mais velho que isto é de um enquadramento ultrapassado e é
+    refeito (`analise/valido_desde`, epoch). Medido em 2026-11-05: o anúncio
+    "Trabalho, trabalho…" saiu com o Paulo enquanto a Júlia falava porque a
+    geração partiu de um arquivo feito antes da correção."""
+    try:
+        return float((TRAB / "analise" / "valido_desde").read_text().strip())
+    except (OSError, ValueError):
+        return 0.0
+
+
+def preparar_projeto(c: dict) -> Path:
+    """O projeto Avelin do corte (ver `preparar_edicao`), sem abrir editor."""
+    edit = projeto_corte(c)
+    (edit / "transcripts").mkdir(parents=True, exist_ok=True)
+    base = edit / "preview.mp4"
+    if base.exists() and base.stat().st_mtime < valido_desde():
+        # base congelada ANTES da última correção do enquadramento: refaz o
+        # projeto do corte em vez de gerar em cima de um quadro errado
+        shutil.rmtree(edit)
+        (edit / "transcripts").mkdir(parents=True, exist_ok=True)
+    if not base.exists():
+        src = exportar(c, "original")
+        shutil.copy2(src, base)
+        ws, _ = palavras_da_versao(c, "original")
+        palavras = [{"type": "word", "text": w["w"], "start": float(w["s"]), "end": float(w["e"]),
+                     "speaker_id": "speaker_0"} for w in ws]
+        (edit / "transcripts" / "cut_mapped.json").write_text(json.dumps(
+            {"words": palavras, "language_code": "por",
+             "_source": "galeria de cortes — o mesmo texto do corte"}, ensure_ascii=False))
+        r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                            "stream=r_frame_rate", "-of", "csv=p=0", str(base)], capture_output=True, text=True)
+        try:
+            n, d = r.stdout.strip().split("/")
+            fps = round(float(n) / float(d))
+        except ValueError:
+            fps = 30
+        (edit / "state.json").write_text(json.dumps({
+            "project": c.get("titulo_sugerido") or c["id"], "phase": 2, "video": "preview.mp4",
+            "editData": "hyperframes/edit-data.json", "captions": "hyperframes/captions.json",
+            "finalVideo": "final.mp4", "fps": fps, "awaitingStyle": True, "modoCorte": True,
+            "message": "Corte da galeria — escolha o estilo e renderize",
+            "origem": {"galeria": str(TRAB), "id": c["id"]}}, ensure_ascii=False, indent=2))
+    return edit
+
+
+# ------------------------------------------------- fila de geração (2º plano)
+# "Adicionar legenda e elementos": o popup manda as escolhas no MESMO formato
+# do editor (o `style-setup` que o app.js envia) e volta para a galeria na
+# hora. Um trabalhador gera UM corte por vez (dois renders juntos deixam a
+# máquina lenta e os dois demoram mais) com a Fase 2 do Avelin; o estado fica
+# em `analise/fila.json`, então recarregar a página não perde nada.
+
+class _TravaFila:
+    """A trava da fila vale ENTRE PROCESSOS, não só entre threads: duas galerias
+    abertas no mesmo projeto (uma esquecida numa porta, outra nova) dividem o
+    `fila.json`, e cada uma tem o seu trabalhador. Sem o `flock`, as duas liam
+    a fila no mesmo instante e pegavam o MESMO pedido. Sem `fcntl` (Windows),
+    fica só a trava de thread — lá não há duas galerias no mesmo projeto."""
+    def __init__(self):
+        self._t = threading.Lock()
+        self._fd = None
+
+    def __enter__(self):
+        self._t.acquire()
+        try:
+            import fcntl  # noqa: PLC0415
+            self._fd = open(_fila_path().with_suffix(".lock"), "a")
+            fcntl.flock(self._fd, fcntl.LOCK_EX)
+        except (ImportError, OSError):
+            self._fd = None
+        return self
+
+    def __exit__(self, *exc):
+        if self._fd:
+            self._fd.close()          # fechar solta o flock
+            self._fd = None
+        self._t.release()
+
+
+def _vivo(pid) -> bool:
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+_FILA_TRAVA = _TravaFila()
+_FILA_SINAL = threading.Event()
+
+
+def _fila_path() -> Path:
+    return TRAB / "analise" / "fila.json"
+
+
+def fila() -> list[dict]:
+    try:
+        return json.loads(_fila_path().read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def _fila_gravar(f: list[dict]) -> None:
+    _fila_path().write_text(json.dumps(f, ensure_ascii=False, indent=1))
+
+
+def enfileirar(c: dict, escolhas: dict | None, cta: str | None = None,
+               versao: str = "original") -> dict:
+    """Um pedido na fila: `escolhas` (o popup — Fase 2 do Avelin) e/ou `cta`
+    (o fecho deste projeto, ver `ctas_projeto`). Um pedido IGUAL ainda na fila
+    é trocado pelo novo; um diferente (outro CTA do mesmo corte) fica."""
+    import time  # noqa: PLC0415
+    tipo = (bool(escolhas), cta or "")
+    with _FILA_TRAVA:
+        f = [j for j in fila() if not (j["id"] == c["id"] and j["estado"] == "na fila"
+                                       and (bool(j.get("escolhas")), j.get("cta") or "") == tipo)]
+        job = {"id": c["id"], "titulo": c.get("titulo_sugerido"), "estado": "na fila",
+               "escolhas": escolhas or None, "pedido": int(time.time())}
+        if cta:
+            job.update(cta=cta, versao=versao)
+        f.append(job)
+        _fila_gravar(f)
+    _FILA_SINAL.set()
+    return job
+
+
+def _progresso(edit: Path) -> dict:
+    try:
+        return json.loads((edit / "progress.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+_PALAVRAS: dict[str, dict] = {}
+
+
+def palavras_corte(c: dict) -> dict:
+    """As palavras do corte para a prévia ao vivo, `[{w, s, e}]` em segundos do
+    próprio corte. Se o projeto do corte já existe, vale o `cut_mapped.json`
+    dele — é EXATAMENTE o texto que a Fase 2 transforma em legenda (e, num
+    corte já gerado, a versão editada à mão traria a legenda queimada de
+    volta pela escuta). Senão, `palavras_da_versao(c, "original")`, a mesma
+    origem que `preparar_projeto` grava. Guardadas em memória: a escuta é
+    cacheada em disco, mas o alinhamento roda de novo a cada pedido."""
+    tr = projeto_corte(c) / "transcripts" / "cut_mapped.json"
+    if tr.exists():
+        try:
+            ws = json.loads(tr.read_text()).get("words") or []
+            r = {"palavras": [{"w": w["text"], "s": w["start"], "e": w["end"]} for w in ws
+                              if w.get("type", "word") == "word"], "origem": "projeto"}
+            # a base LIMPA do projeto (o que a Fase 2 compõe): a prévia toca ela,
+            # não o arquivo da galeria, que num corte já gerado tem legenda queimada
+            if (projeto_corte(c) / "preview.mp4").exists():
+                r["base"] = f"/previa-base/{c['id']}.mp4"
+            return r
+        except (OSError, json.JSONDecodeError, KeyError):
+            pass
+    if c["id"] not in _PALAVRAS:
+        ws, dur = palavras_da_versao(c, "original")
+        _PALAVRAS[c["id"]] = {"palavras": [{"w": w["w"], "s": w["s"], "e": w["e"]} for w in ws],
+                              "dur": dur, "origem": "galeria"}
+    return _PALAVRAS[c["id"]]
+
+
+def _semear_edit_data(edit: Path, escolhas: dict) -> None:
+    """Pré-responde as perguntas que a Fase 2 faria A UMA SESSÃO DE IA.
+
+    Nesta porta não há chat: um `sys.exit` pedindo "leia a fala e decida"
+    deixaria o trabalho em erro. Então, no lugar da IA:
+      - EFEITOS DE CONTEÚDO (checklist, gráfico…): `efeitosRevisados` — o motor
+        põe só os de movimento, que ele posiciona sozinho;
+      - CTA sem momento: `momentoRevisado` — o CTA fecha o vídeo (é o mesmo
+        padrão que a Fase 2 aplica quando a fala não tem chamada).
+    O resto do edit-data (medidas, legendas) é da Fase 2 e fica intocado."""
+    p = edit / "hyperframes" / "edit-data.json"
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    data["efeitosRevisados"] = True
+    if ((escolhas.get("cta") or {}).get("modelo")):
+        cta = data.setdefault("cta", {})
+        if cta.get("start") is None and cta.get("momento") is None:
+            cta["momentoRevisado"] = True
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def _gerar(c: dict, escolhas: dict) -> str:
+    """Roda a Fase 2 do Avelin no projeto do corte com as escolhas do popup e
+    registra o resultado como a versão editada do corte. Devolve o arquivo
+    publicado na galeria (o que o botão Baixar entrega)."""
+    edit = preparar_projeto(c)
+    pedido = {"type": "style-setup", "rerender": (edit / "final.mp4").exists(), **escolhas}
+    (edit / "preview_style.json").write_text(json.dumps(pedido, ensure_ascii=False, indent=2))
+    _semear_edit_data(edit, escolhas)
+    log = edit / "fase2.log"
+    with open(log, "w") as fo:
+        r = subprocess.run([sys.executable, str(SKILL / "helpers" / "phase2.py"), str(edit)],
+                           stdout=fo, stderr=subprocess.STDOUT, cwd=str(SKILL))
+    final = edit / "final.mp4"
+    if r.returncode or not final.exists() or final.stat().st_mtime < log.stat().st_mtime - 1:
+        cauda = [l for l in log.read_text(errors="ignore").splitlines() if l.strip()][-6:]
+        raise RuntimeError(" / ".join(cauda)[-600:] or f"Fase 2 saiu com código {r.returncode}")
+    estado_edicao(c)                       # registra em edicao/edicoes.json
+    return exportar(c, "original").name    # o arquivo da galeria passa a ser o editado
+
+
+# ------------------------------------------- CTA do projeto (fecho do vídeo)
+# Um projeto pode trazer os PRÓPRIOS CTAs: trechos gravados da pessoa pedindo o
+# clique (`edicao/_ctas/ctas.json` + os .mp4), montados no fim do corte pelo kit
+# do projeto (`edicao/_kit/montar.py`, HyperFrames: botão dourado "Acesse
+# agora", cursor e clique). Sem o ctas.json a galeria nem pergunta.
+
+def ctas_projeto() -> dict | None:
+    p = TRAB / "edicao" / "_ctas" / "ctas.json"
+    try:
+        d = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    itens = [x for x in d.get("ctas") or [] if (p.parent / x.get("arquivo", "")).is_file()]
+    if not itens:
+        return None
+    return {**d, "ctas": itens, "_pasta": p.parent}
+
+
+def _fecho_pronto(cfg: dict, item: dict) -> Path:
+    """O CTA com o botão JÁ MONTADO, uma vez por CTA (`_ctas/prontos/<id>.mp4`).
+    Ele é igual em todo corte, então refazer a montagem (HyperFrames, ~1 min) a
+    cada pedido era tempo jogado fora — pergunta do usuário, 2026-11-05. Refaz
+    só quando o clipe, o ctas.json ou o kit mudam."""
+    pasta = cfg["_pasta"]
+    kit = (pasta / (cfg.get("kit") or "../_kit/montar.py")).resolve()
+    if not kit.is_file():
+        raise RuntimeError(f"não achei o kit de montagem ({kit})")
+    clipe = pasta / item["arquivo"]
+    destino = pasta / "prontos" / f"{item['id']}.mp4"
+    fontes = [clipe, pasta / "ctas.json", kit]
+    if destino.exists() and destino.stat().st_mtime >= max(f.stat().st_mtime for f in fontes):
+        return destino
+    with _trava(f"fecho-{item['id']}"):
+        if destino.exists() and destino.stat().st_mtime >= max(f.stat().st_mtime for f in fontes):
+            return destino
+        work = pasta / "render" / f"_fecho_{item['id']}"
+        if work.exists():
+            shutil.rmtree(work)
+        work.mkdir(parents=True)
+        (work / "seg0.mp4").symlink_to(clipe)
+        botao = cfg.get("botao") or {}
+        (work / "spec.json").write_text(json.dumps({
+            "titulo": f"CTA {item.get('nome', item['id'])}", "segs": ["seg0.mp4"],
+            "cta": {"seg": 0, "texto": botao.get("texto", "Acesse agora"),
+                    "sub": botao.get("sub", "CLIQUE NO LINK"),
+                    "entra": item.get("entra", 0.25), "clique": item["clique"]}},
+            ensure_ascii=False, indent=1))
+        log = work / "montar.log"
+        with open(log, "w") as fo:
+            r = subprocess.run([sys.executable, str(kit), str(work)], stdout=fo,
+                               stderr=subprocess.STDOUT, cwd=str(work))
+        pronto = work / f"{work.name}.mp4"
+        if r.returncode or not pronto.exists():
+            cauda = [l for l in log.read_text(errors="ignore").splitlines() if l.strip()][-6:]
+            raise RuntimeError(" / ".join(cauda)[-600:] or f"montagem do CTA saiu com código {r.returncode}")
+        destino.parent.mkdir(exist_ok=True)
+        shutil.copy2(pronto, destino)
+        shutil.rmtree(work, ignore_errors=True)
+    return destino
+
+
+def _com_cta(c: dict, base: Path, cta_id: str, nome: str) -> str:
+    """Corte + o CTA escolhido no fim, publicado como `<nome>_cta-<id>.mp4` —
+    um arquivo à parte: o corte limpo continua o mesmo. A emenda é uma passada
+    só de ffmpeg (segundos): o fecho já vem montado (`_fecho_pronto`)."""
+    cfg = ctas_projeto()
+    item = next((x for x in (cfg or {}).get("ctas", []) if x["id"] == cta_id), None)
+    if not item:
+        raise RuntimeError(f"CTA {cta_id!r} não existe neste projeto")
+    fecho = _fecho_pronto(cfg, item)
+    destino = TRAB / f"{nome}_cta-{cta_id}.mp4"
+    tmp = destino.with_suffix(".tmp.mp4")
+    # o corte pode vir em outro fps/tamanho (60 fps da fonte): normaliza os dois
+    # lados e emenda com o filtro concat; volume medido no vídeo INTEIRO
+    norm = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1,format=yuv420p"
+    fc = (f"[0:v]{norm}[v0];[1:v]{norm}[v1];"
+          "[0:a]aresample=44100,aformat=channel_layouts=stereo[a0];"
+          "[1:a]aresample=44100,aformat=channel_layouts=stereo[a1];"
+          "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a];"
+          "[a]loudnorm=I=-14:TP=-1:LRA=11,aresample=44100[ao]")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(base), "-i", str(fecho),
+                    "-filter_complex", fc, "-map", "[v]", "-map", "[ao]",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-movflags", "+faststart", str(tmp)],
+                   check=True)
+    tmp.replace(destino)
+    return destino.name
+
+
+def _marcar_job(job: dict, **campos) -> None:
+    with _FILA_TRAVA:
+        f = fila()
+        for j in f:
+            if j["id"] == job["id"] and j.get("pedido") == job["pedido"]:
+                j.update(campos)
+        _fila_gravar(f)
+
+
+def _executar(c: dict, job: dict) -> str:
+    """Escolhas do popup → Fase 2 (vira a versão editada do corte); CTA → o
+    kit monta o fecho por cima da base (a Fase 2, se houve, senão o corte)."""
+    arq = None
+    if job.get("escolhas"):
+        arq = _gerar(c, job["escolhas"])
+    if not job.get("cta"):
+        if not arq:
+            raise RuntimeError("pedido vazio")
+        return arq
+    _marcar_job(job, fase="cta")
+    if arq:
+        base, nome = TRAB / arq, base_nome(c)
+    else:
+        versao = normalizar(c, job.get("versao") or "original")
+        base, nome = exportar(c, versao), nome_versao(c, versao)
+    return _com_cta(c, base, job["cta"], nome)
+
+
+def _trabalhador() -> None:
+    import time  # noqa: PLC0415
+    while True:
+        _FILA_SINAL.wait(5)
+        _FILA_SINAL.clear()
+        with _FILA_TRAVA:
+            f = fila()
+            # um "gerando" que sobrou de um servidor que MORREU volta para a fila;
+            # o de outra galeria viva no mesmo projeto é dela (pegá-lo de volta
+            # rodaria a mesma Fase 2 duas vezes na mesma pasta)
+            for j in f:
+                if j["estado"] == "gerando" and j.get("pid") != os.getpid() and not _vivo(j.get("pid")):
+                    j["estado"] = "na fila"
+            prox = next((j for j in f if j["estado"] == "na fila"), None)
+            if prox:
+                prox.update(estado="gerando", inicio=int(time.time()), pid=os.getpid())
+            _fila_gravar(f)
+        if not prox:
+            continue
+        c = next((x for x in cortes()["cortes"] if x["id"] == prox["id"]), None)
+        try:
+            if not c:
+                raise RuntimeError("corte não encontrado")
+            arq = _executar(c, prox)
+            novo = {"estado": "pronto", "arquivo": arq, "url": f"/baixar/{arq}"}
+        except Exception as e:  # noqa: BLE001
+            novo = {"estado": "erro", "erro": str(e)}
+        with _FILA_TRAVA:
+            f = fila()
+            for j in f:
+                if j["id"] == prox["id"] and j.get("pedido") == prox["pedido"]:
+                    j.update(novo, fim=int(time.time()))
+            _fila_gravar(f)
+        _FILA_SINAL.set()
+
+
+def estado_edicao(c: dict) -> dict:
+    """Pronto quando o `final.mp4` do projeto é mais novo que o vídeo base: aí
+    ele vira a versão editada do corte na galeria (todo download sai dele)."""
+    edit = projeto_corte(c)
+    final, base = edit / "final.mp4", edit / "preview.mp4"
+    prog = {}
+    try:
+        prog = json.loads((edit / "progress.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        pass
+    pronto = final.exists() and base.exists() and final.stat().st_mtime > base.stat().st_mtime
+    if pronto:
+        mapa = TRAB / "edicao" / "edicoes.json"
+        mapa.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            d = json.loads(mapa.read_text())
+        except (OSError, json.JSONDecodeError):
+            d = {}
+        if d.get(c["id"]) != str(final):
+            d[c["id"]] = str(final)
+            mapa.write_text(json.dumps(d, ensure_ascii=False))
+    return {"pronto": pronto, "progresso": prog.get("tasks") or prog}
 
 
 def importar_avelin(c: dict, versao: str, forcar: bool = False) -> dict:
@@ -414,6 +923,42 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = unquote(urlparse(self.path).path)
+        # ---- O CATÁLOGO DE ESTILOS DO EDITOR, servido aqui também ----
+        # A galeria oferece as MESMAS escolhas do editor (assets/shared/estilos.js,
+        # `window.AVE_ESTILOS`), e o módulo pede o que desenha pelos MESMOS
+        # caminhos do preview_server.py: /shared/ (o módulo e a folha dele),
+        # /styles/ (folhas, scripts, variants.json e fonts/ do render), /assets/
+        # SÓ com o que as prévias usam (as PNGs do CTA, demos.js, a camada
+        # local — o app do editor não sai daqui) e /api/localfonts. Outra árvore
+        # de URLs seria uma segunda configuração a manter igual nos dois lados.
+        # `no-store`: um estilos.js editado não pode vir do cache do navegador.
+        if path == "/api/localfonts":
+            try:
+                import local_fonts
+                return self._json({"families": local_fonts.catalog()})
+            except Exception as exc:          # sem fontes locais, só as do Google
+                return self._json({"families": [], "error": str(exc)[:200]})
+        for pre, raiz, so in (("/shared/", SKILL / "assets" / "shared", None),
+                              ("/styles/", SKILL / "assets" / "styles", None),
+                              ("/assets/", SKILL / "assets" / "preview",
+                               {"cta-card.png", "cta-simples.png", "demos.js", "styles.local.js"})):
+            if path.startswith(pre):
+                p = (raiz / path[len(pre):]).resolve()
+                tipo = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
+                        ".json": "application/json; charset=utf-8", ".png": "image/png",
+                        ".ttf": "font/ttf", ".otf": "font/otf", ".woff": "font/woff",
+                        ".woff2": "font/woff2"}.get(p.suffix.lower())
+                if (not p.is_relative_to(raiz.resolve()) or not p.is_file() or not tipo
+                        or (so and p.name not in so)):
+                    return self.send_error(404)
+                b = p.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", tipo)
+                self.send_header("Content-Length", str(len(b)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(b)
+                return
         if path in ("/", "/index.html"):
             return self._arquivo(PAGINA, "text/html; charset=utf-8")
         if path == "/icone.png":
@@ -437,6 +982,45 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/legenda-modelos":
             return self._json({"modelos": L.MODELOS, "salvo": estilo_salvo(),
                                "forca": L.FORCA.pattern})
+        if path == "/api/palavras":
+            # a legenda AO VIVO do popup "Com legenda" precisa das palavras do
+            # corte no tempo DELE (0 = início do corte), as mesmas que a Fase 2
+            # vai queimar — ver `palavras_corte`
+            q = parse_qs(urlparse(self.path).query)
+            c = next((x for x in cortes()["cortes"] if x["id"] == (q.get("id") or [""])[0]), None)
+            if not c:
+                return self._json({"erro": "corte não encontrado"}, 404)
+            try:
+                return self._json(palavras_corte(c))
+            except ImportError:
+                return self._json({"palavras": [], "erro": "sem mlx-whisper"})
+        if path == "/api/ctas":
+            # os CTAs DESTE projeto; sem ctas.json, lista vazia — e a galeria não
+            # pergunta (200 e não 404: um 404 sujaria o console de toda galeria)
+            d = ctas_projeto()
+            if not d:
+                return self._json({"ctas": []})
+            return self._json({"ctas": [{k: x.get(k) for k in ("id", "nome", "fala")} for x in d["ctas"]],
+                               "botao": d.get("botao")})
+        if path == "/api/marca":
+            # cores e fontes do PROJETO (marca.json no trabalho): o popup parte delas
+            try:
+                return self._json(json.loads((TRAB / "marca.json").read_text()))
+            except (OSError, json.JSONDecodeError):
+                return self._json({})
+        if path == "/api/fila":
+            itens = fila()
+            for j in itens:
+                if j["estado"] == "gerando" and j.get("fase") != "cta" and j.get("escolhas"):
+                    p = _progresso(TRAB / "editor" / j["id"] / "edit")
+                    j["pct"], j["detalhe"] = p.get("pct"), p.get("detail") or p.get("label")
+            return self._json({"fila": itens})
+        if path == "/api/editar/estado":
+            q = parse_qs(urlparse(self.path).query)
+            c = next((x for x in cortes()["cortes"] if x["id"] == (q.get("id") or [""])[0]), None)
+            if not c:
+                return self._json({"erro": "corte não encontrado"}, 404)
+            return self._json(estado_edicao(c))
         if path == "/api/processando":
             with _TRAVA:
                 return self._json({k: v[-1] for k, v in _TRABALHOS.items() if v})
@@ -449,10 +1033,29 @@ class Handler(BaseHTTPRequestHandler):
             # navegador seguia tocando o enquadramento antigo do cache
             exp = {c["id"]: f"/arquivo/{base_nome(c)}.mp4?v={int((TRAB / f'{base_nome(c)}.mp4').stat().st_mtime)}"
                    for c in d["cortes"] if horiz and (TRAB / f"{base_nome(c)}.mp4").exists()}
-            d.update({"horizontal": horiz, "exportados": exp,
+            for c in d["cortes"]:          # o editado à mão manda na duração mostrada
+                ed = edicao(c)
+                if ed:
+                    # editado à mão: as versões do garimpo (gancho, respiros,
+                    # falhas) refariam o corte a partir da fonte e jogariam a
+                    # edição fora — só o original (o editado) fica na tela
+                    c["editado"] = True
+                    c["dur"] = round(duracao(ed), 1)
+                    orig = (c.get("variantes") or {}).get("original") or {"score": c.get("score_final")}
+                    c["variantes"] = {"original": {**orig, "dur": c["dur"]}}
+                    c["pecas"] = {k: None for k in (c.get("pecas") or {})}
+                    c["respiros"], c["fala"] = [], []
+            d.update({"horizontal": horiz, "exportados": exp, "baixados": sorted(baixados()),
                       "video": VIDEO.name, "duracao": duracao(VIDEO), "pasta": str(TRAB),
-                      "aplicadas": {k: v for k, v in ap.items() if v != "original"}})
+                      "aplicadas": {k: v for k, v in ap.items()
+                                    if v != "original" and not edicao(por_id[k])}})
             return self._json(d)
+        if path.startswith("/previa-base/"):     # a base limpa do projeto do corte
+            cid = Path(path[len("/previa-base/"):]).stem
+            c = next((x for x in cortes()["cortes"] if x["id"] == cid), None)
+            p = projeto_corte(c) / "preview.mp4" if c else None
+            if p and p.exists():
+                return self._arquivo(p, "video/mp4")
         if path.startswith("/thumb/"):
             p = TRAB / "analise" / "thumbs" / Path(path[len("/thumb/"):]).name
             if p.exists():
@@ -465,6 +1068,7 @@ class Handler(BaseHTTPRequestHandler):
             p = TRAB / Path(path[len("/baixar/"):]).name
             tipos = {".mp4": "video/mp4", ".srt": "application/x-subrip; charset=utf-8"}
             if p.exists() and p.suffix in tipos:
+                marcar_baixado(p.name)
                 return self._arquivo(p, tipos[p.suffix], baixar=p.name)
         self.send_error(404)
 
@@ -472,7 +1076,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         corpo = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         c = next((x for x in cortes()["cortes"] if x["id"] == corpo.get("id")), None)
-        if path in ("/api/exportar", "/api/avelin", "/api/aplicar") and not c:
+        if path in ("/api/exportar", "/api/avelin", "/api/aplicar", "/api/editar", "/api/gerar") and not c:
             return self._json({"erro": "corte não encontrado"}, 404)
         versao = normalizar(c, corpo.get("versao") or "original") if c else "original"
         rotulo = str(corpo.get("rotulo") or "Processando…")[:60]
@@ -480,6 +1084,16 @@ class Handler(BaseHTTPRequestHandler):
             with _TRAVA:
                 _TRABALHOS.setdefault(c["id"], []).append(rotulo)
         try:
+            if path == "/api/editar":
+                return self._json(preparar_edicao(c))
+            if path == "/api/gerar":
+                cta = corpo.get("cta") or None
+                if cta and not any(x["id"] == cta for x in (ctas_projeto() or {}).get("ctas", [])):
+                    return self._json({"erro": f"CTA {cta!r} não existe neste projeto"}, 400)
+                escolhas = corpo.get("escolhas") or None
+                if not escolhas and not cta:
+                    return self._json({"erro": "nada a gerar"}, 400)
+                return self._json(enfileirar(c, escolhas, cta, versao))
             if path == "/api/avelin":
                 return self._json(importar_avelin(c, versao, bool(corpo.get("forcar"))))
             if path == "/api/legenda-estilo":
@@ -538,6 +1152,11 @@ def main() -> None:
         FPS = float(n) / float(d)
     except ValueError:
         pass
+    threading.Thread(target=_trabalhador, daemon=True, name="fila-geracao").start()
+    # a galeria pede o módulo de estilos, as folhas, os scripts e as fontes do
+    # render de uma vez: com a fila padrão (5) o macOS recusava conexões e os
+    # cartões do motor `palavra` saíam vazios (ERR_CONNECTION_RESET no console)
+    ThreadingHTTPServer.request_queue_size = 64
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
     print(f"Avelin — cortes → http://127.0.0.1:{a.port}  ({VIDEO.name})", flush=True)
     srv.serve_forever()

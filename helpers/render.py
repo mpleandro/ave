@@ -35,6 +35,10 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 try:
     from grade import get_preset, auto_grade_for_clip  # same directory
@@ -700,7 +704,9 @@ def expand_breaths(edl: dict) -> int:
         # trazia: o lead original vale para o PRIMEIRO pedaço (a emenda de
         # entrada não mudou) e o aparo original para o ÚLTIMO (a saída também
         # não). Só as emendas do MEIO — as que este código criou — são fixadas.
-        base = {k: v for k, v in r.items() if k != "breaths"}
+        # sem `quote`: o pedaço não contém a frase inteira, e o portão confere
+        # a última palavra citada contra o conteúdo real do range
+        base = {k: v for k, v in r.items() if k not in ("breaths", "quote")}
         cur = a
         depois_de_respiro = False
         for m in sorted(marks, key=lambda x: float(x["at"])):
@@ -1779,6 +1785,10 @@ def main() -> None:
     # Respiros ANTES do alinhamento de frame: eles criam ranges novos, e um range
     # que nasce depois do snap chega à extração com bordas fora do frame — o erro
     # que o snap existe para evitar, reintroduzido pela porta dos fundos.
+    if any(r.get("breaths") for r in edl.get("ranges", [])):
+        # A INTENÇÃO fica guardada: depois da expansão o edl.json só tem os
+        # pedaços, e uma troca de ritmo precisava reconstruir à mão.
+        edl["_ranges_com_respiros"] = json.loads(json.dumps(edl["ranges"]))
     grown = expand_breaths(edl)
     if grown:
         print(f"  {grown} respiro(s) encurtado(s) → "

@@ -29,7 +29,48 @@
     "tela": -6,
     "tela_max": -24,
     "promessa": -20,
-    "virada": -20
+    "virada": -20,
+    "cauda": [
+      "(e )?(isso|isso ai|isso mesmo|so isso)( gente| pessoal| galera)?",
+      "(e )?verdade ou nao( e)?( gente| pessoal)?",
+      "e ou nao e( gente)?",
+      "faz sentido ou nao( faz)?( gente)?",
+      "(nao e|ne|ta|ta bom|ta bem|ta certo|certo|beleza|ok|okay|entendeu|entenderam|entendido|viu|sacou|pronto|fechou|combinado|amem|show|perfeito|exatamente)( gente| pessoal| galera)?",
+      "(faz sentido|concorda|concordam|sim ou nao|pegou a visao|pegaram a visao|deu pra entender|ficou claro)( gente| pessoal| pra voces)?",
+      "(quem|voces|voce|ta|tao|estao|esta|tamo|estamos)( \\w+)? entendendo( isso)?( ai)?( gente)?",
+      "quem (diz|disse|fala) sim( ai)?",
+      "(gente|pessoal|galera)",
+      "(e )?entao"
+    ],
+    "cauda_max_palavras": 8,
+    "cauda_colada": [
+      "(e )?verdade ou nao( e)?",
+      "e ou nao e",
+      "(nao e|ne|ta|ta bom|ta certo|certo|ok|okay|entendeu|entenderam|beleza|concorda|faz sentido|sim ou nao)",
+      "(quem )?(ta|esta|estao|tao|voces estao)( me)? entendendo( isso)?"
+    ],
+    "logistica": [
+      "(posso|vou|vamos|podemos) continuar",
+      "falta(m)? (\\w+ )?(minuto|minutos)",
+      "qr ?code|escaneie|escaneia|escaneiem",
+      "tir(a|e|em|ar|arem)( o| um| esse)? print",
+      "(no|pelo|do|pro|para o) chat",
+      "(escreve|escrevam|escrevem|comenta|comentem|manda|mandem|digita|digitem) (ai|aqui)",
+      "link (fixado|na tela|na bio|ai embaixo|aqui embaixo|no chat)",
+      "check ?out",
+      "(quero|queremos|quer) ver (a mao|cade o papel)",
+      "(coloca|coloquem|bota|botem|manda|mandem|escreve|escrevam|digita|digitem) (a|sua) nota"
+    ],
+    "logistica_curta": [
+      "pegou a visao|pegaram a visao",
+      "quem (diz|disse|fala) sim|diz(em)? sim|diz(em)? alguma coisa( pra mim)?",
+      "(levanta|levantem) a mao",
+      "(aula|live) de hoje|segundo dia",
+      "(vamos|bora) (para|pra|pro) (o |a )?(primeir|segund|terceir|quart|quint|sext|proxim)\\w*",
+      "^parabens( \\w+)?$",
+      "(quem|voces|voce|ta|tao|estao|esta)( \\w+)? entendendo"
+    ],
+    "logistica_curta_max_palavras": 10
   },
   "prefiltro": {
     "finalistas": 30,
@@ -97,5 +138,27 @@
     "max": 20,
     "min": 5,
     "por_minutos": 5
+  },
+  "alertas": {
+    "interjeicao": -5,
+    "interjeicao_max": -10,
+    "interjeicao_max_s": 6.0,
+    "lacuna": -8,
+    "lacuna_max": -16,
+    "referencia_live": -3,
+    "referencia_live_max": -9,
+    "cauda": -4
+  },
+  "sinais": {
+    "passo_fala_s": 0.5,
+    "frase_maioria": 0.6,
+    "turno_min_passos": 3,
+    "pico_db": 5.0,
+    "pico_janela_db": 5.0,
+    "pico_top": 2,
+    "pico_voz_min_s": 0.4,
+    "lacuna_vao_s": 2.0,
+    "lacuna_voz_s": 1.2,
+    "palavra_max_s": 0.8
   }
 }

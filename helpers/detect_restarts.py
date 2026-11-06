@@ -135,7 +135,7 @@ def _palavras(edit: Path) -> list[dict]:
     """
     out: list[dict] = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
-                    if not q.name.startswith(".")):
+                    if not q.name.startswith(".") and not q.stem.endswith((".raw", ".prev"))):
         d = json.loads(p.read_text())
         # `corrections.json` mora aqui e é uma LISTA, não um transcrito —
         # filtrar por tipo, não por nome (ver checar_spacing em portao_fase1.py)
@@ -373,9 +373,21 @@ def main() -> None:
     if args.edl and not (edit / "edl.json").exists():
         sys.exit(f"sem edl.json em {edit}")
 
-    ws = _palavras_do_corte(edit) if args.edl else _palavras(edit)
-    fs = frases(ws)
-    hits = [classificar(h) for h in achar(fs)] + quase_repeticoes(fs)
+    def calcular() -> list[dict]:
+        ws = _palavras_do_corte(edit) if args.edl else _palavras(edit)
+        fs = frases(ws)
+        return [classificar(h) for h in achar(fs)] + quase_repeticoes(fs)
+
+    # O portão chama isto duas vezes e o perguntar.py mais duas: em cache pelos
+    # arquivos de entrada (transcritos + edl.json), que são o que muda.
+    try:
+        from derivado import derivado  # noqa: PLC0415
+        entradas = sorted(p for p in (edit / "transcripts").glob("*.json") if not p.name.startswith("."))
+        if args.edl:
+            entradas.append(edit / "edl.json")
+        hits = derivado("detect_restarts", entradas, {"edl": bool(args.edl)}, "1", calcular)
+    except Exception:  # noqa: BLE001
+        hits = calcular()
 
     if args.json:
         print(json.dumps({"escopo": "edl" if args.edl else "fonte",

@@ -77,6 +77,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 
 # O ÚNICO botão da API que mexe no defeito central: o Whisper limpa gaguejo e
@@ -778,6 +782,15 @@ def _transcribe_audio(
     }
 
 
+def _local_disponivel() -> bool:
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import transcribe_local  # noqa: PLC0415
+        return transcribe_local.disponivel()
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def transcribe_one(
     video: Path,
     edit_dir: Path,
@@ -814,9 +827,23 @@ def transcribe_one(
     duration = _probe_duration(video)
     resolved = backend
     if resolved == "auto":
-        # "auto" never picks whispercpp: local transcription is a deliberate
-        # choice (build + model download + minutes of CPU), never a surprise.
-        resolved = "elevenlabs" if (duration > LONG_SOURCE_SECONDS and elevenlabs_key) else "groq"
+        # LOCAL É O PADRÃO quando a máquina consegue (Silero VAD + Whisper
+        # local, ver transcribe_local.py): sem chave, offline, e transcreve
+        # cada região de fala isolada — o que mantém retake e gaguejo no
+        # texto. Nuvem só quando o local não está instalado.
+        # "auto" nunca escolhe whispercpp (build + modelo ggml à mão).
+        if _local_disponivel():
+            resolved = "local"
+        else:
+            resolved = "elevenlabs" if (duration > LONG_SOURCE_SECONDS and elevenlabs_key) else "groq"
+    if resolved == "local":
+        import transcribe_local  # noqa: PLC0415
+        return transcribe_local.gravar(video, edit_dir, language or "pt", verbose)
+    if resolved in ("groq", "elevenlabs"):
+        from ambiente import offline  # noqa: PLC0415
+        if offline():
+            sys.exit("AVE_OFFLINE=1: transcrição em nuvem desligada e a local não está "
+                     "instalada — rode `uv sync --inexact` na pasta do Avelin")
     elif resolved == "elevenlabs" and not elevenlabs_key:
         resolved = "groq"
 
@@ -974,12 +1001,12 @@ def main() -> None:
         "--backend",
         type=str,
         default="auto",
-        choices=["auto", "groq", "elevenlabs", "whispercpp"],
-        help=f"Transcription backend. 'auto' (default) uses ElevenLabs Scribe for "
-             f"sources longer than {LONG_SOURCE_SECONDS}s when ELEVENLABS_API_KEY is set, "
-             "else Groq. Force with 'groq', 'elevenlabs', or 'whispercpp' (fully "
-             "local, no API key, no upload cap — needs whisper.cpp built and a "
-             "ggml model downloaded).",
+        choices=["auto", "local", "groq", "elevenlabs", "whispercpp"],
+        help="Transcription backend. 'auto' (default) uses 'local' (Silero VAD + "
+             "Whisper local, no key, keeps retakes in the text) when installed; "
+             f"otherwise ElevenLabs Scribe for sources longer than {LONG_SOURCE_SECONDS}s "
+             "when ELEVENLABS_API_KEY is set, else Groq. Force with 'local', 'groq', "
+             "'elevenlabs', or 'whispercpp'.",
     )
     ap.add_argument(
         "--repair-spacing",
@@ -1001,7 +1028,8 @@ def main() -> None:
     if args.repair_spacing:
         sys.exit(repair_spacing(video, edit_dir))
     # Local transcription must not require a cloud key — that's the whole point.
-    api_key = "" if args.backend == "whispercpp" else load_api_key()
+    local = args.backend in ("whispercpp", "local") or (args.backend == "auto" and _local_disponivel())
+    api_key = "" if local else load_api_key()
     elevenlabs_key = load_elevenlabs_key()
 
     transcribe_one(

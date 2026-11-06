@@ -1313,7 +1313,7 @@ kbd {
   width: var(--quadro-w, 110px);
   height: var(--quadro-h, 196px);
 }
-.opt-preview.ctbox .ave-cartela { position: absolute; inset: 0; }
+/* `.ctbox .ave-cartela` → /shared/estilos.css */
 
 /* Short panes (the preview often lives in a half-height pane): shrink the
    previews instead of scrolling. The demos are rebuilt on resize, so their
@@ -1339,99 +1339,9 @@ kbd {
   .opt-preview.hlbox { height: 56px; }
 }
 
-/* ---- caption demos: the template's own styles, not an impression of them ----
-   Karaoke: Poppins 900, white, letterSpacing -1, words rise 34px and fade in
-   over 7 frames. Stacked: the STACK_MIXED line styles (bold-italic gradient,
-   regular small, Playfair italic orange), words rise 46px with a blur-off.
-   Geometry is scaled from 1080-wide, so every ratio matches the render.
-   Positions/opacities are written by JS each frame (capAnims in app.js). */
-.cap-demo { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-.kar-line {
-  position: absolute;
-  display: flex;
-  justify-content: center;
-  align-items: baseline;
-  white-space: nowrap;
-  font-family: 'Poppins', sans-serif;
-  font-weight: 900;
-  color: #fff;
-  line-height: 1;
-  letter-spacing: -1px;
-  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
-}
-.kar-line span { display: inline-block; will-change: opacity, translate; }
+/* ---- caption demos (karaokê, empilhado, disperso, estáticas) → /shared/estilos.css ---- */
 
-.stk-cue { position: absolute; display: flex; flex-direction: column; align-items: center; text-align: center; }
-.stk-line { white-space: pre; letter-spacing: -1.5px; line-height: 1.12; }
-.stk-line + .stk-line { margin-top: -0.34em; }
-.stk-line span { display: inline-block; padding: 0 0.06em; will-change: opacity, translate, filter; }
-/* 0 = bold-italic, 1 = regular (small), 2 = serif orange — the cycle the
-   template applies per line (LINE_STYLES in StackedCaptions.tsx).
-   These land on the WORD spans, exactly like the template spreads `...ls` onto
-   each span. On the line div the gradient renders nothing: the spans carry a
-   drop-shadow filter, which paints them in their own layer, and an inherited
-   -webkit-text-fill-color:transparent then leaves plain invisible text. */
-.stk-line .s0, .stk-line .s1, .stk-line .s3 {
-  background-image: linear-gradient(180deg, #fff 0%, #fff 46%, #cfcfcf 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-}
-.stk-line .s0 { font-family: 'Poppins', sans-serif; font-weight: 900; font-style: italic; }
-.stk-line .s1 { font-family: 'Poppins', sans-serif; font-weight: 400; }
-.stk-line .s2 { font-family: 'Playfair Display', serif; font-weight: 900; font-style: italic; color: var(--hl-accent); }
-.stk-line .s3 { font-family: 'Poppins', sans-serif; font-weight: 800; }
-
-/* scatter ("disperso") — Lora, lowercase, off-white with the same baseline
-   darkening the render uses. The gradient sits on the WORD, not the block:
-   per-block it reads as a wash instead of ink weight. */
-.scat-cue { position: absolute; display: flex; flex-direction: column; align-items: center; }
-.scat-line { display: flex; align-items: baseline; white-space: pre; line-height: 1.03; }
-.scat-line span {
-  font-family: 'Lora', serif;
-  font-weight: 400;
-  background-image: linear-gradient(180deg, #f8f5ef 0%, #f4f1e9 54%, #d5cec1 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  will-change: opacity, filter;
-}
-.scat-line span.hi { font-weight: 600; font-style: italic; }
-
-/* the three static styles — flat off-white, no animation, nothing to drive */
-.stat-demo {
-  position: absolute;
-  text-align: center;
-  color: #f4f1e9;
-  line-height: 1.18;
-  white-space: pre;
-  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
-}
-
-/* ---- as prévias de headline usam a FOLHA DO RENDER (/styles/headline.css) ----
-   Só a MOLDURA é adaptada aqui. No render o bloco é posicionado no quadro do
-   vídeo (`position:absolute` + `top` + o `left:50%/translateX(-50%)` do
-   cartão); no cartão da prévia quem centra é o flex do `.cap-demo`, e deixar o
-   posicionamento do render valer jogava o cartão meia largura para a direita,
-   por cima do próprio seletor.
-   Neutralizar aqui, e não mexer na folha do render: ela descreve o vídeo. */
-/* A headline volta ao LUGAR dela — e a folha do render já sabe qual é: ela
-   declara `position: absolute; left/right/top` e cada layout ajusta o que
-   precisa (o `card` centra por `left: 50%` + translateX(-50%)). Então aqui NÃO
-   vai regra nenhuma: a neutralização existia só porque o cartão era uma tira de
-   64px, e forçar `left: 0` de volta cortava o card pela metade — com o
-   translateX dele intacto, o box saía meia largura para fora do quadro. */
-/* A escala de encaixe: uma headline de três linhas é mais alta que o cartão, e
-   com o `/` isso deixou de ser exceção. Medida no JS e escrita aqui. */
-#opt-headlines .cap-demo > .hl-fit { position: absolute; inset: 0; transform: scale(var(--hl-fit, 1)); transform-origin: top center; }
-
-/* Nada de neutralizar posição: o cartão é o quadro, então a deixa senta onde
-   vai sentar no vídeo — a 22% do fundo, ou no centro no rotativo. Era o
-   contrário enquanto o cartão era uma tira, e aquilo escondia justamente a
-   informação que faz escolher: onde o texto cai. */
-.opt-preview.cap .ave-pal { position: absolute; inset: 0; }
+/* ---- a moldura das prévias de headline (`.hl-fit`) e da `.ave-pal` → /shared/estilos.css ---- */
 
 /* ---- restos da cópia antiga do visual, mantidos só para as demos de legenda ---- */
 .hl-demo {
@@ -2266,42 +2176,7 @@ button.tl-chip:disabled { cursor: default; }
 .cx-count.no-limite { color: var(--mark); font-weight: 600; }
 
 
-/* O GANCHO AO VIVO sobre o vídeo, junto da legenda. Fora da janela dele (os
-   primeiros segundos do corte) ele continua desenhado, apagado: sumir faria o
-   usuário achar que a escolha não pegou, e mostrar cheio mentiria sobre quando
-   ele aparece. */
-#liveOverlay .live-hook { position: absolute; inset: 0; pointer-events: none; transition: opacity .18s linear; }
-#liveOverlay .live-hook.fora { opacity: .3; }
-
-/* POSIÇÃO E TAMANHO DA HEADLINE — a alça sobre o que está desenhado.
-   É o único pedaço do #liveHook que recebe ponteiro: o resto do overlay
-   continua deixando clicar no vídeo. Tracejado só no hover, para não sujar a
-   prévia de quem está só olhando. */
-.hook-alca {
-  position: absolute;
-  pointer-events: auto;
-  cursor: grab;
-  border: 1.5px dashed transparent;
-  border-radius: 8px;
-  transition: border-color .15s, background-color .15s;
-  touch-action: none;
-}
-.hook-alca:hover { border-color: rgb(var(--orange-rgb) / .85); background: rgb(var(--orange-rgb) / .06); }
-.hook-alca:active { cursor: grabbing; }
-.hook-canto {
-  position: absolute;
-  right: -7px;
-  bottom: -7px;
-  width: 14px;
-  height: 14px;
-  border-radius: 4px;
-  background: rgb(var(--orange-rgb));
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, .55);
-  cursor: nwse-resize;
-  opacity: 0;
-  transition: opacity .15s;
-}
-.hook-alca:hover .hook-canto { opacity: 1; }
+/* O GANCHO AO VIVO (`.live-hook`) e a alça de posição (`.hook-alca`) → /shared/estilos.css */
 
 /* CENAS DA MOLDURA EXPLICATIVA — cor pelo formato; a base (sujeito grande)
    fica neutra, porque é o "nada acontecendo" do roteiro. */
@@ -2328,28 +2203,7 @@ button.tl-chip:disabled { cursor: default; }
    Miniaturas no mesmo quadro 9:16 das outras opções, com a peça no lugar em
    que ela entra no vídeo: cápsula no topo, card no alto, botão embaixo. */
 .cta-grid .opt { width: calc(var(--mock-w) + 16px); }
-.cta-prev { position: relative; overflow: hidden; border-radius: 8px;
-  background: linear-gradient(180deg, #2b2f36, #15171b); }
-.cta-pill { position: absolute; left: 6%; right: 6%; top: 24%; height: 13%;
-  display: flex; align-items: center; gap: 3px; padding: 0 3px;
-  border-radius: 99px; background: rgba(24, 24, 24, .94); }
-.cta-pill-foto { flex: none; height: 78%; aspect-ratio: 1; border-radius: 50%;
-  background: #555 center / cover; box-shadow: 0 0 0 1.5px var(--orange); }
-.cta-pill-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.1; }
-.cta-pill-txt b { font-size: 6px; color: #fff; white-space: nowrap; }
-.cta-pill-txt i { font-style: normal; font-size: 4.5px; color: #b8b2ad;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cta-pill-btn { flex: none; font-size: 5px; font-weight: 700; color: #fff;
-  padding: 2px 4px; border-radius: 99px; }
-.cta-card { position: absolute; left: 50%; top: 10%; width: 74%; transform: translateX(-50%); }
-.cta-card img { width: 100%; display: block; }
-/* o círculo da foto na mesma posição medida no vídeo (272,407 r 94.6 em 544×890) */
-.cta-card-foto { position: absolute; left: calc(50% - 17.4%); width: 34.8%; aspect-ratio: 1;
-  top: calc(45.7% - 10.6%); border-radius: 50%; background: #3a3a3a center / cover; }
-.cta-simples { position: absolute; left: 50%; top: 72%; width: 70%; transform: translateX(-50%); }
-.cta-simples img { width: 100%; display: block; }
-.cta-nenhum { position: absolute; inset: 0; display: grid; place-items: center;
-  font-size: 10px; color: var(--dim); }
+/* as miniaturas (`.cta-prev`, `.cta-pill`, `.cta-card`, `.cta-simples`) → /shared/estilos.css */
 .cta-nota { margin-top: 10px; font-size: 11px; line-height: 1.45; color: var(--dim); }
 .cta-perfil { display: flex; gap: 14px; align-items: flex-start; margin-top: 14px;
   padding: 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--stroke); }
@@ -2365,49 +2219,7 @@ button.tl-chip:disabled { cursor: default; }
 .cta-acoes { display: flex; flex-wrap: wrap; gap: 6px; }
 .cta-status { font-size: 11px; line-height: 1.4; color: var(--dim); }
 
-/* ---------- DEMONSTRAÇÃO NO PLAYER (demos.js, 2026-10-15) ----------
-   Uma tela virtual 1080×1920 escalada sobre o vídeo. Ela COBRE o vídeo
-   enquanto a camada aberta é Formato, Efeitos, Movimento ou CTA; nas outras o
-   player volta ao vídeo editado. */
-.demo-stage { position: absolute; z-index: 6; overflow: hidden; border-radius: inherit; background: #000;
-              pointer-events: none; }
-.demo-stage.hidden { display: none; }
-.dm-tela { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; overflow: hidden;
-           transform-origin: 0 0; background: #111; }
-.dm-vidwin, .dm-cena, .dm-fg, .dm-fundo { position: absolute; inset: 0; }
-.dm-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.dm-boneco { position: absolute; inset: 0; width: 100%; height: 100%; }
-.dm-fg { pointer-events: none; }
-.dm-cap { position: absolute; left: 0; right: 0; top: 1500px; text-align: center; font: 900 76px/1.1 Poppins, sans-serif;
-          color: #fff; text-shadow: 0 4px 18px rgba(0,0,0,.6); display: flex; gap: 20px; justify-content: center; }
-.dm-escuro { position: absolute; inset: 0; background: rgba(0,0,0,.62); }
-.dm-grade { background-color: #0b0b0b; background-image: linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px); background-size: 120px 120px; }
-.dm-bo { position: absolute; left: 0; right: 0; top: 760px; display: flex; flex-wrap: wrap; justify-content: center;
-         gap: 10px 26px; padding: 0 120px; font: 900 132px/1 Poppins, sans-serif; color: #fff; }
-.dm-kin { position: absolute; left: 130px; top: 640px; font: 900 120px/1.02 Poppins, sans-serif; color: #fff; }
-.dm-piso { position: absolute; left: -200px; right: -200px; bottom: -200px; height: 900px;
-           background-image: linear-gradient(rgba(255,255,255,.18) 2px, transparent 2px),
-                             linear-gradient(90deg, rgba(255,255,255,.18) 2px, transparent 2px);
-           background-size: 120px 120px; transform: perspective(800px) rotateX(62deg); transform-origin: 50% 100%; }
-.dm-lista { position: absolute; left: 130px; right: 130px; top: 860px; display: flex; flex-direction: column; gap: 28px; }
-.dm-lista div { display: flex; align-items: center; gap: 28px; padding: 26px 30px; border-radius: 28px;
-                background: rgba(255,255,255,.1); border: 2px solid rgba(255,255,255,.16);
-                font: 800 64px/1 Inter, sans-serif; color: #fff; }
-.dm-lista b { display: grid; place-items: center; width: 76px; height: 76px; border-radius: 18px; font-size: 44px; }
-.dm-arte { position: absolute; left: 0; width: 1080px; height: 960px; overflow: hidden; }
-.dm-arte svg { width: 100%; height: 100%; display: block; }
-.dm-costura { position: absolute; left: 0; right: 0; height: 6px; background: rgba(255,255,255,.9); }
-.dm-corredor { background: repeating-linear-gradient(90deg, #3a3f55 0 90px, #4b5170 90px 180px);
-               transform-origin: 50% 45%; }
-.dm-corredor::after { content: ''; position: absolute; inset: 0;
-                      background: radial-gradient(40% 30% at 50% 45%, rgba(255,220,160,.55), transparent 70%); }
-.dm-iframe { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; border: 0; background: transparent; }
-.dm-segue { position: absolute; left: 290px; top: 1340px; width: 500px; height: 120px; border-radius: 22px; display: grid;
-            place-items: center; background: #0095f6; font: 700 52px/1 Inter, sans-serif; color: #fff; }
-.dm-segue .a, .dm-segue .b { grid-area: 1 / 1; }
-.dm-rotulo { position: absolute; left: 10px; top: 10px; padding: 4px 10px; border-radius: 999px; z-index: 2;
-             background: rgba(0,0,0,.55); color: #fff; font: 600 11px/1.4 Inter, sans-serif; letter-spacing: .02em; }
+/* ---------- DEMONSTRAÇÃO NO PLAYER (demos.js): `.demo-stage` e `.dm-*` → /shared/estilos.css ---------- */
 /* o vídeo da demo NÃO é o vídeo do player: as regras de `.player-frame video`
    (largura máxima em vw, raio) cortavam a tela virtual pela metade */
 .player-frame .demo-stage video.dm-video { position: absolute; inset: 0; width: 100%; height: 100%;

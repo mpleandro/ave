@@ -33,6 +33,10 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 
 PRESETS: dict[str, str] = {

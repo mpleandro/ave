@@ -315,6 +315,7 @@ def main() -> None:
     json_files = sorted(
         p for p in transcripts_dir.glob("*.json")
         if not p.name.startswith(".") and p.name not in _DERIVADOS
+        and not p.stem.endswith((".raw", ".prev"))   # backups de versões antigas
     )
     if not json_files:
         sys.exit(f"no .json files in {transcripts_dir}")

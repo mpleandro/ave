@@ -18,6 +18,9 @@
        que vai sair no render. -->
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Poppins:ital,wght@0,400;0,600;0,700;0,800;0,900;1,900&family=Playfair+Display:ital,wght@1,900&family=Lora:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css">
+<!-- As prévias de estilo (cartões, legenda e headline ao vivo, demos) vêm do
+     módulo compartilhado com a galeria de cortes — logo depois do app.css. -->
+<link rel="stylesheet" href="/shared/estilos.css">
 <!-- A FOLHA DO RENDER, servida de /styles/ — a MESMA que o compositor usa.
      As prévias de headline emitem `.ave-hook` exatamente como a composição, e
      sem esta linha elas saem sem folha nenhuma: onze layouts renderizaram
@@ -458,6 +461,10 @@
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
 <script src="/styles/efeitos.js"></script>
 <script src="/assets/demos.js"></script>
+<!-- O CATÁLOGO e as PRÉVIAS (window.AVE_ESTILOS): antes do app.js, que desestrutura
+     daqui no parse, e antes do styles.local.js — no editor quem instala a camada
+     local é a linha AVELIN-OVERLAY do app.js, como sempre. -->
+<script src="/shared/estilos.js"></script>
 <script src="/assets/styles.local.js"></script>  <!-- AVELIN-OVERLAY -->
 <script src="/assets/app.js"></script>
 </body>

@@ -44,6 +44,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
+# ffmpeg completo garantido (o do sistema com zscale, ou o estático do pip) — ver ffbin.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ffbin  # noqa: E402
+ffbin.garantir()
 
 FRAME = 1024          # samples per astats window @48k ≈ 21.3ms
 SR = 48000
@@ -69,6 +73,22 @@ def rms_timeline(video: Path) -> tuple[np.ndarray, np.ndarray]:
     prints them. Silent windows come back as -inf / very large negatives; they
     are clamped to -120 so downstream percentile math stays finite.
     """
+    def medir() -> dict:
+        t, lv = _rms_timeline_ffmpeg(video)
+        return {"t": [round(float(x), 4) for x in t], "db": [round(float(x), 2) for x in lv]}
+
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from derivado import derivado  # noqa: PLC0415
+        d = derivado("rms", [Path(video)], {"frame": "astats", "reset": 1}, "2", medir)
+        return np.asarray(d["t"], dtype=float), np.asarray(d["db"], dtype=float)
+    except SystemExit:
+        raise
+    except Exception:  # noqa: BLE001 — cache é upgrade, nunca requisito
+        return _rms_timeline_ffmpeg(video)
+
+
+def _rms_timeline_ffmpeg(video: Path) -> tuple[np.ndarray, np.ndarray]:
     cmd = [
         "ffmpeg", "-v", "error", "-i", str(video),
         "-af", f"astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-",

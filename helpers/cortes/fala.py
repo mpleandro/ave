@@ -224,6 +224,31 @@ def limpar(video: Path, c: dict, janela: tuple[float, float], energia) -> dict:
                                             "versao": 3}, "1", medir)
 
 
+def fim_sem_cauda(video: Path, ponto: float, ultima: str, cauda: str) -> bool | None:
+    """O corte pode terminar em `ponto`, antes da cauda colada? Ouvindo os
+    2,5s que terminam nele: a última palavra ouvida tem de ser a última do
+    conteúdo (`ultima`) e nada da cauda pode aparecer depois dela.
+
+    Medido no c0197 ("E nós pagamos o preço, é verdade ou não é?"): entre
+    "preço" e "É" o vão de voz é de 0,02s — a energia sozinha não garante que o
+    "É" ficou fora, e um "preço-é" no fim do corte é pior que a cauda inteira.
+    None = sem escuta nesta máquina (quem chama decide pelo silêncio medido)."""
+    try:
+        import mlx_whisper  # noqa: F401, PLC0415
+    except ImportError:
+        return None
+    if ponto < 2.5:
+        return None
+    ouvido = [_n(w["w"]) for w in L.ouvir(video, ponto - 2.5, ponto) if _n(w["w"])]
+    alvo = _n(ultima)
+    cauda_ = [_n(w) for w in cauda.split() if _n(w)]
+    if not ouvido or not alvo or not cauda_:
+        return False
+    if ouvido[-1] == cauda_[0] and ouvido[-1] != alvo:
+        return False
+    return difflib.SequenceMatcher(None, ouvido[-1], alvo).ratio() >= 0.6
+
+
 def resumo(remocoes: list[dict]) -> dict[str, int]:
     out: dict[str, int] = {}
     for r in remocoes:
