@@ -12,6 +12,10 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 uv --version
 
 Write-Host "`n2/5  Avelin em $AVE"
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+  Write-Host "  git nao encontrado. Instale com:  winget install --id Git.Git -e  (sem admin), abra um PowerShell NOVO e rode este comando de novo."
+  exit 1
+}
 if (Test-Path "$AVE\.git") { git -C $AVE pull --ff-only } else {
   New-Item -ItemType Directory -Force (Split-Path $AVE) | Out-Null
   git clone $REPO $AVE

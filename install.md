@@ -17,9 +17,15 @@ bash ~/.claude/skills/ave/install.sh
 ```
 
 ```powershell
-# Windows (PowerShell)
+# Windows (PowerShell) — o script clona o repositório sozinho
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/mpleandro/ave/main/install.ps1 | iex"
+# ou, com o repositório já clonado:
 powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ave\install.ps1"
 ```
+
+**O gatilho mais simples:** o usuário diz ao agente *"instale
+https://github.com/mpleandro/ave"*. O topo do `README.md` diz ao agente
+exatamente qual comando rodar; não há nada para interpretar.
 
 It does, in order: `uv` (Python installer, user-level, no sudo) → clone or
 update the repo into `~/.claude/skills/ave` (the clone *is* the skill; nothing

@@ -1,5 +1,22 @@
 # A.V.E. — Avelin Video Edit
 
+> **Para o agente (Claude Code, Codex, Cursor…): se o usuário disse "instale" +
+> esta URL, faça só isto e nada mais** — não clone à mão, não instale pacotes
+> um a um, não peça chave de API nem senha de administrador:
+>
+> ```bash
+> # macOS / Linux
+> bash <(curl -fsSL https://raw.githubusercontent.com/mpleandro/ave/main/install.sh)
+> ```
+> ```powershell
+> # Windows (PowerShell)
+> powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/mpleandro/ave/main/install.ps1 | iex"
+> ```
+> O instalador é idempotente (serve para atualizar) e termina com uma
+> conferência ✓/✗. Depois: ofereça a lista de permissões que ela imprime, e
+> diga ao usuário para abrir o agente na pasta do vídeo e pedir *"edita esse
+> vídeo"*. Detalhes em `install.md`.
+
 Editor de vídeo por conversa. Você joga o material bruto numa pasta, abre seu
 agente ali dentro e diz *"edita isso num vídeo de lançamento"*. Ele transcreve,
 escolhe as melhores tomadas, corta os silêncios, aplica a correção de cor e te
@@ -36,7 +53,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/mpleandro/ave/main/install.s
 **Windows** — abra o PowerShell e cole:
 
 ```powershell
-git clone https://github.com/mpleandro/ave "$env:USERPROFILE\.claude\skills\ave"; powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ave\install.ps1"
+powershell -ExecutionPolicy Bypass -c "irm https://raw.githubusercontent.com/mpleandro/ave/main/install.ps1 | iex"
 ```
 
 O instalador faz tudo e termina com uma conferência (✓/✗ por peça):
