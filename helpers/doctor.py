@@ -16,13 +16,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 HELPERS = Path(__file__).resolve().parent
@@ -43,7 +41,7 @@ def _ok(cond: bool) -> str:
 
 
 def checar_ffmpeg() -> dict:
-    import ffbin  # noqa: PLC0415
+    import ffbin
     origem = ffbin.garantir()
     ff, fp = ffbin.caminhos()
     r: dict = {"ok": False, "origem": origem, "ffmpeg": ff}
@@ -68,9 +66,9 @@ def checar_ffmpeg() -> dict:
 
 def checar_vad() -> dict:
     try:
-        import numpy as np  # noqa: PLC0415
-        import torch  # noqa: PLC0415
-        from silero_vad import get_speech_timestamps, load_silero_vad  # noqa: PLC0415
+        import numpy as np
+        import torch
+        from silero_vad import get_speech_timestamps, load_silero_vad
         m = load_silero_vad(onnx=True)
         sr = 16000
         t = np.arange(sr * 2) / sr
@@ -82,7 +80,7 @@ def checar_vad() -> dict:
 
 
 def checar_whisper(transcrever: bool = True) -> dict:
-    import transcribe_local as TL  # noqa: PLC0415
+    import transcribe_local as TL
     r: dict = {"ok": False, "apple_silicon": TL._APPLE_SILICON}
     if not TL.disponivel():
         r["erro"] = "motor local não instalado — rode `uv sync --inexact` na pasta do Avelin"
@@ -99,7 +97,7 @@ def checar_whisper(transcrever: bool = True) -> dict:
         r["ok"] = True
         return r
     try:
-        import numpy as np  # noqa: PLC0415
+        import numpy as np
         sr = 16000
         t = np.arange(int(sr * 1.5)) / sr
         seg = (0.05 * np.sin(2 * np.pi * 180 * t)).astype("float32")
@@ -138,7 +136,7 @@ def checar_permissoes() -> dict:
 
 def preparar() -> int:
     """Baixa o que o doctor acusa: ffmpeg estático e o modelo de voz."""
-    import ffbin  # noqa: PLC0415
+    import ffbin
     if ffbin.garantir() != "sistema":
         print("· ffmpeg: usando a build completa que vem pelo pip (sem brew)")
         est = ffbin.estatico()
@@ -154,14 +152,14 @@ def preparar() -> int:
                     except OSError:
                         pass
             print(f"  linkado em {bin_dir} (ffmpeg, ffprobe)")
-    import transcribe_local as TL  # noqa: PLC0415
+    import transcribe_local as TL
     if TL._APPLE_SILICON:
         print("· modelo de voz (whisper-large-v3-turbo, ~1,6 GB) — uma vez só")
-        from huggingface_hub import snapshot_download  # noqa: PLC0415
+        from huggingface_hub import snapshot_download
         snapshot_download(TL.MODELO_MLX)
     else:
         print("· modelo de voz (faster-whisper large-v3-turbo) — uma vez só")
-        from faster_whisper import WhisperModel  # noqa: PLC0415
+        from faster_whisper import WhisperModel
         WhisperModel(TL.MODELO_FW, compute_type="int8")
     print("pronto.")
     return 0

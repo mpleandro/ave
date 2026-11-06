@@ -21,6 +21,7 @@ import functools
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 FILTROS_NECESSARIOS = ("zscale", "loudnorm", "silencedetect")
@@ -36,14 +37,47 @@ def _tem_filtros(ffmpeg: str) -> bool:
     return all(f" {f} " in out for f in FILTROS_NECESSARIOS)
 
 
+def _sem_helpers_no_path():
+    """Contexto: tira helpers/ do sys.path e o `progress` sombreado de sys.modules.
+
+    `import static_ffmpeg` puxa `progress.bar`, e `helpers/progress.py` toma
+    esse nome quando helpers/ está na frente do caminho."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def ctx():
+        helpers = Path(__file__).resolve().parent
+        salvo = list(sys.path)
+        sombra = sys.modules.pop("progress", None)
+        sys.path = [p for p in sys.path if p and Path(p).resolve() != helpers]
+        try:
+            yield
+        finally:
+            sys.path = salvo
+            if sombra is not None:
+                sys.modules["progress"] = sombra
+    return ctx()
+
+
 def estatico() -> tuple[str, str] | None:
     """(ffmpeg, ffprobe) do pacote static-ffmpeg, baixando na primeira vez."""
-    try:
-        from static_ffmpeg import run  # noqa: PLC0415
-        ff, fp = run.get_or_fetch_platform_executables_else_raise()
-        return str(ff), str(fp)
-    except Exception:  # noqa: BLE001 — sem pacote ou sem rede
+    import importlib.util
+    spec = importlib.util.find_spec("static_ffmpeg")
+    if spec is None or not spec.origin:
         return None
+    base = Path(spec.origin).resolve().parent / "bin"
+    for ff in sorted(base.glob("*/ffmpeg*")):
+        if ff.name in ("ffmpeg", "ffmpeg.exe") and ff.is_file():
+            fp = ff.with_name("ffprobe" + ff.suffix)
+            if fp.is_file():
+                return str(ff), str(fp)
+    with _sem_helpers_no_path():
+        try:
+            from static_ffmpeg import run
+            ff, fp = run.get_or_fetch_platform_executables_else_raise()
+            return str(ff), str(fp)
+        except Exception:  # noqa: BLE001 — sem rede
+            return None
 
 
 def garantir() -> str:
