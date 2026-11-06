@@ -223,6 +223,7 @@ Phase 1:
 - **`transcribe.py <video> --edit-dir <edit> [--language pt] [--backend auto|local|groq|elevenlabs|whispercpp]`** — word-level, cached. `auto` = `local` (VAD-first, sem chave; grava também `transcripts/vad/<stem>.json`). Nuvem só como reserva: Groq envia MP3 64 kbps em chunks de 24 MB, Scribe para >5 min com chave.
 - **`transcribe_local.py <fonte> [-o x.json | --edit-dir <edit>]`** — o motor local sozinho: Silero VAD → pedaços ≤12 s cortados no ponto mais silencioso → Whisper por pedaço, sem contexto anterior → guarda anti-alucinação (nada fora de região de fala, eco do prompt, "h h h"). Mesmo schema Scribe. ~1/3 do tempo real num M3.
 - **`fala_limpa.py <edit> [--fonte X] [--ritmo R] [--aplicar respostas.json] [--grade F]`** — o detector unificado: gaguejo, muleta, retake (idêntico/truncado/retomada/semântico), pares criados pela montagem, respiros por ritmo, borda acústica → `defeitos.json`, `edl_proposto.json`, `roteiro.md`, `triagem.json`. Exit 2 = perguntas abertas.
+- **`selecao.py <edit> --alvo 60 --tese "…" [--manter 3,5] [--tirar 7]`** — o corte CURTO sobre o corte limpo: blocos por pausa (≥0,6 s, ≤12 s), nota por afinidade com a tese + gancho + fechamento + densidade − redundância, enche o alvo, sempre com um gancho e um fechamento. Saída: `edl_selecao.json`, `selecao.md` (todos os blocos, ✔/✘, motivo) e a seção "Seleção" no `roteiro.md`. Trocar a escolha custa 1 s; o proxy refaz em ~25 s (segmentos reaproveitados).
 - **`transcribe_batch.py <videos_dir> [--backend auto|local|groq|elevenlabs]`** — várias fontes; local roda uma por vez (já usa a GPU inteira).
 - **`pack_transcripts.py --edit-dir <dir>`** — transcripts → `takes_packed.md` (phrase-level, breaks on ≥0.5s silence). **The** reading view: 1/10 the tokens of raw JSON. **`--por-palavra [--gap-min 0.15]`** também escreve `takes_packed_palavras.md` — uma palavra por linha, com a folga medida do token `spacing` (nunca a diferença entre carimbos, que estica por cima do silêncio) e duas marcas: `⏸` folga ≥ `--gap-min` (respiro/hesitação candidato) e `↻` mesma palavra repetida colada (engasgo candidato). O limiar de 0,5s da frase esconde os dois — uma hesitação de 0,2s ou um "que que" colado somem dentro da mesma frase empacotada. Complementa, não substitui: `transcript_audit.py` ainda é quem pega fala ENGOLIDA (sem texto nenhum) e `detect_restarts.py` quem pega frase inteira refeita.
 - **`transcript_audit.py <edit> [--recheck]`** — ONDE A TRANSCRIÇÃO MENTE, e é o portão que faltava antes do EDL. O Whisper **engole repetição**: o locutor gagueja, refaz a frase, e sai UMA passada limpa — o parágrafo lê perfeito e o `takes_packed.md` não tem como avisar. Também **troca palavra por palavra** ("trabalhar" → "avaliar", ambas plausíveis). Nenhum detector de TEXTO pega isso porque o texto está bem. Este pega por **densidade acústica** (região de fala com poucas palavras dentro = fala não transcrita; é física, não linguagem) e por **discordância entre as duas passadas** que o projeto já faz de graça. `--recheck` transcreve só a janela suspeita, isolada — sem contexto em volta o modelo não tem para onde suavizar e a repetição reaparece. Medido na série "170 Questões": achou 2 das 3 gaguejadas que o usuário só viu assistindo, uma delas com **0 palavras em 0,80s de fala**.
@@ -644,9 +645,23 @@ portão, proxy) agora é `helpers/fase1.py`, e o seu trabalho passa a ser LER o
 roteiro, PERGUNTAR o que só o usuário sabe e MOSTRAR o proxy.
 
 ```bash
-uv run python helpers/fase1.py <videos_dir>                       # 1ª rodada
-uv run python helpers/fase1.py <videos_dir> --respostas r.json    # depois das respostas
+uv run python helpers/fase1.py <videos_dir> --alvo 60 --tese "…"            # 1ª rodada (alvo 0 = só o corte limpo)
+uv run python helpers/fase1.py <videos_dir> --alvo 60 --tese "…" \
+    --respostas r.json --manter 13 --tirar 3,4,5                         # depois das respostas
 ```
+
+**A PERGUNTA DO UPLOAD vem ANTES, e roda em paralelo com a transcrição.** A
+transcrição leva ~2 min numa fonte de 4 min; esse tempo é onde a única
+pergunta inicial cabe sem custar espera. Dispare `fase1.py --sem-proxy`
+em segundo plano (`run_in_background`) e, na mesma vez, UMA `AskUserQuestion`
+com três campos — nada técnico (cor, formato, papel de arquivo: isso se mede):
+- **Entrega**: Reels até 60 s · até 90 s · vídeo completo limpo · cortes (vários trechos);
+- **Tese em uma frase** (texto livre, "Other"): a ideia que decide o que fica
+  — ex.: *"conselho de graça sai caro; mentoria é o caminho"*;
+- **Ritmo**: equilibrado (recomendado) · conservador · agressivo.
+Com as respostas, rode `fase1.py --alvo <s> --tese "<tese>" --ritmo <r>` (a
+transcrição já está em cache: ~1 min até o proxy). O primeiro proxy que o
+usuário vê é o do CORTE PROPOSTO no alvo dele — não a fonte limpa inteira.
 
 O que ele faz, nesta ordem (cada peça continua existindo sozinha, para
 diagnóstico): `source_roles` (só com mais de um arquivo) → `transcribe.py`
@@ -654,7 +669,10 @@ diagnóstico): `source_roles` (só com mais de um arquivo) → `transcribe.py`
 mantém retake e gaguejo no texto; sem chave) → `pack_transcripts.py` →
 `detect_color.py` → **`fala_limpa.py`** (gaguejo, muleta, retake idêntico /
 truncado / retomada, pares que a montagem cria, respiros por ritmo, borda
-acústica de cada corte) → `edl.json` ← `edl_proposto.json` → `portao_fase1.py
+acústica de cada corte) → **`selecao.py`** (com `--alvo`: blocos do corte
+limpo pontuados pela TESE, gancho, fechamento e densidade; enche o alvo;
+`selecao.md` lista os 30 blocos com ✔/✘ e motivo) → `edl.json` ←
+`edl_selecao.json` (ou `edl_proposto.json` sem alvo) → `portao_fase1.py
 --pular-render` → `render.py --proxy` → `verify_cut.py` → `state.json` aponta
 para o proxy. Exit 0 = proxy pronto; **exit 2 = há perguntas** (o proxy existe
 mesmo assim); exit 3 = decisão antes de seguir (mais de uma fonte, cor
@@ -684,7 +702,15 @@ quiser conferir uma frase).
    2 (`phase2.py`) com os `inserts[]` colhidos: é ESSE render composto que vai
    à aprovação quando há material extra.
 
-2. **Leia `roteiro.md`** (não o JSON). Confira duas coisas: se algum corte
+2. **Leia `selecao.md` e corrija a seleção ANTES de mostrar.** A heurística
+   é por palavras e erra de dois jeitos previsíveis (medido: 66% da seleção
+   humana sem revisão, 90% com uma linha de revisão): puxa bloco cuja palavra
+   bate com a tese sem servir à linha ("dores pesadas" × "dor de cabeça") e
+   deixa de fora o fecho de uma analogia que não repete palavra nenhuma da
+   tese. Leia os 30 blocos como editor — a tese é o contrato — e ajuste com
+   `--manter`/`--tirar`. É uma leitura de 4 KB que vale um render.
+
+2b. **Leia `roteiro.md`** (não o JSON). Confira duas coisas: se algum corte
    automático riscou texto que não devia (regra 3 abaixo: duplicata mínima — o
    `fala_limpa` tira a MENOR janela que contém a repetição, nunca a oração
    vizinha), e se as perguntas `[?N]` fazem sentido lidas em voz alta.
@@ -745,6 +771,14 @@ quiser conferir uma frase).
   "…como eu estou dedicando tempo demais") → sai a primeira, sem perguntar.
   Idêntica → fica a última. Semântica → pergunta. Par que só compartilha
   palavras funcionais ("se você") → coincidência de língua, nem pergunta.
+- **Retake dentro do fôlego vira PERGUNTA, nunca passa calado.** "Só que eu
+  te oriento, eu te conduzo, só que eu te oriento e te conduzo…" tem 0,20 s
+  entre as cópias — menos que a fronteira de frase (0,35 s) — e a segunda
+  cópia não é idêntica nem colada, então nem reinício nem gaguejo a pegavam
+  (apontado pelo usuário em 2026-11-06; fixture `oriento16`). Agora um prefixo
+  de ≥4 palavras que reaparece na mesma frase vira item `retomada_interna`
+  com a pergunta "erro/repetição (cortar a primeira) ou ênfase (manter)?". A
+  resposta entra pelo `--respostas` e o corte sai ANTES da versão final.
 - **O que a MONTAGEM cria** (duas falas distantes que ficaram lado a lado)
   recebe a mesma análise sobre o corte proposto — é o caso das várias tomadas
   da mesma CTA gravadas em sequência.

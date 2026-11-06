@@ -79,6 +79,8 @@ recurso for usado, e você decide na hora:
 
 ## Primeiro vídeo
 
+A Fase 1 é um comando (`helpers/fase1.py <pasta> --alvo 60 --tese "…"`): transcrição local, erros de fala, seleção pela tese e proxy. O agente faz uma pergunta no upload (entrega, tese, ritmo) e mostra o corte proposto; o que precisa de decisão sua (retake ou ênfase?) vem como pergunta antes da versão final.
+
 1. Coloque seus vídeos brutos numa pasta.
 2. Abra o Claude Code **dentro dessa pasta** e diga: *"abre o editor do
    Avelin"* — ou vá direto ao ponto: *"edita esses vídeos num Reels"*.

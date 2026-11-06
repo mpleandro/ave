@@ -280,10 +280,51 @@ def _fragmentos(ws: list[dict]) -> list[dict]:
     return out
 
 
+RETOMADA_MIN = 4          # palavras do prefixo que reaparece
+RETOMADA_DIST = 14        # distância máxima (palavras) até a segunda cópia
+
+
+def _retomadas_internas(ws: list[dict]) -> list[dict]:
+    """Retake DENTRO do fôlego: "Só que eu te oriento, eu te conduzo, só que eu
+    te oriento e te conduzo passo a passo". A pausa entre as cópias (0,20 s)
+    é menor que a fronteira de frase do detect_restarts (0,35 s), então as duas
+    caem na mesma frase e ninguém as compara; o gaguejo só pega cópia COLADA.
+    Aqui: prefixo de ≥4 palavras (com conteúdo) que reaparece adiante na mesma
+    frase. Nunca decide sozinho — pergunta se foi erro, repetição ou ênfase."""
+    out = []
+    for f in DR.frases(ws):
+        n = f["n"]
+        idx = [w["i"] for w in ws if f["t"] <= w["t"] <= f["fim"]]
+        if len(n) != len(idx):
+            continue
+        usados: set[int] = set()
+        for i in range(len(n)):
+            if i in usados:
+                continue
+            for L in (6, 5, RETOMADA_MIN):
+                pref = n[i:i + L]
+                if len(pref) < L or _conteudo(pref) < 1:
+                    continue
+                j = next((k for k in range(i + L, min(len(n) - L + 1, i + L + RETOMADA_DIST))
+                          if n[k:k + L] == pref), None)
+                if j is None:
+                    continue
+                a_txt = " ".join(ws[x]["txt"] for x in idx[i:j])
+                b_txt = " ".join(ws[x]["txt"] for x in idx[j:min(len(idx), j + L + 6)])
+                out.append({"tipo": "retomada_interna", "i": idx[i], "j": idx[j - 1], "texto": a_txt,
+                            "confianca": 0.6, "acao": "perguntar", "ngrama_dr": " ".join(pref),
+                            "versao_B": b_txt,
+                            "pergunta": f"\"{a_txt}\" e logo depois \"{b_txt}…\" — foi erro/repetição "
+                                        f"(cortar a primeira) ou ênfase de propósito (manter)?"})
+                usados.update(range(i, j + L))
+                break
+    return out
+
+
 def detectar(words: list[dict], vad: list[tuple[float, float]] | None = None) -> list[dict]:
     """Itens de corte/pergunta sobre a lista de palavras (schema Scribe)."""
     ws = palavras(words)
-    itens = _retakes(ws) + _fragmentos(ws) + _gaguejos(ws) + _muletas(ws)
+    itens = _retakes(ws) + _fragmentos(ws) + _retomadas_internas(ws) + _gaguejos(ws) + _muletas(ws)
     # sem sobreposição: o item mais longo em cada palavra vence
     usados: set[int] = set()
     out = []

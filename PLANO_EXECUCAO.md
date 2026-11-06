@@ -14,6 +14,9 @@ Executado e medido nesta máquina (M3, fonte de teste "conselho ou mentoria", 18
 | B5 instalação | feito | `install.sh`/`install.ps1`, `doctor.py`, `ffbin.py` (static-ffmpeg com zscale); instalação limpa testada em 31 s com cache quente; `install.md` e README reescritos |
 | B6 `fase1.py` + SKILL.md | feito, parcial | drop → proxy em 1 min 30 s (3 min de fonte); 2ª rodada com respostas em 27 s; SKILL.md 159 KB → 147 KB (a meta de ≤ 50 KB NÃO foi atingida: só a Fase 1 e o Setup foram reescritos) |
 
+| B7 seleção guiada pela tese (`selecao.py`, `fase1 --alvo/--tese`) | feito | 'conselho ou mentoria' alvo 65 s: 66% da seleção humana sem revisão, 90% com uma linha de revisão; proxy de 70 s em 26 s |
+| B8 retake dentro do fôlego vira pergunta | feito | fixture `oriento16`; apontado pelo usuário no proxy de 70 s |
+
 Pendências conhecidas: `install.ps1` e o caminho faster-whisper (fora de Apple
 Silicon) não foram testados; SKILL.md ainda carrega as narrativas de incidentes
 das outras seções; o portão com render ainda acusa riso/ruído sem texto como

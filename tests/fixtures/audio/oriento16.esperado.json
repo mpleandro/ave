@@ -1,0 +1,9 @@
+{
+  "fonte": "tests/fixtures/audio/oriento16.m4a",
+  "nota": "Fonte 'conselho ou mentoria' 228-244 s. Retake dentro do fôlego apontado pelo usuário em 2026-11-06: 'só que eu te oriento, eu te conduzo, só que eu te oriento e te conduzo'. Deve virar PERGUNTA (erro/repetição/ênfase), nunca passar calado.",
+  "repeticoes": [
+    {"t": 5.1, "tol": 3.5, "ngrama": "só que eu te oriento", "vezes": 2, "tipo": "retomada interna", "corte": true, "acao": "perguntar"}
+  ],
+  "silencios_obrigatorios": [],
+  "falsos_positivos_proibidos": []
+}

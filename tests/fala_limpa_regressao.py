@@ -31,18 +31,25 @@ def norm(t: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--json", type=Path, default=None, help="transcrito já gerado (pula a transcrição)")
-    ap.add_argument("--esperado", type=Path, default=RAIZ / "tests/fixtures/audio/conselho180.esperado.json")
+    ap.add_argument("--json", type=Path, default=None, help="transcrito já gerado (pula a transcrição; só com --esperado)")
+    ap.add_argument("--esperado", type=Path, default=None, help="uma fixture; padrão: todas em tests/fixtures/audio/")
     args = ap.parse_args()
-    esperado = json.loads(args.esperado.read_text())
+    if args.esperado is None:
+        rcs = [um(e, None) for e in sorted((RAIZ / "tests/fixtures/audio").glob("*.esperado.json"))]
+        return 1 if any(rcs) else 0
+    return um(args.esperado, args.json)
+
+
+def um(esperado_p: Path, tj: Path | None) -> int:
+    esperado = json.loads(esperado_p.read_text())
+    print(f"== {esperado_p.name}")
     fonte = RAIZ / esperado["fonte"]
     if not fonte.exists():
         print(f"FALHA: fixture ausente {fonte} — gere com ffmpeg (ver PLANO_EXECUCAO.md B0)")
         return 1
 
-    tj = args.json
     if tj is None:
-        tj = Path("/tmp/ave_regressao_conselho180.json")
+        tj = Path(f"/tmp/ave_regressao_{esperado_p.stem}.json")
         r = subprocess.run([sys.executable, str(RAIZ / "helpers/transcribe_local.py"), str(fonte),
                             "-o", str(tj), "-q"], capture_output=True, text=True)
         if r.returncode != 0:
@@ -78,7 +85,7 @@ def main() -> int:
     fl = RAIZ / "helpers/fala_limpa.py"
     if fl.exists():
         try:
-            import fala_limpa  # noqa: PLC0415
+            import fala_limpa
             vad = d.get("_vad") or []
             itens = fala_limpa.detectar(d["words"], [tuple(x) for x in vad])
             for fp in esperado["falsos_positivos_proibidos"]:
@@ -88,10 +95,11 @@ def main() -> int:
                         falhas.append(f"fala_limpa acusou falso positivo '{fp['ngrama']}' em {it['t']}s")
             for r in esperado["repeticoes"]:
                 n = norm(r["ngrama"])
+                acao_ok = (lambda it, a=r.get("acao"): it["acao"] == a) if r.get("acao") else (lambda it: it["acao"].startswith("cortar"))
                 hits = [it for it in itens if (n in norm(it.get("texto", "")) or norm(it.get("texto", "")) in n)
-                        and abs(it["t"] - r["t"]) <= r["tol"] and it["acao"].startswith("cortar")]
+                        and abs(it["t"] - r["t"]) <= r["tol"] and acao_ok(it)]
                 if r.get("corte", True) and not hits:
-                    falhas.append(f"fala_limpa não propôs cortar '{r['ngrama']}' perto de {r['t']}s")
+                    falhas.append(f"fala_limpa não acusou '{r['ngrama']}' ({r.get('acao', 'cortar')}) perto de {r['t']}s")
                 if not r.get("corte", True) and hits:
                     falhas.append(f"fala_limpa propôs cortar frase legítima '{r['ngrama']}' em {hits[0]['t']}s")
         except Exception as exc:  # noqa: BLE001
