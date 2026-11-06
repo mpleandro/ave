@@ -242,6 +242,27 @@ def main() -> int:
     pontuar(blocos, args.tese)
     manter = {int(x) for x in args.manter.split(",") if x.strip()}
     tirar = {int(x) for x in args.tirar.split(",") if x.strip()}
+    # IDS SÃO DA RODADA ANTERIOR. Um corte novo (resposta a uma pergunta) parte
+    # ou funde blocos e renumera tudo; "--tirar 3,4,5" passaria a apontar para
+    # outros blocos. Resolve pelo TEMPO: cada id vira o bloco anterior, e este
+    # vira o bloco atual que mais se sobrepõe a ele.
+    prev_p = edit / "selecao.json"
+    if prev_p.exists() and (manter or tirar):
+        try:
+            prev = {b["id"]: b for b in json.loads(prev_p.read_text()).get("blocos", [])}
+        except (json.JSONDecodeError, KeyError):
+            prev = {}
+
+        def atual(pid: int) -> int | None:
+            pb = prev.get(pid)
+            if not pb:
+                return pid
+            melhor = max(blocos, key=lambda b: min(b["fim"], pb["fim"]) - max(b["ini"], pb["ini"]))
+            return melhor["id"] if min(melhor["fim"], pb["fim"]) - max(melhor["ini"], pb["ini"]) > 0 else None
+
+        if prev:
+            manter = {y for y in (atual(x) for x in manter) if y is not None}
+            tirar = {y for y in (atual(x) for x in tirar) if y is not None}
     selecionar(blocos, args.alvo, manter, tirar)
     edl = montar_edl(edl_limpo, blocos, mono)
     (edit / "edl_selecao.json").write_text(json.dumps(edl, indent=1, ensure_ascii=False))
