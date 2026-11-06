@@ -501,7 +501,8 @@ def main() -> int:
     edit = args.edit.resolve()
     tdir = edit / "transcripts"
     trans = sorted(p for p in tdir.glob("*.json") if p.name not in
-                   {"corrections.json", "cut_mapped.json", "cut.json"} and not p.name.startswith("."))
+                   {"corrections.json", "cut_mapped.json", "cut.json"} and not p.name.startswith(".")
+                   and not p.stem.endswith((".raw", ".prev")))
     if not trans:
         sys.exit(f"nenhum transcrito em {tdir}")
     if len(trans) > 1:

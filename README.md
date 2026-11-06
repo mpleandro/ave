@@ -34,7 +34,7 @@ abaixo; use esta lista para conferir onde você está.
 - [ ] **Git**, **uv**, **ffmpeg** e **Node.js 18+** instalados *(passo 1)*
 - [ ] Os quatro respondendo no terminal — `git --version` e companhia *(passo 2)*
 - [ ] A skill baixada em `.claude/skills/ave` *(passo 3)*
-- [ ] `uv sync` rodado dentro dela *(passo 4)*
+- [ ] `uv sync --inexact` rodado dentro dela *(passo 4)*
 - [ ] A **chave do Groq** gravada no `.env` *(passo 5)*
 
 O ffmpeg traz o `ffprobe` junto — é um item só. O Node.js só é usado da Fase 2
@@ -111,7 +111,7 @@ git clone https://github.com/mpleandro/ave "$env:USERPROFILE\.claude\skills\ave"
 **4. Instale as dependências Python:**
 
 ```powershell
-uv sync --directory "$env:USERPROFILE\.claude\skills\ave"
+uv sync --inexact --directory "$env:USERPROFILE\.claude\skills\ave"
 ```
 
 Cole os comandos exatamente como estão. O `$env:USERPROFILE` é uma variável que
@@ -152,7 +152,7 @@ git clone https://github.com/mpleandro/ave "$HOME/.claude/skills/ave"
 **4. Instale as dependências Python:**
 
 ```bash
-uv sync --directory "$HOME/.claude/skills/ave"
+uv sync --inexact --directory "$HOME/.claude/skills/ave"
 ```
 
 Cole os comandos exatamente como estão — o `$HOME` é uma variável que o Terminal
@@ -493,7 +493,7 @@ terminar e rode o `git clone` de novo.
 está instalada. Você queria o comando de atualizar (`git pull`), não o de
 instalar.
 
-**`ModuleNotFoundError` ao usar a skill** — faltou o passo 4, o `uv sync`.
+**`ModuleNotFoundError` ao usar a skill** — faltou o passo 4, o `uv sync --inexact`.
 
 **O Claude não encontra a skill** — confirme que a pasta está exatamente em
 `.claude/skills/ave` dentro da sua pasta de usuário, e reinicie o Claude Code.

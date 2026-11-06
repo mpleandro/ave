@@ -163,7 +163,11 @@ def map_through_edl(edit: Path) -> list[dict]:
     out, cursor = [], 0.0
     for i, r in enumerate(edl.get("ranges", [])):
         a, b = float(r["start"]), float(r["end"])
-        off = float(tl[i]["start"]) if i < len(tl) and "start" in tl[i] else cursor
+        # `audio_start_in_output`: a chave `start` nunca existiu no jcut_timeline
+        # e o fallback somava durações — a deriva cumulativa que cut_transcript.py
+        # já tinha corrigido
+        key = "audio_start_in_output"
+        off = float(tl[i][key]) if i < len(tl) and key in tl[i] else cursor
         for w in src.get(r["source"], []):
             s = float(w["start"])
             if a <= s < b:
@@ -301,7 +305,10 @@ def fix_times(path: Path, video: Path) -> int:
     fl = stretch_flags(video, words)
     if not fl:
         return 0
-    raw = path.with_suffix(".raw.json")
+    # em `.backups/`, nunca ao lado: pack_transcripts/detect_restarts/portão
+    # leem todo *.json de transcripts/ e tratavam o backup como outra fonte
+    raw = path.parent / ".backups" / f"{path.stem}.raw.json"
+    raw.parent.mkdir(exist_ok=True)
     if not raw.exists():
         raw.write_text(json.dumps(data, ensure_ascii=False))
     by_i = {f["i"]: f["real_end"] for f in fl}

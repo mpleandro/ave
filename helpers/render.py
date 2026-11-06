@@ -1779,6 +1779,10 @@ def main() -> None:
     # Respiros ANTES do alinhamento de frame: eles criam ranges novos, e um range
     # que nasce depois do snap chega à extração com bordas fora do frame — o erro
     # que o snap existe para evitar, reintroduzido pela porta dos fundos.
+    if any(r.get("breaths") for r in edl.get("ranges", [])):
+        # A INTENÇÃO fica guardada: depois da expansão o edl.json só tem os
+        # pedaços, e uma troca de ritmo precisava reconstruir à mão.
+        edl["_ranges_com_respiros"] = json.loads(json.dumps(edl["ranges"]))
     grown = expand_breaths(edl)
     if grown:
         print(f"  {grown} respiro(s) encurtado(s) → "

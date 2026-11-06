@@ -79,7 +79,8 @@ def checar_spacing(edit: Path) -> list[dict]:
     DERIVADOS = {"cut_mapped"}
     faltas = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
-                    if not q.name.startswith(".") and q.stem not in DERIVADOS):
+                    if not q.name.startswith(".") and q.stem not in DERIVADOS
+                    and not q.stem.endswith((".raw", ".prev"))):
         d = json.loads(p.read_text())
         # NEM TODO .json EM transcripts/ É UM TRANSCRITO. O `corrections.json`
         # mora aqui (é o registro de onde o transcrito errou) e é uma LISTA —
@@ -151,7 +152,7 @@ def checar_quotes(edit: Path) -> list[dict]:
 
     palavras = []
     for p in sorted(q for q in (edit / "transcripts").glob("*.json")
-                    if not q.name.startswith(".")):
+                    if not q.name.startswith(".") and not q.stem.endswith((".raw", ".prev"))):
         d = json.loads(p.read_text())
         if not isinstance(d, dict):
             continue                 # corrections.json é lista — ver checar_spacing

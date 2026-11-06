@@ -270,10 +270,15 @@ def build(edit: Path) -> dict:
 
     out: list[dict] = []
     t_out = 0.0
+    tl = edl.get("jcut_timeline") or []
     for ri, r in enumerate(edl.get("ranges", [])):
         key = r["source"]
         a, b = float(r["start"]), float(r["end"])
         regions = regions_by_src.get(key, [])
+        # sob J-cut o áudio de cada trecho começa ANTES da soma das durações;
+        # o painel segue a voz, então o relógio é o do áudio
+        if ri < len(tl) and "audio_start_in_output" in tl[ri]:
+            t_out = float(tl[ri]["audio_start_in_output"])
         for w in words_by_src.get(key, []):
             ws, we = float(w["start"]), float(w["end"])
             if we <= a or ws >= b:

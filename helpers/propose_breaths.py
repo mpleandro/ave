@@ -218,9 +218,13 @@ def classificar(palavras: list[dict], at: float) -> tuple[str, str]:
         return CLASSE_PADRAO, ""
     ant = None
     for w in palavras:
-        if float(w.get("start") or 0) <= at + CTX_TOL:
+        # a palavra que TERMINA antes do vão — pelo início, uma palavra curta
+        # DEPOIS do vão entrava na tolerância e classificava o vão errado
+        fim = w.get("end")
+        ref = float(fim) if fim is not None else float(w.get("start") or 0)
+        if ref <= at + 0.05:
             ant = w
-        else:
+        elif float(w.get("start") or 0) > at + CTX_TOL:
             break
     if ant is None:
         return CLASSE_PADRAO, ""
@@ -325,8 +329,8 @@ def avaliar(edit: Path, edl: dict, ritmo: str, verbose: bool = True) -> tuple[li
             # impossível de alcançar: na dúvida, mede-se menos e corta-se menos.
             limiar = round((piso + mediana) / 2) if (piso is not None and mediana is not None
                                                      and piso < mediana) else -33.0
-            niveis[str(path)] = (limiar, mediana if mediana is not None else 0.0)
-        limiar, mediana = niveis[str(path)]
+            niveis[str(path)] = (limiar, mediana if mediana is not None else 0.0, piso)
+        limiar, mediana, piso = niveis[str(path)]
 
         palavras = carregar_palavras(edit, path)
         a, b = float(r["start"]), float(r["end"])

@@ -275,7 +275,7 @@ Groq Whisper (`whisper-large-v3`) is the base transcription backend and handles 
 
 ### 6. Node.js (Phase 2)
 
-Phase 2 (captions, motion graphics, images) renders with **HyperFrames**, and the whole setup is Node.js 18+. There is no second skill to clone: `helpers/phase2.py` calls a pinned `npx hyperframes@<version>`, which resolves into a shared cache (~365 MB in `~/.cache/hyperframes`) the first time it runs — once for every project on the machine. Session projects carry no `node_modules`.
+Phase 2 (captions, motion graphics, images) renders with **HyperFrames**, and the whole setup is Node.js 18+. There is no second skill to clone: `helpers/phase2.py` calls a pinned `npx hyperframes@<version>`, which resolves into a shared cache (~1 GB in `~/.cache/hyperframes`, plus the npx cache) the first time it runs — once for every project on the machine. Session projects carry no `node_modules`.
 
 ```bash
 # macOS / Linux
@@ -342,7 +342,7 @@ anything. Never paste a changelog, commit list or command output at them.
 
 - `git -C <AVE> pull --ff-only` pulls the latest code — same command on every OS, and no `cd` needed. The next run picks it up automatically (the clone *is* the skill dir on the user layout; the symlink/junction resolves to it on the contributor layout).
 - `git clone` does **not** update an existing install — it fails on a non-empty directory. Clone once, pull forever.
-- If `pyproject.toml` changed deps, re-run `uv sync --directory <AVE>` (or `pip install -e .`) after pulling.
+- If `pyproject.toml` changed deps, re-run `uv sync --directory <AVE> --inexact` (or `pip install -e .`) after pulling — `--inexact`, or the lazily installed resources (matting, 3D, local listening) get removed.
 - **The skill tells the user when there is something to pull.** `helpers/atualizacoes.py` runs at the start of every round (SKILL.md, Setup): it fetches `origin/main` once a week (`AVE_ATUALIZACOES=rodada` in `.env` fetches every round, `nunca` turns it off) and, while the clone is behind, reminds in one line each round until the user updates. It never pulls by itself. It flags what makes a pull need care: changed deps (`uv sync`), uncommitted local changes, a local branch that diverged from `origin/main`.
 
 ## Cold-start reminders

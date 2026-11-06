@@ -180,10 +180,10 @@ def _deps() -> dict:
         # só a Fase 2 precisa
         "node": bool(shutil.which("node")),
         # o motor da Fase 2 resolve sozinho pelo npx; o cache é o sinal de que
-        # ele já foi baixado uma vez (~365 MB, compartilhado entre projetos)
+        # ele já foi baixado uma vez (~1 GB, compartilhado entre projetos)
         "hyperframes": (Path.home() / ".cache" / "hyperframes").exists(),
         # opcional: só quem traz fonte de URL precisa
-        "ytdlp": bool(shutil.which("yt-dlp")),
+        "ytdlp": bool(shutil.which("yt-dlp")) or (Path(__file__).resolve().parents[1] / ".venv" / "bin" / "yt-dlp").exists(),
         # vídeo HDR (iPhone grava HLG) — o `ffmpeg` do Homebrew veio sem zscale
         "ffmpeg_hdr": _ffmpeg_tem_zscale(),
     }
