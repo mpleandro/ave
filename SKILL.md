@@ -255,6 +255,7 @@ Phase 2/3 (see the track references for usage):
 - **`doctor.py [--preparar] [--json]`** — conferência da instalação sem rede e sem chave (ffmpeg com zscale, VAD, Whisper local rodando de verdade, Node, allowlist de permissões); `--preparar` baixa ffmpeg estático e o modelo. · **`ffbin.py`** — o ffmpeg completo na frente do PATH (sistema com zscale, senão o do pip).
 - **`captions_words.py`** (legendas palavra a palavra, a base de todos os estilos) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
 - **`instalar_anim3d.py [--check]`** — instala o extra `anim3d` (MediaPipe + Depth Anything V2) com `uv sync --inexact` (não derruba o `matting`), baixa os modelos do MediaPipe para `~/.avelin/modelos/` e confere num processo novo. O `phase2.py` chama sozinho quando o formato é "Animação em 3D".
+- **`combinacoes.py --pecas <dir> --saida <dir> (--todas | --so … | --combo … | --lista f) [--listar]`** — **MONTAGEM DE COMBINAÇÕES**: emenda peças já prontas (Fase 2 rodada POR PEÇA) em finais — gancho × corpo × CTA ou qualquer N partes (`--partes`). Vídeo em concat sem recodificar (confere antes que todas as peças têm o mesmo vídeo), trilha única por baixo + loudnorm 2 passadas, nome por molde (`--nome "PFX_{0}{1}{2}"`), subpasta por molde (`--pasta`), checagem de COLISÃO de nome no lote inteiro antes de começar (`--separar` resolve), `.part` + retomável, trava de disco, manifesto CSV. `--listar` é o plano: contagem, nomes de exemplo, minutos e GB. **Antes de rodar, a lógica da junção é PERGUNTADA** — ver "Montagem de combinações".
 - **`hook_finder.py <edit> [--top 8] [--fonte X] [--json]`** — **o garimpo do gancho**: corta o transcrito de cada fonte de fala em frases e janelas de 1–2 frases e MEDE o que o texto não mostra — borda limpa para cold open (silêncio medido dos dois lados), energia e ritmo contra o próprio falante, conector no começo (depende do anterior), sinais das 6 anatomias, retomada dentro do trecho, repetição confirmada no `defeitos_audio.json`. A nota só ORDENA a leitura; o julgamento (aponta para a tese? fica de pé sozinho?) é seu, e a escolha é do usuário. Grava `hook_candidatos.json`. Método completo em `references/hooks.md`.
 
 Interface:
@@ -1337,6 +1338,24 @@ uv run python helpers/estilos_salvos.py salvar <edit> --nome "Reels da Marca"
   depois desmarca o salvo. Mora em `~/.avelin/estilos_salvos.json`, fora do
   projeto, como a marca.
 
+
+## Montagem de combinações — a lógica da junção é do usuário (2026-11-08)
+
+**Gatilho:** sempre que o pedido for MONTAR vídeos a partir de partes — "juntar ganchos com corpos", "gerar as variações", "combinar os criativos", "montar os anúncios", uma pasta com `gancho*/corpo*/cta*`, ou a Fase 2 rodada em várias peças avulsas. Nunca suponha gancho→corpo→CTA nem "todas com todas": a lógica muda por projeto e errar custa horas de render e GB de disco.
+
+**1. Meça antes de perguntar.** Liste as peças (prefixo = grupo) e rode `combinacoes.py … --todas --listar` para ter contagem, minutos e GB contra o disco livre. Esses números vão DENTRO das perguntas — "todas = 972 finais, ~80 GB, 39 GB livres" decide sozinho metade da escolha.
+
+**2. Pergunte com `AskUserQuestion`, uma chamada, até 4 perguntas** (cada uma de pé sozinha; recomendada primeiro):
+- **Estrutura** — quais grupos e em que ordem (ex.: gancho → corpo → CTA · gancho → CTA · abertura → depoimento → CTA). Vira `--partes`.
+- **Quais combinações** — todas (produto cartesiano, com a contagem e os GB) · só algumas peças (`--so gancho02 gancho05 …`) · lista curada pelo tráfego (`--lista combos.csv`, uma por linha) · um lote de teste primeiro (1 final por gancho). Lote grande: recomende o teste antes.
+- **Nome e pastas** — molde do arquivo (`--nome`, códigos `gancho01`→1, `cta08b`→8B; ofereça o padrão do cliente se o projeto tiver um) e subpasta (uma por gancho · tudo numa pasta). Se o `--listar` acusar colisão, a pergunta mostra o par que colide e as saídas (`--separar 11`, ou molde com `_`).
+- **Áudio** — trilha única por baixo (`--trilha`, volume do estilo aprovado) · sem trilha · LUFS da plataforma (padrão −14).
+
+**3. Grave a resposta em `project.md`** (o comando exato) — lote que para no disco retoma com o MESMO comando, e refazer depois de uma correção é `--lista <manifesto filtrado> --sobrescrever`.
+
+**4. Rode em background**, uma final por linha no log; avise na trava de disco (exit 3) com o que falta. Confira por amostra: duração vídeo × áudio, −14 LUFS, e uma final aberta no player.
+
+**Por que peça por peça e não final por final:** legenda, SFX e câmera são queimados uma vez por peça (30 renders) e a emenda é cópia de stream (~6 s por final). A Fase 2 por final custaria 972 renders para o mesmo resultado. Corrigir uma peça = refazer a peça + `--sobrescrever` só nas finais que a usam (o manifesto diz quais).
 
 ## Papel de cada fonte — e o tempo RESERVADO
 
