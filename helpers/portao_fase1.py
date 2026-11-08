@@ -117,6 +117,22 @@ def checar_spacing(edit: Path) -> list[dict]:
     return faltas
 
 
+def checar_bordas(edit: Path) -> list[dict]:
+    """Palavra cortada na borda: o fim (ou o início) de um trecho ainda tem voz
+    na FONTE. Medido no EDL, sem render — pega o defeito antes de gastar um
+    encode. Foi como "processá-los" saiu "processar" num corte de 2026-11-08
+    com todos os outros auditores calados (`aperto.bordas_com_voz`)."""
+    try:
+        import aperto  # noqa: PLC0415
+        edl = json.loads((edit / "edl.json").read_text())
+        achados = aperto.bordas_com_voz(edl)
+    except Exception as e:  # noqa: BLE001 — conferir quebrado não é reprovar
+        return [{"check": "bordas", "aviso": True, "problema": f"não consegui medir as bordas: {e}"}]
+    return [{"check": "bordas", "t": t, "problema": f"trecho {i}: voz no {lado} da borda ({v:.0f} dBFS) — corta sílaba",
+             "conserto": f"{'estender o fim' if lado == 'fim' else 'recuar o início'} até a palavra terminar "
+                         "(speech_regions / aperto.py)"} for i, lado, t, v in achados]
+
+
 def checar_reinicios(edit: Path) -> list[dict]:
     """Frase refeita que sobreviveu ao corte."""
     cod, out = _rodar([str(HELPERS / "detect_restarts.py"), str(edit), "--edl", "--json"])
@@ -187,7 +203,12 @@ def checar_quotes(edit: Path) -> list[dict]:
         src_stem = Path(src_path).stem if src_path else None
         no_trecho = [w for w in palavras
                      if (src_stem is None or w["arquivo"] == src_stem)
-                     and w["start"] >= ini - 1e-6 and w["end"] <= fim + 1e-6]
+                     # pela SOBREPOSIÇÃO, não por caber inteira: o Whisper estica o
+                     # fim da palavra por cima do silêncio, e com a borda apertada
+                     # até a voz (`aperto.py`) a última palavra "sairia" do trecho
+                     # em todo range — 51 falsos num corte de 2:22. Palavra cortada
+                     # de verdade é medida no áudio por `checar_bordas`.
+                     and w["end"] > ini + 0.04 and w["start"] < fim - 0.02]
         dentro = " ".join(" ".join(_norm(w["text"]) for w in no_trecho).split())
 
         if cauda in dentro:
@@ -817,6 +838,7 @@ def main() -> None:
     # Sem pausa medida o resto não tem o que ver — reprova aqui e diz o conserto,
     # em vez de despejar defeitos derivados que somem sozinhos depois do reparo.
     if not faltas:
+        faltas += checar_bordas(edit)
         faltas += checar_reinicios(edit)
         faltas += checar_triagem(edit)
         faltas += checar_transcricao(edit)

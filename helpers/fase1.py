@@ -170,6 +170,17 @@ def main() -> int:
         shutil.copy(edl_p, edit / "edl.prev.json")
     shutil.copy(prop, edl_p)
 
+    # 6b. APERTO — bordas até a voz medida, pausas internas do vídeo todo pelo
+    # ritmo, ruído antes da 1ª palavra e ganho por trecho (`aperto.py`). Sem
+    # ele cada emenda deixava até meio segundo de nada dos dois lados.
+    try:
+        import aperto  # noqa: PLC0415
+        edl_a, notas_a = aperto.apertar(json.loads(edl_p.read_text()), edit, args.ritmo)
+        edl_p.write_text(json.dumps(edl_a, ensure_ascii=False, indent=1))
+        rel["aperto"] = f"{len(edl_a['ranges'])} trechos, {edl_a['total_duration_s']}s, {len(notas_a)} ajuste(s)"
+    except Exception as e:  # noqa: BLE001 — sem aperto o corte continua válido
+        rel["aperto"] = f"falhou: {e}"
+
     # 7. portão sem render
     rc, out = _run([str(HELPERS / "portao_fase1.py"), str(edit), "--pular-render", "--json"], "portão (plano)")
     try:

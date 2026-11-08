@@ -129,7 +129,32 @@ def build(edit: Path) -> dict:
     fixes = corrections(edit)
     out: list[dict] = []
     cursor = 0.0
-    for i, r in enumerate(edl.get("ranges", [])):
+    ranges = edl.get("ranges", [])
+    # Cada palavra vai para o trecho com que ela MAIS se sobrepõe (mínimo
+    # MIN_OV), não para o trecho que contém o seu início. O Whisper adianta o
+    # início e estica a palavra por cima de pausa/ruído — "Mas" carimbado em
+    # 379.90–381.00 com a voz real em 380.90, num trecho que começa em 380.84.
+    # Com `a <= s < b` essa palavra caía fora de TODOS os trechos e a legenda
+    # perdia a 1ª palavra de cada trecho (medido: ~20 palavras num corte de
+    # 2:22 — "Mas", "Pois", "Em", "Foi", "Ao"…). Por sobreposição, uma palavra
+    # que o corte removeu continua fora (sobreposição zero) e nenhuma entra
+    # em dois trechos.
+    MIN_OV = 0.04
+    dono: dict[tuple[str, int], int] = {}
+    for key_src, ws in src.items():
+        for k, w in enumerate(ws):
+            s, e = float(w["start"]), float(w["end"])
+            # palavra curtinha ("eu", "O") pode durar menos que MIN_OV inteira
+            best, bi = min(MIN_OV, 0.5 * max(e - s, 0.0)), None
+            for i, r in enumerate(ranges):
+                if r["source"] != key_src:
+                    continue
+                ov = min(e, float(r["end"])) - max(s, float(r["start"]))
+                if ov > 0 and ov >= best:
+                    best, bi = ov, i
+            if bi is not None:
+                dono[(key_src, k)] = bi
+    for i, r in enumerate(ranges):
         a, b = float(r["start"]), float(r["end"])
         # `audio_start_in_output`, NÃO `video_start_in_output`.
         #
@@ -143,9 +168,9 @@ def build(edit: Path) -> dict:
         # piora ao longo do vídeo, que é a assinatura de deriva acumulada.
         key = "audio_start_in_output"
         off = float(tl[i][key]) if i < len(tl) and key in tl[i] else cursor
-        for w in src.get(r["source"], []):
+        for k, w in enumerate(src.get(r["source"], [])):
             s, e = float(w["start"]), float(w["end"])
-            if not (a <= s < b):
+            if dono.get((r["source"], k)) != i:
                 continue
             # `is None`, não `or`: corrigir para "" é apagar a palavra da
             # legenda sem cortar o áudio, e um `or` leria isso como "nenhuma

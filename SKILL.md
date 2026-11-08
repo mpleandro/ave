@@ -236,7 +236,8 @@ Phase 1:
 - **`biblioteca.py [--registrar <arquivo> --tipo <t>] [--pasta <dir>] [--listar] [--resolver] [--candidatos <edit>] [--usar <id> --projeto <edit>] [--esquecer <id>] [--adotar-sfx]`** — **O ACERVO DE QUEM EDITA**: logo, trilha, efeito, LUT, vinheta, fonte. Mora em `~/.avelin/biblioteca.json` + `~/.avelin/biblioteca/<tipo>/`, fora do clone e fora do projeto, pela razão do `brand.json`: um asset que vive só dentro de `<edit>/` é um asset que o PRÓXIMO vídeo vai pedir de novo, na mão, a quem já o entregou uma vez. **O que ele guarda é MEDIDO** — alfa do PNG (sem canal alfa, o logo vira um retângulo branco sobre o vídeo), pico e ATAQUE do efeito (o `sfx.py` já sabe medir: o `riser-short` tem 864 ms de silêncio antes da batida), duração da trilha (mais curta que o corte = emenda audível). O alerta sai no registro, não no render. **`--candidatos <edit>` é a entrada da pergunta**: lista o que o usuário TROUXE e o acervo ainda não tem, ignorando o que o pipeline baixou (`pexels/`, `web/`) — isso se acha de novo buscando, e perguntar sobre isso gasta a paciência de que a pergunta seguinte vai precisar. `--usar` é o que faz a régua subir (veja a seção da biblioteca); `--pasta` registra um DIRETÓRIO com um papel, porque quem tem 300 risers não vai registrá-los um a um; `--adotar-sfx` migra o `~/.avelin/sfx.json` antigo.
 - **`verify_takes.py <edit> [--video preview_proxy.mp4] [--fonte X] [--janelas]`** — **OUVE o corte pronto** e acusa frase repetida sem confiar no transcrito do corte. Por padrão é a escuta VAD-first (transcreve cada região de fala do render isolada e procura n-grama colado): ~45 s num corte de 3 min, e nunca transcreve silêncio — a varredura antiga por ~300 janelas deslizantes (`--janelas`) levava ~15 min por 2 min e "confirmava" repetição em trecho mudo. Exit 1 se achar algo.
 
-- **`portao_fase1.py <edit> [--pular-render] [--json]`** — **O PORTÃO. Exit 1 = o corte não vai para aprovação.** Checa, nesta ordem: `spacing` medido, reinício sobrevivente, decisão de cada semântica em `triagem.json`, densidade (aviso em transcrito local), `quote` × conteúdo real do range, mapa `defeitos_audio.json`, e com render `verify_cut` + a escuta (`verify_takes`). Existe porque os auditores já existiam quando dez defeitos de fala chegaram ao usuário — não faltava ferramenta, faltava obrigação. A diferença entre recomendação e portão é o exit code.
+- **`aperto.py <edit> [--ritmo R] [--so-checar]`** — bordas até a voz medida, pausas internas do vídeo todo, ruído antes da 1ª palavra e ganho por trecho, sobre o `edl.json`. O `fase1.py` já roda; `--so-checar` é só o teste de palavra cortada (exit 1 se achar).
+- **`portao_fase1.py <edit> [--pular-render] [--json]`** — **O PORTÃO. Exit 1 = o corte não vai para aprovação.** Checa, nesta ordem: `spacing` medido, **palavra cortada na borda (medida na fonte)**, reinício sobrevivente, decisão de cada semântica em `triagem.json`, densidade (aviso em transcrito local), `quote` × conteúdo real do range, mapa `defeitos_audio.json`, e com render `verify_cut` + a escuta (`verify_takes`). Existe porque os auditores já existiam quando dez defeitos de fala chegaram ao usuário — não faltava ferramenta, faltava obrigação. A diferença entre recomendação e portão é o exit code.
 - **`speech_regions.py <video>`** — acoustic speech intervals via silencedetect. The source of truth for cut EDGES (Whisper times drift/stretch). Answers *where* speech is — never *how loud* it is. **`--noise` é `auto` por padrão**: o limiar sai do próprio material (o ponto médio entre piso de ruído e voz mediana, `cut_words.noise_floor_for`) e o cabeçalho do relatório DIZ qual foi, com as duas populações que o produziram. O `-33dB` fixo de antes era a régua errada para metade do material — medido: uma fonte desta série calibra em −37dB, e a −33 o detector chama voz de silêncio. Valor fixo ainda se passa, mas **com `=`** (`--noise=-33dB`): começando com `-`, o argparse o lê como outra flag.
 - **`voice_levels.py <video> [--edit-dir <dir>] [--edl edl.json] [--drop-db 5]`** — the source of truth for speech LEVEL. Learns the noise floor (Ridler-Calvard intermeans, not a percentile) and the speaker's own median from the recording itself, then flags every phrase, sub-phrase run, and EDL range sitting ≥5 dB under that median and sizes a `gain_db` for each. Catches the failure nothing else sees: a whispered aside or a trailing-off sentence where every word is present, the transcript is perfect, `speech_regions` says "speech", `verify_cut` finds no pop and no dead air — and the viewer still hits a passage they cannot hear. **Run it in Phase 1 before writing the EDL.**
 - **`detect_color.py <video> [--json]`** — resolves NORMAL vs LOG from the file instead of asking. Tier 1 metadata (HLG/PQ declare themselves; Apple Log's signature is ProRes 10-bit 4:2:2 + BT.2020 primaries + EMPTY transfer; vendor tags when present), Tier 2 image statistics when the metadata is silent — which is common, since a Sony shooting S-Log3 to H.264 often declares plain bt709 and any transcode drops the tags. Returns the profile, a **confidence**, the evidence, and the `grade` to apply (measured from the footage for non-Apple LOG). Only `confidence: low` should send you back to the user.
@@ -673,8 +674,8 @@ truncado / retomada, pares que a montagem cria, respiros por ritmo, borda
 acústica de cada corte) → **`selecao.py`** (com `--alvo`: blocos do corte
 limpo pontuados pela TESE, gancho, fechamento e densidade; enche o alvo;
 `selecao.md` lista os 30 blocos com ✔/✘ e motivo) → `edl.json` ←
-`edl_selecao.json` (ou `edl_proposto.json` sem alvo) → `portao_fase1.py
---pular-render` → `render.py --proxy` → `verify_cut.py` → `state.json` aponta
+`edl_selecao.json` (ou `edl_proposto.json` sem alvo) → **`aperto.py`** →
+`portao_fase1.py --pular-render` → `render.py --proxy` → `verify_cut.py` → `state.json` aponta
 para o proxy. Exit 0 = proxy pronto; **exit 2 = há perguntas** (o proxy existe
 mesmo assim); exit 3 = decisão antes de seguir (mais de uma fonte, cor
 incerta).
@@ -792,6 +793,15 @@ quiser conferir uma frase).
   `_ranges_com_respiros`.
 - **Nenhuma janela é transcrita fora de região de fala** — é o que mata a
   alucinação que "confirmava" repetição em trecho mudo.
+- **O aperto (`aperto.py`, roda sozinho no `fase1.py`) leva cada borda até a
+  VOZ medida** (início −30 ms, fim +70 ms do último quadro acima do piso), corta
+  pausa interna maior que o ritmo pede EM TODO O VÍDEO (equilibrado: >0,20 s
+  vira 0,08 s), tira ruído colado na 1ª palavra (pigarro que o Whisper esticou
+  dentro do carimbo: a voz é a última rajada) e dimensiona `gain_db` de trecho
+  baixo. Só encolhe — nunca recola o que o `fala_limpa` tirou. Pedido do
+  usuário (2026-11-08): "limpar espaços é o vídeo todo, não só as marcações".
+- **Palavra cortada reprova o portão** (`checar_bordas`): voz nos últimos 30 ms
+  de um trecho, medida na FONTE, antes de qualquer render.
 
 Quando o usuário apontar um defeito que passou: Hard Rule 19 (meça a janela
 isolada antes de explicar) e `tests/regressao.py --criar`; o fixture
