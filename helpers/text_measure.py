@@ -61,6 +61,9 @@ def warm_cache(family: str, weight: int = 400, italic: bool = False) -> None:
             f'style="font-family:\'{family}\';font-weight:{weight};'
             f'{"font-style:italic;" if italic else ""}">Aa</div></div></body></html>'
         )
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import nodebin  # Node >= 22 na frente do PATH (o do sistema ou o do editor)
+        nodebin.garantir()
         subprocess.run(
             ["npx", "--yes", "hyperframes@0.7.109", "check"],
             cwd=d, capture_output=True,

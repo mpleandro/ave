@@ -13,6 +13,14 @@ em `edit-data.json → cta`; quem monta é `helpers/cta.py`, chamado pelo
 | `siga-perfil` | cápsula escura no topo que abre a partir da foto: "Siga o perfil" + @, um cursor aperta "Seguir" → "Seguindo ✓". Botão e anel na cor de destaque | **sim** | 5,8 s |
 | `instagram-card` | o ícone do Instagram vira um cartão com foto, @ e selo, "Seguir" → "Seguindo", e fecha | **sim** | 4,96 s |
 | `instagram-simples` | só o botão "Seguir" → "Seguindo" (`assets/overlays/ig_follow.mov`), logo acima da legenda | não | 3 s |
+| `cartao-perfil` | cartão de vidro escuro com foto (anel na cor de destaque), @, **descrição** do perfil e "Seguir"; uma mão sobe e aperta → "Seguindo", e o cartão sobe e some. Topo padrão 1040px, 780px de largura (área segura) | **sim** + descrição | 3,2 s |
+
+O `cartao-perfil` nasceu sob medida no projeto Shorts/edit (`c03_siga`) e virou
+modelo em 2026-11-09. É o único que pede **descrição** (`cta.descricao`, ex.:
+"IA + edição de vídeo"): a do projeto, senão `~/.avelin/brand.json →
+descricao`; sem nenhuma, a Fase 2 recusa e manda PERGUNTAR (foto, @ e
+descrição numa pergunta só). O editor mostra o campo "Descrição do perfil" na
+aba CTA e grava no brand.json, como o @.
 
 O `siga-perfil` nasceu sob medida no "Mais viral, mais raso" (2026-10-13) e
 virou modelo, com foto, @ e cor como variáveis.
@@ -86,6 +94,7 @@ uv run python helpers/cta.py preparar --card <mov> --simples <mov>
 
 | arquivo | o que é |
 |---|---|
+| `cartao-perfil.html` | modelo do cartão (`{{FOTO}}`, `{{ARROBA}}`, `{{DESCRICAO}}`, `{{ACCENT}}`, `{{CLIQUE}}`, `{{ID}}`) |
 | `siga-perfil.html` | modelo da cápsula (`{{FOTO}}`, `{{ARROBA}}`, `{{ACCENT}}`, `{{CLIQUE}}`, `{{ID}}`) |
 | `instagram-card.html` | modelo do card: vídeo + foto + @ seguindo o mapa |
 | `instagram-card.webm` | o card sem verde, sem foto e sem @ — **gerado** |

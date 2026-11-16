@@ -64,15 +64,19 @@ O instalador faz tudo e termina com uma conferência (✓/✗ por peça):
    iPhone) e a **transcrição local** (detector de voz + Whisper), que é o que
    mantém no texto as repetições e os falsos começos que o corte precisa achar.
 4. **Modelo de voz** (~1,6 GB, uma vez só).
-5. **Conferência real** — transcreve um áudio de teste antes de dizer "pronto".
+5. **Node.js**, só se o seu computador não tiver um 22+ — em segundo plano,
+   enquanto o resto termina. Um Node que você já tenha não é trocado.
+6. **Conferência real** — transcreve um áudio de teste antes de dizer "pronto".
+7. **O editor abre no navegador**, pronto para você soltar um vídeo.
 
 Se preferir que o agente faça: abra o Claude Code e peça *"instala o Avelin"*.
 Ele roda o mesmo comando e explica cada passo.
 
-**Node.js** é o único programa que o instalador não baixa: só a Fase 2
-(legendas e gráficos) precisa dele. Se faltar, a conferência avisa; instale a
-versão LTS em [nodejs.org](https://nodejs.org) quando quiser a Fase 2. A Fase 1
-(corte limpo) funciona sem ele.
+**Node.js** (só a Fase 2: legendas e gráficos) vem junto quando falta: o
+binário oficial do nodejs.org, conferido pelo checksum, numa pasta sua
+(`~/.avelin/node`) — sem senha de administrador. Ele baixa em segundo plano; a
+checklist do editor mostra o progresso e vira ✓ sozinha. O corte funciona
+enquanto isso.
 
 **Menos pedidos de aprovação no Claude Code:** a conferência sugere uma lista
 para `~/.claude/settings.json` (`permissions.allow`). Com ela, uma edição

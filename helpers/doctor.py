@@ -7,7 +7,7 @@
 O que confere:
   ffmpeg/ffprobe (com zscale, deesser, loudnorm) · VAD (Silero/onnx) · Whisper
   local (transcreve 2 s de áudio sintético de verdade, não só importa) ·
-  Node ≥ 18 (Fase 2) · permissões do Claude Code (allowlist sugerida).
+  Node ≥ 22 (Fase 2; o do sistema ou o do editor) · permissões do Claude Code (allowlist sugerida).
 
 Nenhuma chave de API é conferida: nenhuma é obrigatória. Groq/ElevenLabs
 só servem como reserva em máquina sem transcrição local.
@@ -111,16 +111,10 @@ def checar_whisper(transcrever: bool = True) -> dict:
 
 
 def checar_node() -> dict:
-    node = shutil.which("node")
-    if not node:
-        return {"ok": False, "erro": "Node.js não encontrado — a Fase 2 (legendas, gráficos) precisa dele: nodejs.org (LTS)"}
-    try:
-        v = subprocess.run([node, "--version"], capture_output=True, text=True, timeout=10).stdout.strip()
-        major = int(v.lstrip("v").split(".")[0])
-        return {"ok": major >= 18, "versao": v,
-                **({} if major >= 18 else {"erro": f"Node {v} é antigo; precisa 18+"})}
-    except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "erro": str(exc)[:200]}
+    """Node >= 22 (o motor da Fase 2 exige). Do sistema ou o do editor
+    (~/.avelin/node, instalado por instalar_node.py) — ver nodebin.py."""
+    import nodebin
+    return nodebin.estado()
 
 
 def checar_permissoes() -> dict:
@@ -202,7 +196,12 @@ def main() -> int:
     w = rel["whisper"]
     print(f"  {_ok(w['ok'])} transcrição local {w.get('motor', '')}" + (f" — {w['erro']}" if w.get("erro") else ""))
     n = rel["node"]
-    print(f"  {_ok(n['ok'])} Node.js {n.get('versao', '')} (só a Fase 2)" + (f" — {n['erro']}" if n.get("erro") else ""))
+    if n.get("instalando"):
+        pct = f" {round((n.get('progresso') or 0) * 100)}%" if n.get("progresso") else ""
+        print(f"  … Node.js (só a Fase 2) — instalando em segundo plano{pct}; a Fase 1 já funciona")
+    else:
+        origem = " do editor" if n.get("origem") == "avelin" else ""
+        print(f"  {_ok(n['ok'])} Node.js{origem} {n.get('versao') or ''} (só a Fase 2)" + (f" — {n['erro']}" if n.get("erro") else ""))
     p = rel["permissoes"]
     print(f"  {_ok(p['ok'])} permissões do Claude Code" + ("" if p["ok"] else " — para menos pedidos de aprovação, adicione em "
           f"{p['arquivo']} → permissions.allow:"))
@@ -211,8 +210,9 @@ def main() -> int:
             print(f"        {json.dumps(a)}")
     print()
     print("Fase 1 pronta: " + ("SIM" if fase1_ok else "NÃO — rode `uv run python helpers/doctor.py --preparar`"))
-    if not n["ok"]:
-        print("Fase 2 (legendas e gráficos) espera o Node.js; a Fase 1 funciona sem ele.")
+    if not n["ok"] and not n.get("instalando"):
+        print("Fase 2 (legendas e gráficos) espera o Node.js; a Fase 1 funciona sem ele.\n"
+              "Para instalar: `uv run python helpers/instalar_node.py` (sem senha de administrador).")
     return 0 if fase1_ok else 1
 
 

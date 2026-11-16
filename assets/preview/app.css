@@ -2102,6 +2102,10 @@ button.tl-chip:disabled { cursor: default; }
 .dep-ic { flex: 0 0 12px; color: #5fd07a; font-size: 11px; line-height: 1.4; }
 .dep-row.miss .dep-ic { color: var(--orange); }
 .dep-row.unk .dep-ic { color: var(--dim); }
+.dep-row.wait .dep-ic { color: var(--orange-soft); animation: dep-pulse 1.4s ease-in-out infinite; }
+.dep-row.wait .dep-why { color: var(--orange-soft); }
+@keyframes dep-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .dep-row.wait .dep-ic { animation: none; } }
 .dep-txt { min-width: 0; }
 .dep-name { font-weight: 500; }
 /* A explicação vem DEPOIS do nome, na mesma linha enquanto couber: em duas

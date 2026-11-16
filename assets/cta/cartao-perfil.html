@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1080, height=1920" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+  /* CTA "Cartão de perfil" — modelo da biblioteca (assets/cta/, helpers/cta.py).
+   * Nasceu sob medida no projeto Shorts/edit (c03_siga, 2026-11) e virou modelo
+   * em 2026-11-09: cartão de vidro escuro com a FOTO (anel na cor de destaque),
+   * o @, uma DESCRIÇÃO curta do perfil e o botão "Seguir"; uma mão sobe, aperta,
+   * e o botão vira "Seguindo". Foto, @, descrição e cor são variáveis. O clique
+   * ({{CLIQUE}}s dentro do modelo) é alinhado pelo composer com a chamada.
+   * Largura 780px — dentro da área segura (≤ 840) do vertical.
+   */
+  @font-face { font-family: 'Mont'; font-weight: 800; src: local('Montserrat ExtraBold'), local('Montserrat-ExtraBold'); }
+  @font-face { font-family: 'Mont'; font-weight: 700; src: local('Montserrat Bold'), local('Montserrat-Bold'); }
+  @font-face { font-family: 'Mont'; font-weight: 500; src: local('Montserrat Medium'), local('Montserrat-Medium'); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; background: transparent; }
+  #{{ID}}-palco { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; }
+  #{{ID}}-card { position: absolute; left: 150px; top: 1040px; width: 780px; height: 260px;
+    display: flex; align-items: center; gap: 34px; padding: 0 40px; border-radius: 32px;
+    background: rgba(11,18,32,.86); border: 1px solid rgba(255,255,255,.16);
+    box-shadow: 0 24px 60px rgba(0,0,0,.45); font-family: 'Mont', sans-serif; color: #eef2f7; opacity: 0; }
+  #{{ID}}-foto { width: 170px; height: 170px; flex: none; border-radius: 50%; object-fit: cover;
+    border: 6px solid {{ACCENT}}; display: block; }
+  #{{ID}}-txt { min-width: 0; }
+  #{{ID}}-arroba { font-size: 44px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #{{ID}}-desc { font-size: 26px; font-weight: 500; color: #8a94a6; margin-top: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #{{ID}}-btn { margin-top: 18px; display: inline-block; background: #0095f6; padding: 14px 60px;
+    border-radius: 14px; font-size: 30px; font-weight: 700; color: #fff; }
+  #{{ID}}-mao { position: absolute; left: 640px; top: 1300px; font-size: 84px; opacity: 0;
+    filter: drop-shadow(0 6px 10px rgba(0,0,0,.45)); }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="{{ID}}" data-start="0" data-duration="{{DURACAO}}"
+     data-width="1080" data-height="1920">
+  <div id="{{ID}}-palco">
+    <div id="{{ID}}-card">
+      <img id="{{ID}}-foto" src="{{FOTO}}" alt="" />
+      <div id="{{ID}}-txt">
+        <div id="{{ID}}-arroba">@{{ARROBA}}</div>
+        <div id="{{ID}}-desc">{{DESCRICAO}}</div>
+        <div id="{{ID}}-btn">Seguir</div>
+      </div>
+    </div>
+    <div id="{{ID}}-mao">👆</div>
+  </div>
+</div>
+<script>
+  var tl = gsap.timeline({ paused: true });
+  /* POSIÇÃO (cta.top/left/width em % do quadro, gravados pelo cta.py): TOPO é a
+     borda de cima do cartão. Placeholder não substituído (demonstração do
+     editor) cai no padrão: 1040px, 780px de largura, centrado. */
+  var num = function (v, d) { v = parseFloat(v); return isFinite(v) ? v : d; };
+  var TOPO = num('{{PTOP}}', 1040), ESC = num('{{PESC}}', 1), CX = num('{{PCX}}', 540);
+  if (ESC <= 0) ESC = 1;
+  var LARG = 780, ESQ = CX - LARG / 2;
+  var card = document.getElementById('{{ID}}-card'), palco = document.getElementById('{{ID}}-palco');
+  var mao = document.getElementById('{{ID}}-mao');
+  card.style.top = TOPO + 'px'; card.style.left = ESQ + 'px';
+  mao.style.top = (TOPO + 260) + 'px'; mao.style.left = (ESQ + 490) + 'px';
+  palco.style.transformOrigin = CX + 'px ' + TOPO + 'px';
+  palco.style.transform = 'scale(' + ESC + ')';
+  /* sem a descrição, o @ e o botão se ajeitam sozinhos (o flex centra) */
+  var desc = document.getElementById('{{ID}}-desc');
+  if (!desc.textContent.trim() || desc.textContent.indexOf('{{') === 0) desc.style.display = 'none';
+  var CLIQUE = {{CLIQUE}}, DUR = {{DURACAO}};
+  tl.fromTo('#{{ID}}-card', { y: 50, opacity: 0 }, { y: 0, opacity: 1, duration: .45, ease: 'power3.out' }, .1);
+  /* a mão sobe de baixo e para em cima do botão */
+  tl.fromTo('#{{ID}}-mao', { x: 160, y: 120, opacity: 0 }, { x: 0, y: -110, opacity: 1, duration: .6, ease: 'power2.out' }, CLIQUE - .65);
+  tl.to('#{{ID}}-btn', { scale: .9, duration: .08 }, CLIQUE);
+  tl.set('#{{ID}}-btn', { textContent: 'Seguindo', backgroundColor: '#2b3242' }, CLIQUE + .08);
+  tl.to('#{{ID}}-btn', { scale: 1, duration: .2, ease: 'back.out(3)' }, CLIQUE + .08);
+  tl.to('#{{ID}}-mao', { opacity: 0, y: '+=60', duration: .3, ease: 'power1.in' }, CLIQUE + .45);
+  /* fecha: sobe um pouco e some — um cartão que só desaparece lê como corte */
+  tl.to('#{{ID}}-card', { y: -30, opacity: 0, duration: .3, ease: 'power2.in' }, Math.max(CLIQUE + .6, DUR - .32));
+  tl.set({}, {}, DUR);
+  window.__timelines = window.__timelines || {};
+  window.__timelines['{{ID}}'] = tl;
+</script>
+</body>
+</html>

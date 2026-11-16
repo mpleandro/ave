@@ -1597,7 +1597,13 @@ async function loadCtaFoto(force) {
    módulo; o que é do editor (a foto do projeto, o @, o destaque) entra aqui. */
 function ctaMock(id, host) {
   ESTILOS.ctaMock(id, host, { foto: S.ctaFoto && S.ctaFoto.tem ? S.ctaFoto.url : '',
-                              arroba: ctaArroba(), accent: S.style.accent || ACCENT_DEFAULT });
+                              arroba: ctaArroba(), accent: S.style.accent || ACCENT_DEFAULT,
+                              descricao: ctaDescricao() });
+}
+
+/* A descrição do perfil (só o "Cartão de perfil"): a do projeto, senão a da marca. */
+function ctaDescricao() {
+  return ((S.style.cta || {}).descricao || '').trim() || ((S.brand || {}).descricao || '').trim();
 }
 
 function ctaArroba() { return ESTILOS.ctaArroba(S.style, S.brand); }
@@ -1639,6 +1645,16 @@ function buildCtaBody(body) {
   inp.spellcheck = false;
   inp.placeholder = ((S.brand || {}).instagram || '@seuperfil');
   inp.value = S.style.cta.arroba || '';
+  if (m.descricao) {
+    const ld = el('label', 'cta-label', col);
+    ld.textContent = 'Descrição do perfil';
+    const di = el('input', 'cta-arroba', col);
+    di.id = 'ctaDescricao';
+    di.type = 'text';
+    di.maxLength = 40;
+    di.placeholder = ((S.brand || {}).descricao || 'ex.: IA + edição de vídeo');
+    di.value = S.style.cta.descricao || '';
+  }
   const acoes = el('div', 'cta-acoes', col);
   const b = (acao, txt, tip) => {
     const x = el('button', 'btn ghost small', acoes);
@@ -1736,6 +1752,22 @@ document.addEventListener('paste', (e) => {
   if (!it) return;
   e.preventDefault();
   ctaEnviaFoto(it.getAsFile());
+});
+
+// a descrição segue o mesmo caminho do @: estado, barra e brand.json
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'ctaDescricao') return;
+  if (!S.style.cta) S.style.cta = { modelo: '', arroba: '' };
+  S.style.cta.descricao = e.target.value.trim();
+  refreshActionBar();
+  clearTimeout(ctaDescricao.t);
+  ctaDescricao.t = setTimeout(() => {
+    const v = S.style.cta.descricao;
+    if (!v) return;
+    fetch('/api/brand', { method: 'POST', body: JSON.stringify({ descricao: v }) })
+      .then((r) => r.json()).then((d) => { if (d && d.brand) S.brand = { ...(S.brand || {}), descricao: d.brand.descricao }; })
+      .catch(() => {});
+  }, 900);
 });
 
 // o @ não reconstrói o painel a cada tecla: só o estado, o resumo e a barra
@@ -4172,37 +4204,47 @@ wireDropzone();
 const IS_WIN = /Win/i.test((navigator.userAgentData && navigator.userAgentData.platform)
                            || navigator.platform || navigator.userAgent || '');
 
+/* As correções são FRASES PARA O AGENTE, não comandos de terminal: a
+   instalação inteira acontece pelo chat (Claude Code ou Codex), sem brew, sem
+   sudo — e quem lê esta tela é criador, não desenvolvedor. */
+const PECA = (frase) => `peça ao agente: “${frase}”`;
+
 const DEP_ITEMS = [
   { id: 'ffmpeg', dep: 'ffmpeg', req: true, name: 'ffmpeg',
     why: 'corta, converte e exporta — a Fase 1 inteira passa por ele',
-    fix: IS_WIN ? 'winget install Gyan.FFmpeg' : 'brew install ffmpeg-full && brew link --overwrite --force ffmpeg-full' },
+    fix: PECA('roda a conferência do Avelin e conserta o que faltar') },
   { id: 'ffprobe', dep: 'ffprobe', req: true, name: 'ffprobe',
     why: 'lê duração, resolução e fps das fontes',
     fix: 'vem junto com o ffmpeg' },
   { id: 'uv', dep: 'uv', req: true, name: 'uv (Python)',
     why: 'roda os helpers da skill no ambiente certo',
-    fix: IS_WIN ? 'winget install astral-sh.uv' : 'brew install uv' },
-  { id: 'groq', key: 'groq', req: true, name: 'Chave do Groq',
-    why: 'transcrição — sem ela nada é cortado, porque o corte parte do texto',
-    fix: 'console.groq.com/keys → GROQ_API_KEY no .env da skill' },
+    fix: PECA('instale https://github.com/mpleandro/ave') },
   /* Node é obrigatório, mas só a partir da Fase 2 — e essa diferença muda o
-     que a tela deve fazer: ela AVISA, e não impede de gerar o corte. */
-  { id: 'node', dep: 'node', req: true, phase2: true, name: 'Node.js 18+',
+     que a tela deve fazer: ela AVISA, e não impede de gerar o corte. A
+     instalação baixa o Node em segundo plano quando o computador não tem um
+     22+; enquanto isso a linha mostra o progresso (ver depRow). */
+  { id: 'node', dep: 'node', req: true, phase2: true, name: 'Node.js 22+',
     why: 'motor da Fase 2 (legendas, gráficos, imagens)',
-    fix: IS_WIN ? 'winget install OpenJS.NodeJS.LTS' : 'brew install node' },
+    fix: PECA('instala o Node do Avelin') },
 
   { id: 'ffmpeg_hdr', dep: 'ffmpeg_hdr', name: 'ffmpeg completo (HDR)',
     why: 'vídeo de iPhone e de câmera em HDR — converte para cores normais no corte',
-    fix: IS_WIN ? 'winget install Gyan.FFmpeg (o build completo já traz)'
-      : 'brew install ffmpeg-full && brew unlink ffmpeg && brew link --overwrite --force ffmpeg-full' },
+    fix: PECA('baixa de novo o ffmpeg completo do Avelin') },
   { id: 'hyperframes', dep: 'hyperframes', name: 'Cache do HyperFrames',
     why: 'os ~365 MB do motor da Fase 2',
     fix: 'baixa sozinho na primeira Fase 2 — nada a fazer' },
   { id: 'ytdlp', dep: 'ytdlp', name: 'yt-dlp',
     why: 'trazer material de uma URL (YouTube, Drive)',
-    fix: IS_WIN ? 'winget install yt-dlp.yt-dlp' : 'brew install yt-dlp' },
+    fix: 'instala sozinho na primeira vez que você mandar um link' },
+  /* A transcrição é LOCAL desde a instalação sem chave: Groq e ElevenLabs
+     viraram reserva para máquina sem motor local. Enquanto o Groq aparecia
+     como obrigatório, toda instalação nova abria com "falta um item
+     obrigatório" — acusando a pessoa de ter esquecido algo que ninguém pediu. */
+  { id: 'groq', key: 'groq', name: 'Chave do Groq',
+    why: 'transcrição na nuvem, só como reserva — a transcrição local já roda',
+    fix: 'console.groq.com/keys → ' + PECA('põe minha chave do Groq no .env') },
   { id: 'elevenlabs', key: 'elevenlabs', name: 'Chave da ElevenLabs',
-    why: 'transcrever fontes longas (>5 min) com mais precisão',
+    why: 'transcrição na nuvem, outra reserva',
     fix: 'elevenlabs.io/app/settings/api-keys → ELEVENLABS_API_KEY' },
   { id: 'pexels', key: 'pexels', name: 'Chave da Pexels',
     why: 'imagens e vídeos ilustrativos na Fase 2',
@@ -4230,19 +4272,31 @@ const depMissing = (f) => DEP_ITEMS.filter((it) => depOk(it) === false).filter(f
    um motor de render para ver um corte que não usa nenhum. */
 const depBlocking = () => depMissing((it) => it.req && !it.phase2);
 
+/* O Node chegando em segundo plano. `null` quando não há instalação em curso. */
+function nodeInstalando() {
+  const ni = S.deps && S.deps.node_install;
+  if (!ni || !ni.instalando) return null;
+  const pct = ni.progresso ? ` ${Math.round(ni.progresso * 100)}%` : '';
+  const etapa = { baixando: `baixando${pct}`, conferindo: 'conferindo o download',
+                  extraindo: 'desempacotando' }[ni.etapa] || 'instalando';
+  return `instalando em segundo plano — ${etapa}. A tela atualiza sozinha.`;
+}
+
 function depRow(it) {
   const ok = depOk(it);
+  const chegando = it.id === 'node' && ok === false ? nodeInstalando() : null;
   const row = document.createElement('div');
-  row.className = `dep-row${ok === false ? ' miss' : ''}${ok === null ? ' unk' : ''}`;
+  row.className = `dep-row${chegando ? ' wait' : (ok === false ? ' miss' : '')}${ok === null ? ' unk' : ''}`;
   row.innerHTML = '<span class="dep-ic"></span>'
     + '<span class="dep-txt"><span class="dep-name"></span>'
     + '<span class="dep-why"></span></span>';
-  row.querySelector('.dep-ic').textContent = ok === null ? '·' : (ok ? '✓' : '✗');
+  row.querySelector('.dep-ic').textContent = chegando ? '…' : (ok === null ? '·' : (ok ? '✓' : '✗'));
   row.querySelector('.dep-name').textContent = it.name
     + (it.phase2 ? ' — a partir da Fase 2' : '');
   // Faltando, a linha diz COMO resolver; presente, diz para que serve. As duas
   // frases servem a momentos diferentes e mostrar as duas juntas dobra a lista.
-  row.querySelector('.dep-why').textContent = ok === false ? it.fix : it.why;
+  // Chegando em segundo plano, nem uma coisa nem outra: diz que está vindo.
+  row.querySelector('.dep-why').textContent = chegando || (ok === false ? it.fix : it.why);
   return row;
 }
 
@@ -4276,6 +4330,10 @@ function renderDepsCard() {
   if (faltaObrig.length) {
     resumo = `Falta ${faltaObrig.length === 1 ? 'um item obrigatório' : `${faltaObrig.length} itens obrigatórios`}: `
       + faltaObrig.map((it) => it.name).join(', ');
+  } else if (faltaNode && nodeInstalando()) {
+    const ni = S.deps.node_install;
+    const pct = ni.progresso ? ` (${Math.round(ni.progresso * 100)}%)` : '';
+    resumo = `Pronto para cortar — o Node.js da Fase 2 está chegando${pct}`;
   } else if (faltaNode) {
     resumo = 'Pronto para cortar — o Node.js falta só para a Fase 2';
   } else {
@@ -4292,8 +4350,8 @@ function renderDepsCard() {
                               DEP_ITEMS.filter((it) => !it.req)));
   const pe = document.createElement('div');
   pe.className = 'dep-foot';
-  pe.textContent = 'As chaves moram no arquivo .env dentro da pasta da skill. '
-    + 'Peça à IA no chat — “põe minha chave do Groq no .env” — e ela grava para você.';
+  pe.textContent = 'Nenhuma chave é necessária para editar. As opcionais moram no arquivo .env '
+    + 'da skill: peça à IA no chat — “põe minha chave da Pexels no .env” — e ela grava para você.';
   body.appendChild(pe);
 
   // Aberta sozinha só quando há o que resolver. Depois que o usuário toca no

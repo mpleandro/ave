@@ -2142,9 +2142,22 @@ def _transicao_zoom_blur(k, tr, at, duration, fps, W, accent):
     """Igual ao estouro, com borrão radial crescendo junto — o zoom de
     CapCut/Reels. Mesma razão de animar `#vidwin`, não `#a-roll`."""
     cfg = VARIANTS["transicoes"]["zoomBlur"]
-    scale, blur = cfg["scale"], cfg["blur"]
-    inn = cfg["inFrames"] / fps
-    outt = min(cfg["outFrames"] / fps, duration - at)
+    scale, blur = tr.get("scale", cfg["scale"]), tr.get("blur", cfg["blur"])
+    inn = tr.get("inFrames", cfg["inFrames"]) / fps
+    outt = min(tr.get("outFrames", cfg["outFrames"]) / fps, duration - at)
+    if tr.get("entrada"):
+        # ABERTURA (pedido do usuário, 2026-11-16): ZOOM IN BLUR. O vídeo começa
+        # num plano mais aberto (`de`, < 1) e AVANÇA SÓ PARA DENTRO até o plano
+        # (1) — que é o zoom da câmera do gancho e FICA o gancho inteiro. O
+        # borrão sobe e desce durante o avanço. Sem passar do ponto: qualquer
+        # recuo no fim lê como "aproximou e voltou" (flash). Três versões
+        # erradas antes desta: ida-e-volta, "nasce aproximado e recua", e
+        # avanço com sobra que recuava.
+        de = tr.get("de", 0.75)
+        tot = inn + outt
+        return "", (f"\n  tl.fromTo('#vidwin', {{scale:{de}}}, {{scale:1, duration:{tot:.3f}, ease:'power3.inOut'}}, {at:.3f});"
+                    f"\n  tl.fromTo('#vidwin', {{filter:'blur(0px)'}}, {{filter:'blur({blur}px)', duration:{inn:.3f}, ease:'power2.in'}}, {at:.3f});"
+                    f"\n  tl.to('#vidwin', {{filter:'blur(0px)', duration:{outt:.3f}, ease:'power2.out'}}, {at + inn:.3f});")
     js = (f"\n  tl.fromTo('#vidwin', {{scale:1, filter:'blur(0px)'}}, "
           f"{{scale:{scale}, filter:'blur({blur}px)', duration:{inn:.3f}, ease:'power2.in'}}, "
           f"{max(0.0, at - inn):.3f});")
@@ -2379,8 +2392,15 @@ def render_html(data, timed, st, style_id, video, duration, orphans, penalty, vd
     # clara atrás da barra, o #ff3b30 escolhido pelo usuário era reprovado por
     # contraste e saía #FFAD7A — salmão numa barra que ele pediu vermelha.
     _hkv = VARIANTS["headlines"].get(hk.get("style", "card"), {})
-    _accent_e_chapa = any(str(v).startswith("sobre")
-                          for v in (_hkv.get("paint") or {}).values())
+    # Accent que PREENCHE uma caixa (a tarja da `etiqueta`: `tagBox`) também é
+    # chapa — o texto lê contra ela, não contra a parede. Medir o fundo trocava
+    # o Laranja Ignis da tarja por bege (#FFAD7A); apontado pelo usuário em
+    # 2026-11-16. `hook.accentFixo: true` força o mesmo para qualquer layout.
+    _paint = _hkv.get("paint") or {}
+    _accent_e_chapa = (any(str(v).startswith("sobre") for v in _paint.values())
+                       or any(k.lower().endswith("box") and v == "accent"
+                              for k, v in _paint.items())
+                       or bool(hk.get("accentFixo")))
     if (hk.get("enabled") and _hkv.get("usesAccent")
             and not _hkv.get("cheia") and not _accent_e_chapa):
         hv = Path(data.get("_proj", ".")) / data.get("_video", "preview.mp4")

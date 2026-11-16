@@ -36,6 +36,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ffbin  # noqa: E402
 ffbin.garantir()
+# Node >= 22 na frente do PATH (o do sistema, ou o do editor em ~/.avelin/node) — ver nodebin.py
+import nodebin  # noqa: E402
+nodebin.garantir()
 
 HELPERS = Path(__file__).resolve().parent
 sys.path.insert(0, str(HELPERS))
@@ -376,6 +379,8 @@ def apply_style_pick(edit: Path, data: dict) -> tuple[dict, bool]:
             cur["modelo"] = c["modelo"]
             if (c.get("arroba") or "").strip():
                 cur["arroba"] = c["arroba"].strip()
+            if (c.get("descricao") or "").strip():
+                cur["descricao"] = c["descricao"].strip()
         else:
             data.pop("cta", None)
     # EFEITO DO GANCHO (camada Headline, motor de efeitos). Vazio é "nenhum" e
@@ -433,11 +438,22 @@ def check_cta(data: dict, proj: Path) -> None:
                 f"ou print colado), ou grave você mesmo:\n"
                 f"  uv run python helpers/cta.py foto <edit> <imagem>\n"
                 f"  uv run python helpers/cta.py foto <edit> --quadro <segundos>\n")
+    try:
+        marca = json.loads((Path.home() / ".avelin" / "brand.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        marca = {}
+    # DESCRIÇÃO do perfil (só o "Cartão de perfil" pede): a do projeto, senão a
+    # da marca (`brand.json → descricao`); sem nenhuma, recusa e manda perguntar.
+    if m.get("descricao") and not (c.get("descricao") or "").strip():
+        if (marca.get("descricao") or "").strip():
+            c["descricao"] = marca["descricao"].strip()
+        else:
+            sys.exit(
+                f"\nO CTA '{m['nome']}' está ligado, mas falta a DESCRIÇÃO do perfil "
+                f"(ex.: \"IA + edição de vídeo\").\n"
+                f"Pergunte ao usuário (AskUserQuestion) e escreva em edit-data.json → "
+                f"cta.descricao (e em ~/.avelin/brand.json → descricao, para os próximos).\n")
     if m["foto"] and not (c.get("arroba") or "").strip():
-        try:
-            marca = json.loads((Path.home() / ".avelin" / "brand.json").read_text())
-        except (OSError, json.JSONDecodeError):
-            marca = {}
         if (marca.get("instagram") or "").strip():
             c["arroba"] = marca["instagram"].strip()
         else:

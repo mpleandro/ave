@@ -176,13 +176,23 @@ def _deps() -> dict:
     existe custa um processo por poll, e o poll é de 2 em 2 segundos.
     """
     import shutil
+    import nodebin
+    _node = nodebin.estado()
+    # o Node que acabou de chegar entra no PATH deste processo: a Fase 2 que o
+    # próprio servidor dispara (salvar já refaz) herda o ambiente dele
+    if _node["ok"]:
+        nodebin.garantir()
     return {
         # sem estes, nada funciona
         "ffmpeg": bool(shutil.which("ffmpeg")),
         "ffprobe": bool(shutil.which("ffprobe")),
         "uv": bool(shutil.which("uv")),
-        # só a Fase 2 precisa
-        "node": bool(shutil.which("node")),
+        # só a Fase 2 precisa — Node >= 22, o do sistema ou o do editor
+        # (~/.avelin/node). Enquanto o instalar_node.py baixa em segundo plano,
+        # `node_install` leva a etapa e o progresso, e a checklist mostra
+        # "instalando… 40%" em vez de ✗ — e vira ✓ sozinha no poll seguinte.
+        "node": _node["ok"],
+        "node_install": {k: _node.get(k) for k in ("instalando", "etapa", "progresso", "erro", "origem", "versao")},
         # o motor da Fase 2 resolve sozinho pelo npx; o cache é o sinal de que
         # ele já foi baixado uma vez (~1 GB, compartilhado entre projetos)
         "hyperframes": (Path.home() / ".cache" / "hyperframes").exists(),
@@ -267,7 +277,7 @@ SERVER = Path.home() / ".avelin" / "server.json"
 BRAND = Path.home() / ".avelin" / "brand.json"
 # `instagram` é o @ do CTA de fechamento: de quem faz, não do vídeo — como a cor.
 BRAND_KEYS = ("accent", "textColor", "capColor", "fontMain", "fontAccent", "capFont",
-              "instagram")
+              "instagram", "descricao")
 
 # AS ESCOLHAS DE ESTILO, lembradas entre projetos. O `brand.json` já guardava a
 # identidade (cor e letra); faltava o resto do que o usuário marca toda vez —
@@ -815,6 +825,7 @@ class Handler(BaseHTTPRequestHandler):
         arroba = (marca.get("instagram") or "seuperfil").lstrip("@")
         accent = marca.get("accent") or "#ff3b30"
         subs = {"{{FOTO}}": foto, "{{ARROBA}}": arroba, "{{ACCENT}}": accent,
+                "{{DESCRICAO}}": (marca.get("descricao") or "descrição do perfil"),
                 "{{CLIQUE}}": f"{m['clique']:.3f}", "{{DURACAO}}": f"{m['duracao']:.3f}",
                 "{{ID}}": "demo"}
         if modelo == "instagram-card":

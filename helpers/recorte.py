@@ -46,6 +46,9 @@ import numpy as np
 
 HELPERS = Path(__file__).resolve().parent
 SKILL = HELPERS.parent
+sys.path.insert(0, str(HELPERS))
+import nodebin  # noqa: E402  — Node >= 22 na frente do PATH antes de copiar o ambiente
+nodebin.garantir()
 HF = ["npx", "--yes", "hyperframes@0.7.109"]
 ENV = {**os.environ, "HYPERFRAMES_SKIP_SKILLS": "1"}
 MEDIR_W = 360                       # largura de medição (1080/3)

@@ -1180,7 +1180,7 @@ Nas outras camadas o player volta ao vídeo editado; apertar play também.
 | Câmera | zoom por corte, aproximação lenta, perseguição do olhar, flash · `zoomPunch` `zoomThrough` |
 | Efeitos (`efeitos[]`) | `checklist` `chartGrow` `conta` `versus` `phoneMockup` `uiWorld` |
 | Efeito do gancho (`ganchoEfeito`) | `frameBreak` `coverStory` `headlineWall` `couchWall` `orbit` `vertigo` |
-| CTA | `siga-perfil` `instagram-card` `instagram-simples` `revelarApp` |
+| CTA | `siga-perfil` `cartao-perfil` (foto + @ + descrição) `instagram-card` `instagram-simples` `revelarApp` |
 | Curta | inserts, palavras em destaque, gráficos sob medida |
 | Longform | B-roll, lower-thirds, cards de capítulo, callouts |
 | Som | efeitos por evento + trilha |
@@ -1677,7 +1677,7 @@ starts sounding like a different microphone.
 The cut is approved and the user picked the style in the UI (`preview_style.json`)
 → load **one** file and build exactly what was picked:
 
-- **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, hook headline (band or full-screen cartela), dynamic camera, inserts, behind-the-subject, SFX, soundtrack. **`hook.lines`, o frame zero, a virada do riser e o prompt da trilha saem de `references/hooks.md`** (lote de 4 com a regra 3-2-1, diferenciação forçada, CTA por objetivo). **CTA de fechamento (aba CTA → `edit-data.cta`)**: modelos Siga o perfil / Instagram Card / Instagram Simples em `assets/cta/` via `helpers/cta.py` — os dois primeiros exigem a foto (`hyperframes/cta/perfil.png`, ou `cta.py foto`) e a Fase 2 recusa sem ela.
+- **Vertical / Reels / TikTok / Shorts → read `references/shortform.md`.** Karaoke captions, hook headline (band or full-screen cartela), dynamic camera, inserts, behind-the-subject, SFX, soundtrack. **`hook.lines`, o frame zero, a virada do riser e o prompt da trilha saem de `references/hooks.md`** (lote de 4 com a regra 3-2-1, diferenciação forçada, CTA por objetivo). **CTA de fechamento (aba CTA → `edit-data.cta`)**: modelos Siga o perfil / Cartão de perfil / Instagram Card / Instagram Simples em `assets/cta/` via `helpers/cta.py` — os três primeiros exigem a foto (o Cartão de perfil também a DESCRIÇÃO: pergunte foto, @ e descrição juntos se faltar no projeto e no `brand.json`) (`hyperframes/cta/perfil.png`, ou `cta.py foto`) e a Fase 2 recusa sem ela.
 - **Horizontal / YouTube / tutorial / vlog → read `references/longform.md`.** Retention cut is there too (read it BEFORE Phase 1 on longform jobs), B-roll, lower-thirds, chapter cards, callouts, .srt + chapters, soundtrack.
 
 Both tracks: `helpers/phase2.py <edit>` faz tudo — aplica a escolha da aba Estilo, monta o projeto, compõe, roda o `check`, renderiza, normaliza a loudness e devolve os caminhos ao editor. A edição inteira é o `edit-data.json`; nada de código por sessão fora dos gráficos sob medida em `compositions/`. **Não carregue a skill `remotion-best-practices`.** Não é o motor desta skill.

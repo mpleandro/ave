@@ -15,6 +15,8 @@ cta`:
 | `instagram-card`    | o ícone do Instagram vira um cartão com foto, @ e      | sim  |
 |                     | "Seguir → Seguindo", e fecha                           |      |
 | `instagram-simples` | só o botão "Seguir → Seguindo"                         | não  |
+| `cartao-perfil`     | cartão com foto, @, DESCRIÇÃO e "Seguir"; uma mão      | sim  |
+|                     | aperta → "Seguindo" (pede também `cta.descricao`)      |      |
 
 O `siga-perfil` nasceu sob medida no "Mais viral, mais raso" (2026-10-13) e
 virou modelo: mesmo HTML, com foto, @ e cor de destaque como variáveis.
@@ -62,6 +64,11 @@ OVERLAYS = SKILL / "assets" / "overlays"
 MODELOS = {
     "siga-perfil": {"nome": "Siga o perfil", "foto": True, "duracao": 5.8,
                     "clique": 5.08, "html": "siga-perfil.html"},
+    # CARTÃO DE PERFIL (2026-11-09, do projeto Shorts/edit): foto + @ +
+    # DESCRIÇÃO curta do perfil + "Seguir", uma mão aperta. Único que pede a
+    # descrição — `descricao: True` faz a Fase 2 recusar sem ela.
+    "cartao-perfil": {"nome": "Cartão de perfil", "foto": True, "descricao": True,
+                      "duracao": 3.2, "clique": 1.9, "html": "cartao-perfil.html"},
     "instagram-card": {"nome": "Instagram Card", "foto": True, "duracao": 4.96,
                        "clique": 2.54, "html": "instagram-card.html",
                        "video": "instagram-card.webm", "audio": "instagram-card.mp3",
@@ -454,16 +461,18 @@ def montar(data: dict, proj: Path, duration: float, words: list[dict],
         shutil.copy2(foto, comp / "cta-perfil.png")
         accent = data.get("accent") or "#ff3b30"
         subs = {"{{FOTO}}": FOTO_REL, "{{ARROBA}}": _esc(arroba_txt),
+                "{{DESCRICAO}}": _esc((cta.get("descricao") or "").strip()),
                 "{{ACCENT}}": accent, "{{CLIQUE}}": f"{clique:.3f}",
                 "{{DURACAO}}": f"{en - st:.3f}"}
-        if mid == "siga-perfil":
+        if mid in ("siga-perfil", "cartao-perfil"):
             # posição e tamanho em % do quadro, como nos outros modelos: `top`
             # é a borda de cima visível da cápsula, `left` o centro, `width` a
             # largura da cápsula (padrão 700px). Ausentes, o modelo fica no topo.
             if cta.get("top") is not None:
                 subs["{{PTOP}}"] = f"{float(cta['top']) / 100 * H:.1f}"
             if cta.get("width") is not None:
-                subs["{{PESC}}"] = f"{float(cta['width']) / 100 * W / 700:.4f}"
+                base_w = 700 if mid == "siga-perfil" else 780
+                subs["{{PESC}}"] = f"{float(cta['width']) / 100 * W / base_w:.4f}"
             if cta.get("left") is not None:
                 subs["{{PCX}}"] = f"{float(cta['left']) / 100 * W:.1f}"
         if mid == "instagram-card":
@@ -499,7 +508,7 @@ def montar(data: dict, proj: Path, duration: float, words: list[dict],
             f'  <audio id="cta-som" src="cta/{m["audio"]}" data-start="{st:.3f}" '
             f'data-duration="{en - st:.3f}" data-track-index="{track_audio + 30}" '
             f'data-volume="{float(cta.get("volume", 0.8)):.2f}"></audio>')
-    elif mid == "siga-perfil":
+    elif mid in ("siga-perfil", "cartao-perfil"):
         # a cápsula não traz som próprio: o whoosh de entrada é o mesmo dos
         # gráficos sob medida — um gráfico que aparece mudo lê como falha
         events.append((st, "hook"))

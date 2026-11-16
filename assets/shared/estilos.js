@@ -1831,6 +1831,8 @@ const CTA_MODELOS = [
   { id: '', name: 'Nenhum', foto: false },
   { id: 'siga-perfil', name: 'Siga o perfil', foto: true,
     title: 'Cápsula no topo que abre da foto: "Siga o perfil" + @, cursor aperta Seguir' },
+  { id: 'cartao-perfil', name: 'Cartão de perfil', foto: true, descricao: true,
+    title: 'Cartão com foto, @, descrição do perfil e Seguir; uma mão aperta → Seguindo' },
   { id: 'instagram-card', name: 'Instagram Card', foto: true,
     title: 'O ícone do Instagram vira um cartão com foto, @ e Seguir → Seguindo' },
   { id: 'instagram-simples', name: 'Instagram Simples', foto: false,
@@ -1855,6 +1857,20 @@ function ctaMock(id, host, o) {
     host.querySelector('.cta-pill-btn').style.background = accent;
     host.querySelector('.cta-pill-txt i').textContent = arroba || '@perfil';
     if (foto) host.querySelector('.cta-pill-foto').style.backgroundImage = `url("${foto}")`;
+  } else if (id === 'cartao-perfil') {
+    /* desenhado em linha (sem folha própria): cartão escuro, foto com anel na
+       cor de destaque, @, descrição e o botão azul */
+    host.innerHTML = '<div style="position:absolute;left:8%;right:8%;top:52%;display:flex;align-items:center;gap:6%;'
+      + 'padding:6% 5%;border-radius:10px;background:rgba(11,18,32,.9);border:1px solid rgba(255,255,255,.16);font-family:Montserrat,sans-serif">'
+      + '<span class="cp-foto" style="flex:none;width:30%;aspect-ratio:1;border-radius:50%;background:#556 center/cover;border:2px solid ' + accent + '"></span>'
+      + '<span style="min-width:0;display:flex;flex-direction:column;gap:2px;color:#eef2f7">'
+      + '<b class="cp-a" style="font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></b>'
+      + '<i class="cp-d" style="font-size:6px;font-style:normal;color:#8a94a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></i>'
+      + '<span style="align-self:flex-start;margin-top:2px;background:#0095f6;border-radius:3px;padding:1px 6px;font-size:6px;font-weight:700">Seguir</span>'
+      + '</span></div>';
+    host.querySelector('.cp-a').textContent = arroba || '@perfil';
+    host.querySelector('.cp-d').textContent = o.descricao || 'descrição do perfil';
+    if (foto) host.querySelector('.cp-foto').style.backgroundImage = `url("${foto}")`;
   } else if (id === 'instagram-card') {
     host.innerHTML = `<div class="cta-card"><img src="${amb.assets}cta-card.png" alt="">`
       + '<span class="cta-card-foto"></span></div>';

@@ -31,18 +31,34 @@ It does, in order: `uv` (Python installer, user-level, no sudo) → clone or
 update the repo into `~/.claude/skills/ave` (the clone *is* the skill; nothing
 to register) → Python deps, which include a **complete ffmpeg build** (with
 `zscale` for iPhone HDR) and the **local transcription engine** (Silero VAD +
-Whisper) → the voice model (~1.6 GB, once) → `helpers/doctor.py`, a real check
-that runs the VAD and the Whisper engine on synthetic audio.
+Whisper) → **Node.js in the background**, only if the machine has no Node 22+
+(`helpers/instalar_node.py --fundo`) → the voice model (~1.6 GB, once) →
+`helpers/doctor.py`, a real check that runs the VAD and the Whisper engine on
+synthetic audio → `helpers/abrir_editor.py`, which opens the editor in the
+browser (reuses a running one; `AVE_SEM_EDITOR=1` skips).
 
 **No API key is required.** Transcription is local. Groq/ElevenLabs are
 optional fallbacks for machines without a usable local engine; Pexels/Treblo
 only for stock images and AI music. Ask for a key only when the user picks a
 feature that needs it, never at install.
 
-**Node.js 18+** is the only system prerequisite left, and only for Phase 2
-(captions, graphics). `doctor.py` reports it; if missing, say so in one line
-("a Fase 2 precisa do Node.js — nodejs.org, versão LTS") and continue: Phase 1
-works without it.
+**Node.js 22+** (the HyperFrames engine's `engines` floor) is only for Phase 2
+(captions, graphics), and the installer brings it now — no system installer,
+no admin password. `instalar_node.py` downloads the OFFICIAL nodejs.org build
+of the 24.x line, verifies it against `SHASUMS256.txt` and unpacks it into
+`~/.avelin/node/<versão>` (`current` points to it). Rules:
+- a Node 22+ already on the machine → nothing is installed;
+- an older Node (18, 20) → the editor's Node goes **beside** it and is put in
+  front of PATH only inside the editor's processes (`nodebin.garantir()`);
+  the person's Node is never replaced;
+- no Node at all → also linked into `~/.local/bin` (not on Windows).
+
+It runs **in the background** (Phase 1 needs no Node; waiting would hold the
+cut). Progress lives in `~/.avelin/node/estado.json`; the editor's checklist
+reads it every poll ("instalando… 42%") and turns ✓ on its own. If it failed
+(no network), the fix is one sentence to the agent — *"instala o Node do
+Avelin"* → `uv run python helpers/instalar_node.py`. Never tell the user to go
+to nodejs.org.
 
 ## When you run it as the agent
 
