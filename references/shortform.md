@@ -938,14 +938,16 @@ faz e por quê — números medidos na referência Video-43569.
 
 Puts an image or giant word(s) BEHIND the person. Great on medium/wide shots;
 on tight close-ups anchor elements to the TOP (template already does). Needs
-the matting extra: `uv sync --extra matting` (torch).
+the `recorte` resource (RVM in ONNX, ~15 MB — installed, repaired and benchmarked automatically on first use; never ask the user to run anything); the
+optional `recorte_turbo` (torch/CoreML) only makes it faster. Engine choice and
+layers-vs-ffmpeg: SKILL.md, "O motor por baixo".
 
 **Antes: a pergunta do teste de 5s** (SKILL.md, "Recorte de fundo"). Depois,
 cada janela sai do motor APROVADO e é reaproveitada entre renders:
 
 ```bash
 uv run python helpers/recorte.py processar <edit> --inicio <s> --fim <e>
-# → edit/recorte/fg_<motor>_<s>_<e>.mov
+# → edit/recorte/fg_<motor>_<s>_<e>.mask.mp4  (o .mov com alfa nasce dela na composição)
 ```
 
 Then describe each window in `edit-data.json` `behind[]` (kind image/words,

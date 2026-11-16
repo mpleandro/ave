@@ -190,6 +190,8 @@ def montar(data: dict, duracao: float, accent: str, cap_color: str) -> dict | No
                 raise SystemExit(
                     f"cabeça vazando: falta o recorte de {e['t0']:.2f}–{e['t1']:.2f}s — "
                     f"o phase2.py gera (recorte.py processar); rode a Fase 2 por ele")
+            import matte_engine as _ME   # o .mov com alfa nasce da máscara, se faltar
+            _ME.garantir_alfa(edit / "recorte", arq)
             r, v = e["rect"], e["video"]
             d = e["t1"] - e["t0"]
             vaza_html.append(

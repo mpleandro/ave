@@ -143,11 +143,18 @@ def escolher_janela(video: Path, dur: float = 5.0) -> tuple[float, str]:
 
 # ---------------------------------------------------------------- os motores
 
+def arquivos(out: Path, fgr: bool) -> tuple[Path, Path | None]:
+    """A máscara (sempre) e a cor descontaminada (fundo novo) de uma janela."""
+    return out.with_suffix(".mask.mp4"), (out.with_suffix(".cor.mp4") if fgr else None)
+
+
 def recortar(motor: str, video: Path, S: float, dur: float, out: Path,
-             fgr: bool = False) -> float:
+             fgr: bool = False, alfa: bool = True) -> float:
+    """`rvm`/`rvm-hq` passam pelo matte_engine (o acelerador da máquina) e
+    gravam a MÁSCARA leve; o `.mov` com alfa (`out`) só nasce com `alfa=True`
+    — o `processar` deixa para quem compõe em camadas (garantir_alfa)."""
     if motor in ("rvm", "rvm-hq"):
-        # INSTALAÇÃO GRADUAL: o recorte precisa do torch + RVM (~2 GB), que não
-        # vêm na base. Instala aqui, na primeira vez em que alguém o pede.
+        # INSTALAÇÃO GRADUAL: o modelo ONNX (~15 MB) na primeira vez
         sys.path.insert(0, str(HELPERS))
         import instalar
         if not instalar.garantir("recorte"):
@@ -155,12 +162,16 @@ def recortar(motor: str, video: Path, S: float, dur: float, out: Path,
                      "rode: uv run python helpers/instalar.py recorte")
     t0 = time.time()
     if motor in ("rvm", "rvm-hq"):
+        import matte_engine as ME
         # rvm-hq = RVM resnet50: a "correção pequena" quando o rvm sai com atenção
-        modelo = ["--model", "resnet50"] if motor == "rvm-hq" else []
-        modelo += ["--fgr"] if fgr else []
-        subprocess.run([sys.executable, str(HELPERS / "person_matte.py"), str(video),
-                        "-o", str(out), "--start", str(S), "--duration", str(dur), *modelo],
-                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        mascara, cor = arquivos(out, fgr)
+        r = ME.recortar(video, mascara, motor=motor, start=S, dur=dur, cor=cor)
+        recortar.ultimo = r
+        if alfa:
+            if cor:
+                ME.derivar_alfa(cor, mascara, out)
+            else:
+                ME.derivar_alfa(video, mascara, out, start=S, dur=dur)
     elif motor == "hyperframes":
         # o CLI processa o arquivo inteiro: recorta a janela antes
         tmp = out.with_suffix(".janela.mp4")
@@ -336,12 +347,15 @@ def cmd_teste(args) -> None:
         rev = pasta(edit) / f"teste_{motor}_revisao.mp4"
         folha = pasta(edit) / f"teste_{motor}_folha.png"
         revisao(out, rev, folha)
+        r = getattr(recortar, "ultimo", {}) if motor.startswith("rvm") else {}
         reg = {"motor": motor, "inicio": round(S, 3), "dur": args.dur, "motivo": motivo,
                "segundos": round(seg, 1), "metricas": med, "matte": out.name,
+               "backend": r.get("backend"), "fps": r.get("fps"),
                "revisao": rev.name, "folha": folha.name, "em": time.strftime("%Y-%m-%d %H:%M")}
         m["testes"] = [t for t in m["testes"] if t["motor"] != motor] + [reg]
         v = med["veredito"]
-        print(f"\n  [{motor}] {seg:.0f}s de processamento · geral: {v['geral'].upper()}")
+        via = f" via {r['backend']} ({r['fps']} fps)" if r else ""
+        print(f"\n  [{motor}] {seg:.0f}s de processamento{via} · geral: {v['geral'].upper()}")
         print(f"    tremulação {med['tremulacao']} ({v['tremulacao']}) · "
               f"corpo sumindo {med['sumindo']} quadro(s) ({v['sumindo']}) · "
               f"manchas {med['manchas']} ({v['manchas']}) · "
@@ -374,16 +388,28 @@ def cmd_processar(args) -> None:
     # efeito "atrás do apresentador", que mantém o fundo original.
     suf = "_fgr" if args.fundo_novo and motor.startswith("rvm") else ""
     out = pasta(edit) / f"fg_{motor}_{S:.2f}_{E:.2f}{suf}.mov"
+    rvm = motor.startswith("rvm")
+    mascara, cor = arquivos(out, bool(suf)) if rvm else (out, None)
     # REAPROVEITA: mudar lettering não refaz o recorte. Só a fonte mais nova
     # que o arquivo (corte refeito) o invalida.
-    if out.exists() and out.stat().st_mtime > video.stat().st_mtime:
-        print(f"reaproveitado: {out}")
+    if mascara.exists() and mascara.stat().st_mtime > video.stat().st_mtime \
+            and out.name in (m.get("janelas") or {}):
+        print(f"reaproveitado: {mascara if rvm else out}")
         return
-    seg = recortar(motor, video, S, E - S, out, fgr=bool(suf))
-    m.setdefault("janelas", {})[out.name] = {"motor": motor, "inicio": S, "fim": E,
-                                             "fundoNovo": bool(suf), "segundos": round(seg, 1)}
+    # o .mov (ProRes com alfa, ~50 MB/s) NÃO nasce aqui: quem compõe em camadas
+    # o gera da máscara na hora (matte_engine.garantir_alfa); o fundo trocado
+    # composto no ffmpeg nunca precisa dele
+    out.unlink(missing_ok=True)
+    seg = recortar(motor, video, S, E - S, out, fgr=bool(suf), alfa=not rvm)
+    reg = {"motor": motor, "inicio": S, "fim": E, "fundoNovo": bool(suf),
+           "segundos": round(seg, 1)}
+    if rvm:
+        r = getattr(recortar, "ultimo", {})
+        reg.update({"mascara": mascara.name, "cor": cor.name if cor else None,
+                    "fonte": str(video), "backend": r.get("backend"), "fps": r.get("fps")})
+    m.setdefault("janelas", {})[out.name] = reg
     gravar_manifesto(edit, m)
-    print(f"recortado em {seg:.0f}s: {out}")
+    print(f"recortado em {seg:.0f}s: {mascara if rvm else out}")
 
 
 def main() -> None:

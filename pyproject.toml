@@ -21,7 +21,13 @@ dependencies = [
     "static-ffmpeg>=2.7",
     "huggingface_hub>=0.23",
     "silero-vad>=5.1",
-    "onnxruntime>=1.17",
+    # onnxruntime também roda o RECORTE (matte_engine.py). No Windows, a build
+    # DirectML: o mesmo pacote + aceleração em qualquer placa DX12 (NVIDIA,
+    # AMD, Intel), com a CPU de reserva — o VAD segue igual.
+    # (DirectML só tem build x64; Windows ARM fica no onnxruntime comum. Escrito
+    # como exceção ao ARM64 porque o x64 se chama AMD64 no Python e x86_64 no uv.)
+    "onnxruntime>=1.17; sys_platform != 'win32' or platform_machine == 'ARM64'",
+    "onnxruntime-directml>=1.17; sys_platform == 'win32' and platform_machine != 'ARM64'",
     "soundfile>=0.12",
     "mlx-whisper>=0.4; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "faster-whisper>=1.1; sys_platform != 'darwin' or platform_machine != 'arm64'",
@@ -32,7 +38,11 @@ animations = ["manim"]
 # Person matting for the "element behind the subject" effect (person_matte.py).
 # Robust Video Matting via torch.hub — heavy (~2GB), so it's opt-in: install with
 # `uv sync --extra matting`. Base install stays light for users who don't need it.
-matting = ["torch", "torchvision"]
+# O recorte em si roda no onnxruntime da BASE (helpers/matte_engine.py); este
+# extra é o TURBO do Mac: torch converte o RVM para CoreML uma vez por resolução
+# e o coremltools roda o modelo no Neural Engine. No M3, medido: torch MPS
+# 22 fps > CoreML 15 > onnx CPU 11 — o `matte_engine.py bench` decide por máquina.
+matting = ["torch", "torchvision", "coremltools>=8; sys_platform == 'darwin' and platform_machine == 'arm64'"]
 # "Animação em 3D" (aba Estilo): rastreio de mãos/rosto/corpo (MediaPipe) e mapa
 # de profundidade (Depth Anything V2 via transformers). Opt-in e pesado — o
 # `helpers/instalar_anim3d.py` instala sozinho na primeira vez que o usuário
@@ -61,3 +71,14 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = []
+
+[tool.uv]
+# O faster-whisper depende do `onnxruntime` COMUM. No Windows ele chegaria junto
+# com o `onnxruntime-directml` — os dois instalam a MESMA pasta `onnxruntime`, o
+# último sobrescreve o outro e o DirectML some (ou o import quebra pela metade).
+# Este override tira o comum do Windows: lá o directml fornece o módulo para o
+# VAD do faster-whisper e para o recorte. O instalar.py repara venvs antigos.
+override-dependencies = ["onnxruntime>=1.17; sys_platform != 'win32' or platform_machine == 'ARM64'"]
+# O directml 1.24+ não publica wheel para o Python 3.10: sem este teto o lock
+# escolhe 1.24.3 ali e a instalação base quebra no Windows com Python 3.10.
+constraint-dependencies = ["onnxruntime-directml<1.24; python_full_version < '3.11'"]

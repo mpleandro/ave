@@ -372,15 +372,26 @@ CONTEUDO = {"checklist": _checklist, "chartGrow": _chart, "phoneMockup": _phone,
 
 # ---------------------------------------------------------------- recorte
 
-def _recorte(proj: Path, t0: float, t1: float, fgr: bool) -> str:
-    """O arquivo de recorte (relativo ao projeto) que cobre [t0, t1]."""
+def _janela_recorte(proj: Path, t0: float, t1: float, fgr: bool) -> tuple[str, dict] | None:
     man = proj.parent / "recorte" / "recorte.json"
     janelas = (json.loads(man.read_text()) if man.exists() else {}).get("janelas") or {}
     for nome, j in janelas.items():
         if bool(j.get("fundoNovo")) != fgr:
             continue
         if abs(float(j["inicio"]) - t0) < 0.02 and float(j["fim"]) >= t1 - 0.02:
-            return f"recorte/{nome}"
+            return nome, j
+    return None
+
+
+def _recorte(proj: Path, t0: float, t1: float, fgr: bool) -> str:
+    """O arquivo de recorte (relativo ao projeto) que cobre [t0, t1] — o .mov
+    com alfa, gerado da máscara agora se ainda não existe (composição em
+    camadas é a única que paga o ProRes)."""
+    achou = _janela_recorte(proj, t0, t1, fgr)
+    if achou:
+        import matte_engine as ME
+        ME.garantir_alfa(proj.parent / "recorte", achou[0])
+        return f"recorte/{achou[0]}"
     raise SystemExit(
         f"efeito com a pessoa recortada: falta o recorte de {t0:.2f}–{t1:.2f}s"
         f"{' (fundo novo)' if fgr else ''} — quem gera é o phase2.py "
@@ -693,13 +704,56 @@ RABISCOS = (
     '</svg>')
 
 
+def _fundo_no_ffmpeg(proj: Path, cfg: dict, duracao: float) -> dict | None:
+    """FUNDO TROCADO COMPOSTO NO FFMPEG (alternativa 5): pessoa × máscara sobre
+    a imagem/vídeo de fundo num MP4 opaco que vira o próprio a-roll — sem
+    ProRes, sem alfa no navegador. `fundoTrocado.composicao`:
+
+      auto     (padrão) ffmpeg quando há arquivo de fundo e o recorte tem
+               máscara; camadas quando pediu `paralaxe: true`
+      ffmpeg   sempre que der; camadas  nunca
+
+    A diferença que se vê: nas CAMADAS a câmera dinâmica mexe só a pessoa (o
+    fundo fica parado — paralaxe); no FFMPEG a câmera mexe a cena inteira,
+    como uma câmera de verdade."""
+    modo = str(cfg.get("composicao") or "auto")
+    if modo == "camadas" or (modo == "auto" and cfg.get("paralaxe")):
+        return None
+    fundo = cfg.get("fundo")
+    if not fundo:
+        return None                     # gradiente da marca é CSS: camadas
+    f = Path(fundo)
+    if not f.is_absolute():
+        f = proj / fundo
+    achou = _janela_recorte(proj, 0.0, round(duracao, 3), True)
+    if not f.exists() or not achou or not achou[1].get("mascara") or not achou[1].get("cor"):
+        return None
+    import matte_engine as ME
+    pasta = proj.parent / "recorte"
+    mascara, cor = pasta / achou[1]["mascara"], pasta / achou[1]["cor"]
+    W, H, fps, _ = ME.sonda(mascara)
+    import hashlib
+    chave = hashlib.sha1(f"{f.resolve()}|{achou[0]}|{W}x{H}@{fps}".encode()).hexdigest()[:10]
+    out = proj / "efeitos" / f"fundo_trocado_{chave}.mp4"
+    novo = max(f.stat().st_mtime, mascara.stat().st_mtime, cor.stat().st_mtime)
+    if not (out.exists() and out.stat().st_mtime >= novo):
+        print(f"  fundo trocado: compondo no ffmpeg ({f.name})", file=sys.stderr)
+        ME.compor_fundo(f, cor, mascara, out, W=W, H=H, fps=fps, dur=duracao)
+    return {"antes": [], "arollSrc": f"efeitos/{out.name}", "arollStyle": "", "js": []}
+
+
 def _formato_recorte(data, plano, W, H, duracao, events):
     """Fundo trocado / Caderno: a pessoa recortada vira o próprio a-roll (a
-    câmera continua valendo nela) e o fundo novo mora ANTES da janela."""
+    câmera continua valendo nela) e o fundo novo mora ANTES da janela — ou,
+    no fundo trocado com arquivo, tudo já sai composto do ffmpeg."""
     fmt = F.formato_de(data)
     proj = Path(data.get("_proj", ".")).resolve()
-    src = _recorte(proj, 0.0, round(duracao, 3), True)
     cfg = data.get(fmt) or {}
+    if fmt == "fundoTrocado":
+        pronto = _fundo_no_ffmpeg(proj, cfg, duracao)
+        if pronto:
+            return pronto
+    src = _recorte(proj, 0.0, round(duracao, 3), True)
     antes, aroll_style, js = [], "", []
     comum = f'data-start="0" data-duration="{duracao:.3f}" data-track-index="{TRACK_FUNDO}"'
     if fmt == "fundoTrocado":

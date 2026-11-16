@@ -18,8 +18,12 @@ Do código:
 
 Os recursos:
 
-  recorte  — torch + Robust Video Matting (~2 GB): cabeça vazando o card, teste
-             de recorte de 5s, elemento atrás do apresentador
+  recorte  — Robust Video Matting em ONNX (~15 MB; roda no onnxruntime da base —
+             no Windows x64 a build DirectML, que acelera em qualquer placa DX12):
+             cabeça vazando o card, teste de recorte de 5s, elemento atrás do
+             apresentador, fundo trocado — em qualquer máquina
+  recorte_turbo — torch (+ coremltools no Mac) (~2 GB): o recorte na GPU
+             (MPS/CUDA) e no Neural Engine, e o rvm-hq rápido. Opcional
   anim3d   — MediaPipe + Depth Anything (~2,5 GB): formato "Animação em 3D"
   escuta   — mlx-whisper + modelo turbo (~1,6 GB, só Apple Silicon): ouvir o
              corte atrás de repetição — o portão da Fase 1
@@ -51,6 +55,45 @@ HELPERS = Path(__file__).resolve().parent
 SKILL = HELPERS.parent
 REGISTRO = Path.home() / ".avelin" / "instalados.json"
 APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
+# Windows x64 (o Python chama de AMD64): o recorte acelera pelo DirectML.
+WIN_DIRECTML = sys.platform == "win32" and platform.machine().upper() != "ARM64"
+_TEM_DML = ("import onnxruntime as o; raise SystemExit("
+            "0 if 'DmlExecutionProvider' in o.get_available_providers() else 1)")
+
+
+def _baixar_rvm_onnx(py: str) -> None:
+    _rodar([py, "-c", "import sys; sys.path.insert(0, 'helpers'); import matte_engine as m; "
+                      "m.modelo_onnx('mobilenetv3')"],
+           "baixando o modelo de recorte (Robust Video Matting em ONNX, ~15 MB)")
+
+
+def _directml(py: str) -> None:
+    """Windows x64: deixa o `onnxruntime` do venv ser a build DirectML.
+
+    O `onnxruntime` comum e o `onnxruntime-directml` instalam a MESMA pasta; com
+    os dois no venv (pip, ou venv anterior ao override do pyproject) o último a
+    instalar vence e o DirectML some em silêncio — o recorte cai para a CPU.
+    Remove os dois e põe só o directml, que também serve o VAD do faster-whisper."""
+    if not WIN_DIRECTML or subprocess.run([py, "-c", _TEM_DML],
+                                          capture_output=True).returncode == 0:
+        return
+    uv = achar_uv()
+    pip, alvo = ([uv, "pip"], ["--python", py]) if uv else ([py, "-m", "pip"], [])
+    say("deixando só o onnxruntime-directml (acelera o recorte em placas DX12)…")
+    subprocess.run([*pip, "uninstall", *alvo, *([] if uv else ["-y"]),
+                    "onnxruntime", "onnxruntime-directml"], cwd=SKILL)   # ausente: tudo bem
+    try:
+        _rodar([*pip, "install", *alvo, "onnxruntime-directml>=1.17"],
+               "instalando onnxruntime-directml (~25 MB)")
+    except RuntimeError:
+        # nunca deixar o venv sem onnxruntime — o VAD da transcrição depende dele
+        _rodar([*pip, "install", *alvo, "onnxruntime>=1.17"],
+               "directml falhou — voltando ao onnxruntime comum (recorte na CPU)")
+
+
+def _preparar_recorte(py: str) -> None:
+    _directml(py)
+    _baixar_rvm_onnx(py)
 
 
 def _baixar_rvm(py: str) -> None:
@@ -113,6 +156,15 @@ RECURSOS: dict[str, dict] = {
     "recorte": {
         "nome": "Recorte do apresentador",
         "para": "cabeça vazando o card, teste de recorte, elemento atrás do apresentador",
+        "tamanho": "~15 MB",
+        # no Windows x64 confere o DirectML, não só o import: a build CPU que o
+        # faster-whisper puxa importa igual e deixaria o recorte na CPU sem avisar
+        "confere": _TEM_DML if WIN_DIRECTML else "import onnxruntime",
+        "depois": _preparar_recorte,
+    },
+    "recorte_turbo": {
+        "nome": "Recorte acelerado (GPU / Neural Engine)",
+        "para": "recorte na GPU (MPS/CUDA) e no CoreML; rvm-hq rápido no Mac",
         "tamanho": "~2 GB", "extra": "matting",
         "confere": "import torch, torchvision",
         "depois": _baixar_rvm,
@@ -151,8 +203,10 @@ def say(msg: str) -> None:
 
 
 def python_do_projeto() -> str:
-    venv = SKILL / ".venv" / "bin" / "python"
-    return str(venv) if venv.exists() else sys.executable
+    for venv in (SKILL / ".venv" / "bin" / "python", SKILL / ".venv" / "Scripts" / "python.exe"):
+        if venv.exists():                      # macOS/Linux · Windows
+            return str(venv)
+    return sys.executable
 
 
 def achar_uv() -> str | None:
@@ -191,6 +245,8 @@ def pronto(rid: str) -> bool:
     if ok and rid == "enquadramento":
         ok = _modelos_ok()
     if ok and rid == "recorte":
+        ok = (Path.home() / ".avelin" / "modelos" / "rvm" / "rvm_mobilenetv3_fp32.onnx").exists()
+    if ok and rid == "recorte_turbo":
         hub = Path.home() / ".cache" / "torch" / "hub"
         ok = any(hub.glob("PeterL1n_RobustVideoMatting*"))
     return ok
@@ -233,8 +289,10 @@ def garantir(rid: str, progresso=None) -> bool:
         return ok
     py = python_do_projeto()
     try:
-        uv = achar_uv()
-        if uv:
+        uv = achar_uv() if r.get("extra") else None
+        if not r.get("extra"):
+            pass                       # só modelo: os pacotes já vêm na base
+        elif uv:
             _rodar([uv, "sync", "--extra", r["extra"], "--inexact"],
                    f"instalando pacotes (uv sync --extra {r['extra']} --inexact)")
         else:

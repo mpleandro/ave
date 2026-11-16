@@ -193,8 +193,10 @@ First-time install lives in `install.md`. On cold start just verify:
 - **`helpers/doctor.py`** confere tudo isso sem rede e sem chave (e `--preparar` baixa o que falta). É a resposta para "falta alguma coisa".
 - Fase 2: nada a instalar. `npx hyperframes@0.7.109` resolve do cache compartilhado (~1 GB em `~/.cache/hyperframes`, uma vez para todos os projetos) e o projeto da sessão fica SEM `node_modules`. **Nunca carregue `remotion-best-practices`** — não é o motor desta skill.
 - **INSTALAÇÃO GRADUAL — efeito pesado instala o que precisa quando é pedido.**
-  `helpers/instalar.py` tem o registro: `recorte` (torch + RVM, ~2 GB — cabeça
-  vazando, teste de recorte, atrás do apresentador), `anim3d` (~2,5 GB),
+  `helpers/instalar.py` tem o registro: `recorte` (RVM em ONNX, ~15 MB — cabeça
+  vazando, teste de recorte, atrás do apresentador, fundo trocado; roda em
+  qualquer máquina), `recorte_turbo` (torch + coremltools, ~2 GB — o recorte
+  na GPU/Neural Engine; opcional, ver "Recorte de fundo"), `anim3d` (~2,5 GB),
   `enquadramento` (detector de rosto e de voz, ~100 MB — o
   vídeo horizontal vira vertical seguindo quem fala, no garimpo de cortes) e
   `link` (yt-dlp, ~10 MB). Quem usa o recurso chama
@@ -254,7 +256,8 @@ Phase 2/3 (see the track references for usage):
 - **REUSO DE SEGMENTOS — o render só reextrai o que mudou.** O nome de cada segmento carrega uma chave de conteúdo (fonte + entrada/saída + grade declarado + ganho + tier + fps), então mexer em 1 trecho de 10 reextrai 1, e remover um trecho reextrai ZERO. Medido: apagar um trecho de 5 caiu de 14,5s para 1,6s, com a saída **idêntica pixel a pixel** (SSIM 1,000) à do render completo. O resumo do J-cut diz quantos foram reaproveitados e quantos obsoletos foram podados. **Suba `SEG_VERSAO` no `render.py` ao alterar `extract_segment` ou `video_encoder_args`** — sem isso os segmentos antigos sobrevivem à mudança. `AVELIN_SEM_CACHE=1` apaga tudo e reextrai.
 - **`derivado.py`** — cache de análise por fonte (`~/.avelin/derivados`), chaveado por conteúdo + parâmetros + versão do produtor. É por que o painel de transcrição abre em 0,1s em vez de 2s. `derivado.py` lista, `derivado.py --limpar` apaga, e **`AVELIN_SEM_CACHE=1` desliga tudo** — use ao investigar qualquer suspeita de dado velho, em vez de sair apagando arquivo.
 - **`doctor.py [--preparar] [--json]`** — conferência da instalação sem rede e sem chave (ffmpeg com zscale, VAD, Whisper local rodando de verdade, Node, allowlist de permissões); `--preparar` baixa ffmpeg estático e o modelo. · **`ffbin.py`** — o ffmpeg completo na frente do PATH (sistema com zscale, senão o do pip).
-- **`captions_words.py`** (legendas palavra a palavra, a base de todos os estilos) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte; `uv sync --extra matting`) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`captions_words.py`** (legendas palavra a palavra, a base de todos os estilos) · **`face_track.py`** (eye-track JSON) · **`person_matte.py`** (RVM alpha matte pelo `matte_engine.py`; `--mask-only` para só a máscara) · **`matte_engine.py`** (o motor de recorte; escolhe e mede sozinho — `info`/`bench` são só diagnóstico) · **`pexels_search.py`** · **`wikimedia_images.py`** (no key, brands/people first choice) · **`google_images.py`** (fallback, mind rights) · **`captions_srt.py`** (longform .srt) · **`chapters.py`** (YouTube chapters) · **`treblo_music.py`** (AI soundtrack — pass a context-driven MUSICAL vibe: genre + instruments + tempo + mood, not SFX-y phrasing; auto-framed as a composed instrumental).
+- **`instalar_node.py [--fundo|--status]`** — Node.js 22+ do editor (binário oficial em `~/.avelin/node`, sem admin), só se o computador não tiver um; o install roda com `--fundo`. Pedido do usuário *"instala o Node do Avelin"* = rode este (sem `--fundo`). · **`nodebin.py`** — o Node certo na frente do PATH (`garantir()`); chame antes de qualquer `npx`. · **`abrir_editor.py`** — abre o editor no navegador (reaproveita o que está no ar); o install chama no fim.
 - **`instalar_anim3d.py [--check]`** — instala o extra `anim3d` (MediaPipe + Depth Anything V2) com `uv sync --inexact` (não derruba o `matting`), baixa os modelos do MediaPipe para `~/.avelin/modelos/` e confere num processo novo. O `phase2.py` chama sozinho quando o formato é "Animação em 3D".
 - **`combinacoes.py --pecas <dir> --saida <dir> (--todas | --so … | --combo … | --lista f) [--listar]`** — **MONTAGEM DE COMBINAÇÕES**: emenda peças já prontas (Fase 2 rodada POR PEÇA) em finais — gancho × corpo × CTA ou qualquer N partes (`--partes`). Vídeo em concat sem recodificar (confere antes que todas as peças têm o mesmo vídeo), trilha única por baixo + loudnorm 2 passadas, nome por molde (`--nome "PFX_{0}{1}{2}"`), subpasta por molde (`--pasta`), checagem de COLISÃO de nome no lote inteiro antes de começar (`--separar` resolve), `.part` + retomável, trava de disco, manifesto CSV. `--listar` é o plano: contagem, nomes de exemplo, minutos e GB. **Antes de rodar, a lógica da junção é PERGUNTADA** — ver "Montagem de combinações".
 - **`hook_finder.py <edit> [--top 8] [--fonte X] [--json]`** — **o garimpo do gancho**: corta o transcrito de cada fonte de fala em frases e janelas de 1–2 frases e MEDE o que o texto não mostra — borda limpa para cold open (silêncio medido dos dois lados), energia e ritmo contra o próprio falante, conector no começo (depende do anterior), sinais das 6 anatomias, retomada dentro do trecho, repetição confirmada no `defeitos_audio.json`. A nota só ORDENA a leitura; o julgamento (aponta para a tese? fica de pé sozinho?) é seu, e a escolha é do usuário. Grava `hook_candidatos.json`. Método completo em `references/hooks.md`.
@@ -1035,7 +1038,8 @@ modelo mais pesado** (`rvm-hq`) · **Usar moldura com fundo, sem recorte** ·
 - **Reprovado não se disfarça**: nada de brilho em cima do halo, nada de
   retângulo fingindo silhueta. As saídas honestas são as três da pergunta.
 - **O alfa aprovado é reaproveitado.** `recorte.py processar <edit> --inicio S
-  --fim E` usa o motor aprovado e guarda `recorte/fg_<motor>_<S>_<E>.mov`;
+  --fim E` usa o motor aprovado e guarda a máscara `recorte/fg_<motor>_<S>_<E>.mask.mp4`
+  (o `.mov` com alfa sai dela só quando a composição em camadas pede);
   mudar texto, posição ou tempo do lettering NUNCA reprocessa. Só um corte
   refeito (fonte mais nova que o arquivo) invalida.
 - **Medido (Carrossel, pessoa sentada gesticulando, 5s):** RVM 14s, atenção
@@ -1044,6 +1048,63 @@ modelo mais pesado** (`rvm-hq`) · **Usar moldura com fundo, sem recorte** ·
   e saía do alfa). Por isso o padrão é o RVM.
 - A Animação em 3D recorta com MediaPipe dentro do próprio efeito — para ela,
   o teste é a amostra da Fase 2 (seção anterior), não este.
+
+#### O motor por baixo — a máquina escolhe, você escolhe o modelo e a composição
+
+O modelo é sempre o RVM; o `helpers/matte_engine.py` decide ONDE ele roda, e
+três decisões são suas, por vídeo:
+
+**1. O acelerador — automático, ninguém roda nada.** O usuário NUNCA executa
+comando de instalação, conferência ou medição — nem você pede que execute.
+Tudo acontece dentro do próprio recorte (`recorte.py` / Fase 2):
+`instalar.garantir("recorte")` instala e repara o que faltar (no Windows x64,
+inclusive deixa só o `onnxruntime-directml`), e o primeiro recorte num
+ambiente novo mede sozinho os motores disponíveis (~3s do próprio vídeo, em
+regime, ~20s no total, uma vez) e grava em `~/.avelin/recorte_bench.json`.
+Instalou o torch, o DirectML entrou, outra máquina → mede de novo sozinho.
+`AVE_RECORTE_BACKEND=coreml|onnx|torch` força.
+Medido no M3 (1080x1920, pipeline real com aquecimento): torch MPS 22,3 fps ·
+CoreML 14,9 · onnx CPU 11,3. **A máscara é a mesma** nos três (teste de 5s
+idêntico: tremulação 0,0414, borda 6,2–6,3px). Quando o log mostrar
+`medido: … → usando X` (primeira vez na máquina), diga o vencedor em uma linha.
+O ONNX CPU é o piso: sem placa e sem torch ainda dá ~0,4× tempo real num
+vertical 1080p — avise antes de recortar 60s+ nele (≈2–3 min).
+
+**2. O modelo — `rvm` por padrão, `rvm-hq` só por evidência.** Suba para o
+`rvm-hq` (resnet50) quando o teste de 5s der *atenção* em tremulação ou borda
+NA CABEÇA, num close em que o cabelo ocupa boa parte do quadro. No Carrossel
+ele não melhorou e custou 35% a mais — não suba "por garantia". Sem torch nem
+CoreML, o rvm-hq no onnx CPU roda a ~3 fps: ofereça o `recorte_turbo` antes.
+
+**3. A composição — camadas ou ffmpeg.** O recorte grava a MÁSCARA leve
+(`fg_*.mask.mp4`, H.264 cinza, ~0,4 MB/s) e, com fundo novo, a cor limpa
+(`fg_*.cor.mp4`). O ProRes 4444 com alfa (15–50 MB/s medidos; 13s = 209 MB)
+só nasce quando a composição em CAMADAS pede (`matte_engine.garantir_alfa`).
+
+| Caso | Composição | Por quê |
+|---|---|---|
+| Fundo trocado com imagem/vídeo de fundo | **ffmpeg** (padrão) | pessoa × máscara sobre o fundo num MP4 opaco que vira o a-roll; sem ProRes nem alfa no navegador. A câmera mexe a cena inteira, como câmera real |
+| Fundo trocado pedindo paralaxe (`fundoTrocado.paralaxe: true`) ou `composicao: "camadas"` | camadas | a câmera mexe só a pessoa; o fundo fica parado |
+| Fundo trocado sem arquivo (gradiente da marca) | camadas | o gradiente é CSS |
+| Caderno, atrás do apresentador (`uiWorld`), cabeça vazando, ganchos com recorte | camadas | há algo animado ENTRE o fundo e a pessoa, ou um filtro SVG no contorno — só o navegador faz |
+
+Escolha pelo efeito, não pelo arquivo: `fundoTrocado.composicao` aceita
+`auto` (padrão) · `ffmpeg` · `camadas`. O VP9 com alfa NÃO é saída: o libvpx
+desta build zera o alfa em silêncio (medido de novo em 2026-11-16).
+
+**Windows.** O mesmo código: o `pyproject` instala o `onnxruntime-directml`
+no Windows x64 (acelera em qualquer placa DX12 — NVIDIA, AMD, Intel — e cai
+para a CPU sozinho) e um override tira de lá o `onnxruntime` comum que o
+faster-whisper puxaria — os dois disputam a mesma pasta e o DirectML sumiria.
+O `garantir("recorte")` confere o provedor `Dml` (não só o import) e repara o
+venv se os dois estiverem juntos — sozinho, no primeiro recorte. O
+`recorte_turbo` vindo do PyPI no Windows é torch **só CPU** (para CUDA
+precisaria do índice do PyTorch) — então no Windows NÃO ofereça o turbo: o
+DirectML já é a aceleração. Windows ARM não instala a base (o `ctranslate2`
+do faster-whisper não tem build ARM). CoreML não existe lá; a composição no
+ffmpeg e a máscara leve valem igual. *Ainda não medido numa máquina Windows
+real* — o teste de 5s (que já faz parte do fluxo) mostra o fps; só prometa
+tempo depois dele.
 
 ### The check is a gate, not a formality
 
