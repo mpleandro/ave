@@ -886,6 +886,83 @@ def concat_segments(segment_paths: list[Path], out_path: Path, edit_dir: Path) -
     print(f"concat → {out_path.name}")
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     concat_list.unlink(missing_ok=True)
+    _audio_em_uma_passada(segment_paths, out_path)
+
+
+def _sonda_segmento(p: Path) -> tuple[float, bool]:
+    """(duração do arquivo, tem áudio?) — a duração é a que o concat usa de passo."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries",
+         "format=duration:stream=codec_type", "-of", "json", str(p)],
+        capture_output=True, text=True, check=True).stdout
+    j = json.loads(out)
+    tem = any(s.get("codec_type") == "audio" for s in j.get("streams", []))
+    return float(j["format"]["duration"]), tem
+
+
+def _pcm_do_segmento(p: Path, sr: int, ch: int) -> bytes:
+    return subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(p), "-vn", "-ac", str(ch),
+         "-ar", str(sr), "-f", "s16le", "-"],
+        capture_output=True, check=True).stdout
+
+
+def _audio_em_uma_passada(segment_paths: list[Path], out_path: Path,
+                          sr: int = 48000, ch: int = 2) -> None:
+    """Refaz o áudio do concat: PCM de cada trecho emendado, UM encode AAC.
+
+    Cada segmento é um AAC próprio, com as amostras de priming do encoder e o
+    último quadro completado (~31 ms a mais por trecho). O `-c copy` leva tudo:
+    medido num longform de 314 trechos, 579,29s de áudio num
+    contêiner de 569,53s — quem decodifica em fila (o motor da Fase 2) atrasava
+    a voz 9,2s no fim. A primeira correção (`aresample=async` sobre o concat)
+    acertou a sincronia e criou outro defeito: a sobra de um trecho era
+    descartada EM CIMA do começo do seguinte — ~65 ms quase mudos em cada
+    emenda (medido contra a fonte: −40 dB de 0 a +60 ms em 313 trechos, com o
+    segmento isolado limpo). Como o `aperto` começa o trecho 30 ms antes da
+    voz, sumia o ataque da primeira sílaba: fala "truncada" a cada corte.
+
+    Aqui não sobra nada para descartar: cada segmento é decodificado SOZINHO
+    (o decoder já tira o priming e o enchimento pela edit list), cortado ou
+    completado até a fronteira exata do seu lugar na linha do tempo — a soma
+    das durações, a mesma conta do concat — e a faixa inteira é codificada uma
+    única vez. Os fades de 30 ms de cada trecho seguem valendo; o vídeo não é
+    tocado (`-c:v copy`).
+    """
+    if len(segment_paths) < 2:
+        return
+    with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 4)) as ex:
+        sondas = list(ex.map(_sonda_segmento, segment_paths))
+        if not any(tem for _, tem in sondas):
+            return
+        import wave  # noqa: PLC0415
+        wav = out_path.with_suffix(".voz_emenda.wav")
+        quadro = 2 * ch
+        escritos, acum = 0, 0.0
+        pcms = ex.map(lambda ps: _pcm_do_segmento(ps[0], sr, ch) if ps[1][1] else b"",
+                      zip(segment_paths, sondas))
+        with wave.open(str(wav), "wb") as w:
+            w.setnchannels(ch)
+            w.setsampwidth(2)
+            w.setframerate(sr)
+            for (dur, _), pcm in zip(sondas, pcms):
+                acum += dur
+                n = max(0, round(acum * sr) - escritos)      # fronteira acumulada: sem deriva
+                pcm = pcm[: n * quadro]
+                w.writeframesraw(pcm + b"\0" * (n * quadro - len(pcm)))
+                escritos += n
+    tmp = out_path.with_suffix(".umapassada" + out_path.suffix)
+    try:
+        subprocess.run([
+            "ffmpeg", "-y", "-i", str(out_path), "-i", str(wav),
+            "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "192k", "-ar", str(sr),
+            "-movflags", "+faststart", str(tmp),
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        tmp.replace(out_path)
+    finally:
+        wav.unlink(missing_ok=True)
+        tmp.unlink(missing_ok=True)
 
 
 # -------- J-cut assembly (Phase-1 default cleanup) ---------------------------
